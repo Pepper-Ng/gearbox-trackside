@@ -1,8 +1,8 @@
-# docs
+# Documentation
 
-Developer-facing documentation lives here. `implementation-plan.md` (repo
-root) is the source of truth for phases/architecture — move it into this
-folder if you'd prefer, just update this pointer.
+Developer-facing documentation lives here.\
+A separate non-technical runbook for the venue owner (Phase 7) should also land here once written.
 
-A separate non-technical runbook for the venue owner (Phase 7) should also
-land here once written.
+## Quick navigation
+
+- [Implementation plan](./implementation-plan.md) - Source of truth for implementation phases/architecture.
