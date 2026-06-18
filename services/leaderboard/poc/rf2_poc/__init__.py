@@ -1,0 +1,1 @@
+"""Phase 0A rFactor 2 shared-memory browser proof-of-concept."""
