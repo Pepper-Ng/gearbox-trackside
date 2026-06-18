@@ -1,0 +1,220 @@
+from __future__ import annotations
+
+import json
+import sys
+import tempfile
+import unittest
+import ctypes
+import uuid
+from ctypes import wintypes
+from pathlib import Path
+
+POC_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(POC_ROOT))
+
+from rf2_poc.rf2_shared_memory import (  # noqa: E402
+    FILE_MAP_READ,
+    MAPPED_BUFFER_WRAPPER_SIZE,
+    MAX_MAPPED_VEHICLES,
+    SCORING_MAP_NAME,
+    SharedMemoryScoringReader,
+    SharedMemoryUnavailable,
+    candidate_scoring_map_names,
+    rF2MappedBufferVersionBlock,
+    rF2Scoring,
+    c_string,
+    session_type_name,
+)
+from rf2_poc.sources import MockScoringSource  # noqa: E402
+
+
+class MockScoringSourceTests(unittest.TestCase):
+    def test_fixture_source_returns_driver_data_and_updates_counter(self) -> None:
+        fixture_path = POC_ROOT / "fixtures" / "mock_scoring_snapshot.json"
+        source = MockScoringSource(fixture_path)
+
+        first = source.read()
+        second = source.read()
+
+        self.assertEqual(first["source"], "mock")
+        self.assertEqual(second["update_counter"], first["update_counter"] + 1)
+        self.assertGreaterEqual(len(first["drivers"]), 3)
+        self.assertEqual(first["session"]["session_type"], "Practice")
+
+    def test_fixture_source_accepts_minimal_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            fixture_path = Path(temp_dir) / "minimal.json"
+            fixture_path.write_text(
+                json.dumps({"session": {"current_time": 0}, "drivers": []}),
+                encoding="utf-8",
+            )
+            snapshot = MockScoringSource(fixture_path).read()
+
+        self.assertEqual(snapshot["drivers"], [])
+        self.assertEqual(snapshot["source"], "mock")
+
+
+class SharedMemoryMappingTests(unittest.TestCase):
+    def test_candidate_names_include_dedicated_pid_variants_and_base_name(self) -> None:
+        names = candidate_scoring_map_names(pid=12345)
+
+        self.assertEqual(names[0], f"{SCORING_MAP_NAME}12345")
+        self.assertIn(f"Global\\{SCORING_MAP_NAME}12345", names)
+        self.assertEqual(names[-1], SCORING_MAP_NAME)
+
+    def test_explicit_map_name_is_tried_first(self) -> None:
+        names = candidate_scoring_map_names(map_name="CustomMap", pid=42)
+
+        self.assertEqual(names[0], "CustomMap")
+
+    def test_c_string_decodes_null_terminated_bytes(self) -> None:
+        raw = (ctypes.c_ubyte * 8)()
+        for index, value in enumerate(b"Setup1\0x"):
+            raw[index] = value
+
+        self.assertEqual(c_string(raw), "Setup1")
+
+    def test_session_type_mapping(self) -> None:
+        self.assertEqual(session_type_name(0), "Test Day")
+        self.assertEqual(session_type_name(1), "Practice")
+        self.assertEqual(session_type_name(5), "Qualifying")
+        self.assertEqual(session_type_name(10), "Race")
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows shared-memory behavior only")
+    def test_missing_map_does_not_create_false_live_connection(self) -> None:
+        missing_name = f"GearboxTracksideMissing-{uuid.uuid4()}"
+
+        with self.assertRaises(SharedMemoryUnavailable):
+            SharedMemoryScoringReader(map_name=missing_name)
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows shared-memory behavior only")
+    def test_reader_parses_existing_scoring_memory_map(self) -> None:
+        map_name = f"GearboxTracksideScoring-{uuid.uuid4()}"
+        scoring = build_fake_scoring_payload()
+
+        with NamedScoringMap(map_name, scoring):
+            snapshot = SharedMemoryScoringReader(map_name=map_name).read_snapshot()
+
+        self.assertEqual(snapshot["source"], "shared-memory")
+        self.assertEqual(snapshot["memory_map"], map_name)
+        self.assertEqual(snapshot["session"]["track"], "PoC Test Track")
+        self.assertEqual(snapshot["session"]["session_type"], "Practice")
+        self.assertEqual(snapshot["session"]["vehicle_count"], 1)
+        self.assertEqual(snapshot["drivers"][0]["driver_name"], "Setup9")
+        self.assertEqual(snapshot["drivers"][0]["place"], 1)
+        self.assertEqual(snapshot["drivers"][0]["best_lap_time"], 81.234)
+
+PAGE_READWRITE = 0x0004
+FILE_MAP_WRITE = 0x0002
+INVALID_HANDLE_VALUE = wintypes.HANDLE(-1).value
+
+
+class NamedScoringMap:
+    def __init__(self, name: str, scoring: rF2Scoring):
+        self.name = name
+        self.scoring = scoring
+        self.handle = None
+        self.view = None
+        self.size = MAPPED_BUFFER_WRAPPER_SIZE + ctypes.sizeof(rF2Scoring)
+        self.kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        self.kernel32.CreateFileMappingW.argtypes = [
+            wintypes.HANDLE,
+            wintypes.LPVOID,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            wintypes.LPCWSTR,
+        ]
+        self.kernel32.CreateFileMappingW.restype = wintypes.HANDLE
+        self.kernel32.MapViewOfFile.argtypes = [
+            wintypes.HANDLE,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            ctypes.c_size_t,
+        ]
+        self.kernel32.MapViewOfFile.restype = wintypes.LPVOID
+        self.kernel32.UnmapViewOfFile.argtypes = [wintypes.LPCVOID]
+        self.kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+
+    def __enter__(self) -> "NamedScoringMap":
+        self.handle = self.kernel32.CreateFileMappingW(
+            INVALID_HANDLE_VALUE,
+            None,
+            PAGE_READWRITE,
+            0,
+            self.size,
+            self.name,
+        )
+        if not self.handle:
+            raise ctypes.WinError(ctypes.get_last_error())
+
+        self.view = self.kernel32.MapViewOfFile(
+            self.handle,
+            FILE_MAP_READ | FILE_MAP_WRITE,
+            0,
+            0,
+            self.size,
+        )
+        if not self.view:
+            raise ctypes.WinError(ctypes.get_last_error())
+
+        wrapper = rF2MappedBufferVersionBlock()
+        wrapper.mVersionUpdateBegin = 7
+        wrapper.mVersionUpdateEnd = 7
+        ctypes.memmove(int(self.view), ctypes.byref(wrapper), MAPPED_BUFFER_WRAPPER_SIZE)
+        ctypes.memmove(
+            int(self.view) + MAPPED_BUFFER_WRAPPER_SIZE,
+            ctypes.byref(self.scoring),
+            ctypes.sizeof(rF2Scoring),
+        )
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:  # type: ignore[no-untyped-def]
+        if self.view:
+            self.kernel32.UnmapViewOfFile(self.view)
+        if self.handle:
+            self.kernel32.CloseHandle(self.handle)
+
+
+def build_fake_scoring_payload() -> rF2Scoring:
+    scoring = rF2Scoring()
+    scoring.mVersionUpdateBegin = 11
+    scoring.mVersionUpdateEnd = 11
+    scoring.mBytesUpdatedHint = ctypes.sizeof(rF2Scoring)
+    scoring.mScoringInfo.mSession = 1
+    scoring.mScoringInfo.mCurrentET = 123.456
+    scoring.mScoringInfo.mEndET = 1800.0
+    scoring.mScoringInfo.mLapDist = 3210.0
+    scoring.mScoringInfo.mNumVehicles = 1
+    scoring.mScoringInfo.mInRealtime = 1
+    scoring.mScoringInfo.mAmbientTemp = 21.0
+    scoring.mScoringInfo.mTrackTemp = 29.5
+    scoring.mScoringInfo.mMaxPlayers = MAX_MAPPED_VEHICLES
+    write_c_string(scoring.mScoringInfo.mTrackName, "PoC Test Track")
+    write_c_string(scoring.mScoringInfo.mServerName, "PoC Test Server")
+
+    vehicle = scoring.mVehicles[0]
+    vehicle.mID = 9
+    write_c_string(vehicle.mDriverName, "Setup9")
+    write_c_string(vehicle.mVehicleName, "Formula Test")
+    write_c_string(vehicle.mVehicleClass, "F1")
+    vehicle.mTotalLaps = 4
+    vehicle.mPlace = 1
+    vehicle.mBestLapTime = 81.234
+    vehicle.mLastLapTime = 82.345
+    vehicle.mTimeIntoLap = 12.5
+    vehicle.mLapDist = 512.0
+    vehicle.mServerScored = 1
+    return scoring
+
+
+def write_c_string(buffer, value: str) -> None:  # type: ignore[no-untyped-def]
+    encoded = value.encode("utf-8")[: len(buffer) - 1]
+    for index, byte in enumerate(encoded):
+        buffer[index] = byte
+    buffer[len(encoded)] = 0
+
+
+if __name__ == "__main__":
+    unittest.main()
