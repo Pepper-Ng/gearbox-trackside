@@ -472,8 +472,7 @@ If this still fails, try the exact map names shown in the dedicated-server secti
 If all dedicated-server map names fail but client mode works, the most likely explanations are:
 
 * the plugin is enabled for the client profile but not for the profile/configuration used by `Dedicated.exe`;
-* `Dedicated.exe` did not load the plugin DLL;
-* the dedicated-server process has not started a session that causes scoring output to be created;
+* `Dedicated.exe` loaded the plugin and receives session callbacks, but mapped-buffer startup did not complete;
 * the plugin created a map in a Windows namespace/session the PoC process cannot see;
 * the monitor or test tool is only checking the normal client map name and not the dedicated-server PID-suffixed names.
 
@@ -486,7 +485,23 @@ To distinguish those cases:
 5. Check the plugin log output under the rFactor 2 `UserData\Log` area.
 6. Run `python services/leaderboard/poc/list_memory_maps.py --pid <PID>` and check whether any rF2 maps are visible/openable.
 
-If plugin log files are created but `RF2SMMP_DebugOutput.txt` remains empty, increase the plugin's debug output settings in `CustomPluginVariables.json` if available for that plugin version. A created-but-empty log file is useful evidence that the DLL loaded, but it is not by itself proof that scoring maps were created.
+If the internals telemetry/scoring output files update while only the server is running, the DLL is loaded and receiving callbacks. That still does not prove that mapped files were created; use `list_memory_maps.py --pid <PID>` to verify maps directly.
+
+If `RF2SMMP_DebugOutput.txt` remains empty with `DebugOutputLevel = 1`, that is expected unless an error is logged. Startup/configuration lines use `CriticalInfo`. `DebugOutputLevel = 15` is enough for startup/config/error/warning output; `255` adds deeper timing/synchronization/verbose tracing.
+
+```json
+"DebugOutputLevel":15,
+"DebugOutputSource":32767,
+"DebugISIInternals":1
+```
+
+Then restart `Dedicated.exe` with no client connected and look for `Files mapped successfully.` or a mapping failure. If debug output appears only after a client joins, it is likely coming from the client plugin instance rather than the dedicated-server instance.
+
+If global map creation fails, either grant the server account the Windows `Create Global Objects` user right, or set `DedicatedServerMapGlobally = 0`, restart `Dedicated.exe`, and run the PoC from the same Windows user/session as the server.
+
+If the debug log still reports `DedicatedServerMapGlobally: 1` after editing it to `0`, the server is reading a different `CustomPluginVariables.json` than the one being edited, or the server was not restarted after the change.
+
+If `list_memory_maps.py --pid <PID>` shows only non-PID maps while a client is connected, those are client maps. Dedicated-server maps should be PID-suffixed or global PID-suffixed.
 
 ### Browser shows impossible values in live mode
 

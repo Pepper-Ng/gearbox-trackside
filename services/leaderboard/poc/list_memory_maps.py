@@ -127,6 +127,9 @@ def main() -> None:
     if args.pid is not None:
         print(f"Target PID: {args.pid}")
         print(f"Target PID Windows session ID: {target_session_id if target_session_id is not None else '<unavailable>'}")
+    print("Inspected object directories:")
+    for directory in directories:
+        print(f"  {directory}")
     print()
     print("rF2 map open probes:")
     for result in probes:

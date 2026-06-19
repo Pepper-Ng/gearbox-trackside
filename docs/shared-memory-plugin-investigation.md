@@ -2,7 +2,7 @@
 
 This note summarizes the source-level behavior of `TheIronWolfModding/rF2SharedMemoryMapPlugin` as vendored under `memorymap/src`.
 
-The practical goal is to understand why a normal rFactor 2 client can expose readable shared-memory data while `Dedicated.exe` appears to load the DLL but does not expose maps that the PoC can open.
+The practical goal is to document how the plugin loads, creates maps, names dedicated-server maps, logs status, and publishes scoring data so future development can use the shared-memory data path confidently.
 
 ---
 
@@ -12,12 +12,11 @@ The plugin source says that shared-memory maps are created during `SharedMemoryP
 
 Therefore:
 
-* Client mode working proves the PoC can open and decode a real plugin-created map.
-* Dedicated-server `OpenFileMappingW(... Windows error 2)` means none of the tried dedicated-server map names exists from the PoC process's Windows namespace.
-* Log files appearing under `UserData\Log` strongly suggests the DLL was loaded and at least some plugin code ran, but it does not by itself prove that mapped files were successfully created.
-* The next decisive check is `list_memory_maps.py --pid <PID>` plus plugin debug output with `DebugOutputLevel` enabled.
-
-No source patch to the DLL is justified yet. The public plugin is widely used, and the source path indicates this should work once namespace/config/startup details are understood.
+* The shared-memory map approach is valid for both client and dedicated-server processes when the plugin is enabled and the Windows namespace is correct.
+* Client maps use base names such as `$rFactor2SMMP_Scoring$`.
+* Dedicated-server maps use PID-suffixed names such as `$rFactor2SMMP_Scoring$<PID>`.
+* The PoC should target the dedicated-server PID when using `Dedicated.exe` as the source of truth.
+* No source patch to the DLL is currently justified. The public plugin behavior matches the source and works once configuration and namespace settings are correct.
 
 ---
 
@@ -140,7 +139,11 @@ That matters because a dedicated server may run in a different Windows session/u
 * dedicated server launched as a service/session 0 while Python runs in a desktop/RDP session: non-global names may not be visible;
 * dedicated server configured with `DedicatedServerMapGlobally = 1`: maps are created in the global namespace, but the server account needs the `Create Global Objects` permission.
 
-So if non-global dedicated maps cannot be opened, turning `DedicatedServerMapGlobally` **on** is the useful cross-session test. Turning it off is only useful when both processes are definitely in the same Windows session and global creation is failing.
+Use this rule of thumb:
+
+* If the PoC runs in the same Windows user/session as `Dedicated.exe`, prefer `DedicatedServerMapGlobally = 0`.
+* If the PoC must run from a different Windows user/session, `DedicatedServerMapGlobally = 1` can make maps globally visible, but the account running `Dedicated.exe` must have the Windows `Create Global Objects` user right.
+* If global map creation fails, use session-local maps (`DedicatedServerMapGlobally = 0`) from the same session, or grant the required Windows privilege before retrying global mode.
 
 ---
 
@@ -154,17 +157,19 @@ There are three RF2SMMP log/output files of interest:
 | `RF2SMMP_InternalsTelemetryOutput.txt` | `DebugISIInternals` | Example telemetry/internals output. |
 | `RF2SMMP_InternalsScoringOutput.txt` | `DebugISIInternals` | Example scoring/internals output. |
 
-`DebugOutputLevel` defaults to `0`, so `RF2SMMP_DebugOutput.txt` can remain empty even when the DLL loads.
+`DebugOutputLevel` defaults to `0`, so `RF2SMMP_DebugOutput.txt` can remain empty even when the DLL loads. A value of `1` enables only `Errors`. Startup/configuration lines use `CriticalInfo` (`2`). A value of `15` enables `Errors`, `CriticalInfo`, `DevInfo`, and `Warnings`, so it is enough to see startup configuration and map-creation failures. A value of `255` additionally enables synchronization, performance, timing, and verbose messages; use it only when deeper tracing is needed.
 
-`WriteToAllExampleOutputFiles(...)` writes to the internals telemetry/scoring output files only when `DebugISIInternals` is enabled. It writes `-STARTUP-` before mapped-buffer initialization completes. Therefore these files are evidence that the plugin reached that code path, but they do not prove maps were created successfully.
+`WriteToAllExampleOutputFiles(...)` writes to the internals telemetry/scoring output files only when `DebugISIInternals` is enabled. Those files are useful evidence that the plugin object is receiving callbacks, but they do not by themselves prove that mapped files were created successfully.
 
 Recommended troubleshooting settings:
 
 ```json
-"DebugOutputLevel": 255,
+"DebugOutputLevel": 15,
 "DebugOutputSource": 32767,
 "DebugISIInternals": 1
 ```
+
+Use `"DebugOutputLevel": 255` instead of `15` only if the normal startup/error output is not enough.
 
 Restart rFactor 2 / `Dedicated.exe` after changing those settings.
 
@@ -181,6 +186,10 @@ $rFactor2SMMP_Scoring$
 The monitor source does not appear to append `Dedicated.exe` PID values when opening maps. That means it can naturally detect client maps while failing to show dedicated-server maps, even if dedicated-server maps exist under PID-suffixed names.
 
 So monitor success with a client and monitor failure with a dedicated server is not decisive. Use `list_memory_maps.py --pid <PID>` or the PoC `--pid <PID>` path for dedicated-server testing.
+
+If non-PID maps such as `$rFactor2SMMP_Scoring$` appear only while an rFactor 2 client is connected, those maps are most likely created by the client process, not by `Dedicated.exe`. They should not be treated as proof that the dedicated-server maps exist.
+
+To prove dedicated-server startup/mapping, test with `Dedicated.exe` running and the client closed. Use `list_memory_maps.py --pid <PID>` or the PoC `--pid <PID>` path.
 
 ---
 
@@ -216,18 +225,18 @@ If the map exists but no session/vehicles are active, consumers may see a valid 
    " Enabled":1
    ```
 
-3. Temporarily enable verbose plugin debug:
+3. Temporarily enable startup/error plugin debug:
 
    ```json
-   "DebugOutputLevel":255,
+   "DebugOutputLevel":15,
    "DebugOutputSource":32767,
    "DebugISIInternals":1
    ```
 
 4. Decide namespace mode:
 
-   * same Windows session/user as Python: try `DedicatedServerMapGlobally = 0` first;
-   * different session/user/service: set `DedicatedServerMapGlobally = 1` and make sure the server account can create global objects.
+   * same Windows session/user as Python: use `DedicatedServerMapGlobally = 0`;
+   * different session/user/service: use `DedicatedServerMapGlobally = 1` and make sure the server account can create global objects.
 
 5. Restart `Dedicated.exe`.
 
@@ -245,7 +254,7 @@ If the map exists but no session/vehicles are active, consumers may see a valid 
    python services/leaderboard/poc/run_poc.py --source shared-memory --pid <PID>
    ```
 
-9. If no dedicated maps are visible/openable but debug output says files mapped successfully, the remaining suspect is Windows namespace/user/session visibility. Try running Python from the same account/session as `Dedicated.exe`, or enable global mapping with the required permission.
+9. If no dedicated maps are visible/openable but debug output says files mapped successfully, the remaining suspect is Windows namespace/user/session visibility. Run Python from the same account/session as `Dedicated.exe`, or enable global mapping with the required permission.
 
 10. If debug output does not say files mapped successfully, resolve the plugin startup/mapping error first.
 
@@ -255,8 +264,8 @@ If the map exists but no session/vehicles are active, consumers may see a valid 
 
 Based on the source and current test observations:
 
-* The client path is proven viable because the PoC can open and display client shared-memory data.
-* Dedicated-server logs appearing means the DLL is probably loaded, but does not prove map creation.
-* Dedicated-server `Windows error 2` after probing PID-suffixed names means the expected maps are not visible/openable from Python.
-* The next best evidence is the new `list_memory_maps.py --pid <PID>` output and a non-empty debug log with `DebugOutputLevel = 255`.
-* Patching the DLL should remain a last resort. The likely issue is configuration, namespace/session visibility, or server startup/map initialization rather than a fundamentally broken plugin.
+* The client path is viable because the PoC can open and display client shared-memory data.
+* The dedicated-server path is viable when `DedicatedServerMapGlobally = 0` and the PoC runs in the same Windows session/user as `Dedicated.exe`.
+* Global dedicated-server maps require the `Create Global Objects` Windows user right for the account running `Dedicated.exe`.
+* For this project, a local dedicated server plus the Python PoC can be used as the first source-of-truth data path for leaderboard development.
+* Patching the DLL should remain a last resort. Current evidence points to configuration and Windows namespace/permission behavior, not a broken shared-memory plugin.
