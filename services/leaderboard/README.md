@@ -34,6 +34,12 @@ Get-Process Dedicated | Select-Object Id, ProcessName, Path
 python services/leaderboard/poc/run_poc.py --source shared-memory --pid <PID>
 ```
 
+If live mode cannot open a map, inspect visible/probed map names:
+
+```powershell
+python services/leaderboard/poc/list_memory_maps.py --pid <PID>
+```
+
 Run with mock data from the repository root:
 
 ```powershell
