@@ -107,10 +107,13 @@ Typical steps:
 
 1. Download or otherwise obtain `rFactor2SharedMemoryMapPlugin64.dll` from `TheIronWolfModding/rF2SharedMemoryMapPlugin` or a known-good existing installation.
 2. Place the DLL in the rFactor 2 / dedicated-server plugin folder, typically under a `Bin64\Plugins` path.
-3. Start rFactor 2 or `Dedicated.exe` once so rFactor 2 creates or updates plugin configuration.
-4. Check the rFactor 2 `CustomPluginVariables.json` for the shared-memory plugin settings.
-5. Make sure scoring output is not disabled. The plugin's `UnsubscribedBuffersMask` must not include the `Scoring` flag value `2`.
-6. Start a session with AI or human drivers so scoring data changes.
+3. Start rFactor 2 or `Dedicated.exe` once so rFactor 2 detects the DLL and creates or updates plugin configuration.
+4. Stop rFactor 2 / `Dedicated.exe` before editing the plugin configuration.
+5. Open the relevant `CustomPluginVariables.json`, usually under a `UserData\<player-or-profile>\` folder.
+6. Find the shared-memory plugin entry and set its `" Enabled"` value to `1`. The leading space in `" Enabled"` is intentional in rFactor 2 plugin configuration keys; do not rename it to `"Enabled"` unless the generated file actually uses that spelling.
+7. Make sure scoring output is not disabled. The plugin's `UnsubscribedBuffersMask` must not include the `Scoring` flag value `2`.
+8. Start rFactor 2 or `Dedicated.exe` again. The plugin should now load and create its shared-memory maps once a session is active.
+9. Start a session with AI or human drivers so scoring data changes.
 
 If the PoC reports that the scoring map cannot be opened, the plugin is not loaded, scoring output is disabled, the map name/PID is wrong, or the map is not visible to the Windows user running the PoC.
 
@@ -131,7 +134,7 @@ The live data path is:
 
 The PoC deliberately uses `OpenFileMappingW` instead of Python's `mmap.mmap(...)` live path because Python's named `mmap` can create a new empty map when the requested name does not exist. That would produce a false positive. `OpenFileMappingW` only succeeds when another process, such as the rFactor 2 shared-memory plugin, already created the map.
 
-The plugin map contains a small wrapper version block followed by the actual `rF2Scoring` payload. The PoC skips the wrapper block and decodes the payload.
+The upstream plugin/monitor code has historically exposed a small mapped-buffer version wrapper as well as a version header inside the `rF2Scoring` payload. To keep the PoC useful while validating real installations, the reader tries both plausible payload offsets and chooses the decode that looks sane: valid session code, plausible vehicle count, readable text, and plausible vehicle rows. The page shows `Decode offset` so a live run records which layout worked.
 
 ---
 
@@ -262,17 +265,22 @@ http://127.0.0.1:8877/poc
 
 ### Dedicated server
 
-For a dedicated server, first find the process ID:
+For a dedicated server, the process ID must be the Windows PID of the running `Dedicated.exe` process, not the PID of `rFactor2.exe`, Steam, the launcher, the monitor app, or Python.
+
+Find it with one of these commands. The second command is more tolerant of executable names such as `rFactor2 Dedicated.exe`:
 
 ```powershell
 Get-Process Dedicated | Select-Object Id, ProcessName, Path
+Get-CimInstance Win32_Process | Where-Object { $_.Name -like '*Dedicated*.exe' } | Select-Object ProcessId, Name, ExecutablePath, CommandLine
 ```
 
-Then pass that PID:
+Then pass that process ID value to the PoC:
 
 ```powershell
 python services/leaderboard/poc/run_poc.py --source shared-memory --pid <PID>
 ```
+
+No repository config file is required for this value. It is a runtime argument because the PID changes each time `Dedicated.exe` restarts.
 
 The PoC will try these scoring map names in order:
 
@@ -281,6 +289,15 @@ $rFactor2SMMP_Scoring$<PID>
 Global\$rFactor2SMMP_Scoring$<PID>
 $rFactor2SMMP_Scoring$
 ```
+
+This is different from normal client mode. The upstream shared-memory plugin appends the `Dedicated.exe` PID when it runs inside a dedicated server so that multiple dedicated-server instances can run at the same time without map-name collisions.
+
+If rFactor 2 and `Dedicated.exe` are installed in the same folder, they may share content, installed packages, `Bin64\Plugins`, and some `UserData` structure, but they are still separate processes. If both executables are running and both load the shared-memory plugin, they can expose different maps at the same time:
+
+* `rFactor2.exe` exposes the normal client map name such as `$rFactor2SMMP_Scoring$`.
+* `Dedicated.exe` exposes a PID-suffixed map name such as `$rFactor2SMMP_Scoring$12345` or `Global\$rFactor2SMMP_Scoring$12345`.
+
+A monitor application that only opens the normal client map name may show data when a client joins but show nothing for the dedicated server. That does not necessarily prove that the dedicated-server plugin failed; it may only mean the monitor is not looking for the PID-suffixed dedicated-server map. For the PoC, use `--pid <PID>` or `--map-name` to target the dedicated-server map explicitly.
 
 If needed, pass the exact map name:
 
@@ -386,10 +403,46 @@ Check:
 
 * Is rFactor 2 or `Dedicated.exe` running?
 * Is `rF2SharedMemoryMapPlugin` installed and loaded?
+* Has rFactor 2 generated the plugin entry in `CustomPluginVariables.json`, and is `" Enabled"` set to `1` for that plugin?
 * Is scoring output enabled? `UnsubscribedBuffersMask` must not include `2`.
-* Did you pass the correct `Dedicated.exe` PID?
+* For dedicated-server mode, did you pass the current `Dedicated.exe` PID with `--pid <PID>`?
+* Did `Dedicated.exe` restart after you collected the PID? If yes, collect the new PID.
 * Are you running the PoC under a Windows user/session that can see the map?
 * If using `Global\...`, does the dedicated-server account have `Create Global Objects` permission?
+* If a monitor app shows client data but not server data, confirm whether the monitor supports PID-suffixed dedicated-server map names. Some tools may only look for `$rFactor2SMMP_Scoring$`.
+
+For a hard dedicated-server check, prefer:
+
+```powershell
+Get-CimInstance Win32_Process | Where-Object { $_.Name -like '*Dedicated*.exe' } | Select-Object ProcessId, Name, ExecutablePath, CommandLine
+python services/leaderboard/poc/run_poc.py --source shared-memory --pid <PID>
+```
+
+If this still fails, try the exact map names shown in the dedicated-server section with `--map-name`.
+
+If all dedicated-server map names fail but client mode works, the most likely explanations are:
+
+* the plugin is enabled for the client profile but not for the profile/configuration used by `Dedicated.exe`;
+* `Dedicated.exe` did not load the plugin DLL;
+* the dedicated-server process has not started a session that causes scoring output to be created;
+* the plugin created a map in a Windows namespace/session the PoC process cannot see;
+* the monitor or test tool is only checking the normal client map name and not the dedicated-server PID-suffixed names.
+
+To distinguish those cases, verify the `CustomPluginVariables.json` used by the dedicated server, check the plugin log output under the rFactor 2 `UserData\Log` area if enabled, and confirm that the `Dedicated.exe` process was restarted after changing `" Enabled"`.
+
+### Browser shows impossible values in live mode
+
+Examples: `128` vehicles when only a few cars are present, `Unknown (<large number>)` session, very large sector values, negative/changing lap counts, or many blank rows.
+
+These usually mean the reader opened a real map but decoded the bytes with the wrong layout or offset. The PoC now auto-detects the more plausible scoring payload offset and filters unlikely empty vehicle rows. If this still happens, record:
+
+* source line from the page, including `Decode offset`;
+* map name used;
+* whether the map came from client or dedicated server;
+* shared-memory plugin version;
+* a screenshot or `/api/snapshot` JSON sample.
+
+Then treat the run as partial evidence only: the map exists, but the struct layout needs adjustment before the data can be trusted.
 
 ### Browser opens but shows fixture data
 

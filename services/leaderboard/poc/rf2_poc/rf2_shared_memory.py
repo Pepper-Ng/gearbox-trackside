@@ -189,16 +189,22 @@ class SharedMemoryScoringReader:
         except Exception as exc:
             raise SharedMemoryUnavailable(f"Could not read scoring memory map '{self.map_name}': {exc}") from exc
 
-        scoring = rF2Scoring.from_buffer_copy(buffer)
+        scoring, decode_offset = decode_best_scoring_payload(buffer)
         info = scoring.mScoringInfo
-        vehicle_count = max(0, min(int(info.mNumVehicles), MAX_MAPPED_VEHICLES))
-        drivers = [vehicle_to_dict(scoring.mVehicles[index]) for index in range(vehicle_count)]
+        raw_vehicle_count = int(info.mNumVehicles)
+        scan_limit = raw_vehicle_count if 0 <= raw_vehicle_count <= MAX_MAPPED_VEHICLES else MAX_MAPPED_VEHICLES
+        drivers = [
+            driver
+            for index in range(scan_limit)
+            if (driver := vehicle_to_dict(scoring.mVehicles[index])) is not None
+        ]
         drivers.sort(key=lambda driver: driver.get("place") or 999)
 
         return {
             "source": "shared-memory",
             "status": "connected",
             "memory_map": self.map_name,
+            "decode_offset": decode_offset,
             "timestamp": time.time(),
             "update_counter": int(scoring.mVersionUpdateEnd),
             "version_begin": int(scoring.mVersionUpdateBegin),
@@ -212,7 +218,8 @@ class SharedMemoryScoringReader:
                 "end_time": none_if_negative(float(info.mEndET)),
                 "max_laps": int(info.mMaxLaps),
                 "lap_distance": none_if_negative(float(info.mLapDist)),
-                "vehicle_count": vehicle_count,
+                "vehicle_count": len(drivers),
+                "raw_vehicle_count": raw_vehicle_count,
                 "game_phase": int(info.mGamePhase),
                 "in_realtime": bool(info.mInRealtime),
                 "player_name": c_string(info.mPlayerName),
@@ -238,11 +245,15 @@ class SharedMemoryScoringReader:
         view = None
         try:
             view = _KERNEL32.MapViewOfFile(handle, FILE_MAP_READ, 0, 0, mapped_size)
+            read_size = mapped_size
+            if not view:
+                view = _KERNEL32.MapViewOfFile(handle, FILE_MAP_READ, 0, 0, size)
+                read_size = size
             if not view:
                 raise SharedMemoryUnavailable(last_win32_error(f"MapViewOfFile({name!r}) failed"))
 
-            buffer = (ctypes.c_ubyte * size)()
-            ctypes.memmove(buffer, int(view) + MAPPED_BUFFER_WRAPPER_SIZE, size)
+            buffer = (ctypes.c_ubyte * read_size)()
+            ctypes.memmove(buffer, view, read_size)
             return bytes(buffer)
         finally:
             if view:
@@ -250,7 +261,52 @@ class SharedMemoryScoringReader:
             _KERNEL32.CloseHandle(handle)
 
 
-def vehicle_to_dict(vehicle: rF2VehicleScoring) -> dict[str, Any]:
+def decode_best_scoring_payload(buffer: bytes) -> tuple[rF2Scoring, int]:
+    size = ctypes.sizeof(rF2Scoring)
+    candidates: list[tuple[int, rF2Scoring, int]] = []
+    for offset in (0, MAPPED_BUFFER_WRAPPER_SIZE):
+        if len(buffer) < offset + size:
+            continue
+        scoring = rF2Scoring.from_buffer_copy(buffer[offset : offset + size])
+        candidates.append((score_decoded_scoring(scoring), scoring, offset))
+
+    if not candidates:
+        raise SharedMemoryUnavailable("Scoring memory map is smaller than the expected rF2Scoring payload.")
+
+    _, scoring, offset = max(candidates, key=lambda item: item[0])
+    return scoring, offset
+
+
+def score_decoded_scoring(scoring: rF2Scoring) -> int:
+    info = scoring.mScoringInfo
+    score = 0
+    raw_vehicle_count = int(info.mNumVehicles)
+    session_code = int(info.mSession)
+    track_name = c_string(info.mTrackName)
+
+    if 0 <= raw_vehicle_count <= MAX_MAPPED_VEHICLES:
+        score += 5
+    if 0 <= session_code <= 13:
+        score += 5
+    if is_plausible_text(track_name):
+        score += 3
+    if none_if_unreasonable(float(info.mAmbientTemp)) is not None:
+        score += 1
+    if none_if_unreasonable(float(info.mTrackTemp)) is not None:
+        score += 1
+
+    scan_limit = raw_vehicle_count if 0 <= raw_vehicle_count <= MAX_MAPPED_VEHICLES else MAX_MAPPED_VEHICLES
+    valid_driver_count = sum(
+        1 for index in range(scan_limit) if is_probable_vehicle(scoring.mVehicles[index])
+    )
+    score += min(valid_driver_count, 16) * 2
+    return score
+
+
+def vehicle_to_dict(vehicle: rF2VehicleScoring) -> dict[str, Any] | None:
+    if not is_probable_vehicle(vehicle):
+        return None
+
     return {
         "id": int(vehicle.mID),
         "driver_name": c_string(vehicle.mDriverName),
@@ -286,6 +342,29 @@ def vehicle_to_dict(vehicle: rF2VehicleScoring) -> dict[str, Any]:
             "z": round(float(vehicle.mPos.z), 3),
         },
     }
+
+
+def is_probable_vehicle(vehicle: rF2VehicleScoring) -> bool:
+    driver_name = c_string(vehicle.mDriverName)
+    if not is_plausible_text(driver_name):
+        return False
+    place = int(vehicle.mPlace)
+    laps = int(vehicle.mTotalLaps)
+    sector = int(vehicle.mSector)
+    if place < 0 or place > MAX_MAPPED_VEHICLES:
+        return False
+    if laps < 0 or laps > 10000:
+        return False
+    if sector not in (0, 1, 2):
+        return False
+    return True
+
+
+def is_plausible_text(value: str) -> bool:
+    if not value:
+        return False
+    printable_count = sum(1 for char in value if char.isprintable())
+    return printable_count == len(value)
 
 
 def c_string(value: Any) -> str:

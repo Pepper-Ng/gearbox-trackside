@@ -22,6 +22,18 @@ The PoC does not create rFactor 2 shared memory itself. Live mode requires
 rFactor 2 / `Dedicated.exe`. Mock mode bypasses rFactor 2 and shared memory
 entirely and uses `poc/fixtures/mock_scoring_snapshot.json`.
 
+After copying the plugin DLL into `Bin64\Plugins`, start rFactor 2 or
+`Dedicated.exe` once so `CustomPluginVariables.json` is updated, then set the
+plugin's `" Enabled"` value to `1` and restart. The leading space in
+`" Enabled"` is intentional in rFactor 2 plugin configuration.
+
+For dedicated-server live mode, pass the current `Dedicated.exe` PID:
+
+```powershell
+Get-Process Dedicated | Select-Object Id, ProcessName, Path
+python services/leaderboard/poc/run_poc.py --source shared-memory --pid <PID>
+```
+
 Run with mock data from the repository root:
 
 ```powershell

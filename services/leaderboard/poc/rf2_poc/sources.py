@@ -32,8 +32,11 @@ class MockScoringSource:
         snapshot["status"] = "fixture replay"
         snapshot["timestamp"] = time.time()
         snapshot["update_counter"] = self._updates
+        snapshot["decode_offset"] = None
 
         session = snapshot.setdefault("session", {})
+        session["raw_vehicle_count"] = len(snapshot.get("drivers", []))
+        session["vehicle_count"] = len(snapshot.get("drivers", []))
         session["current_time"] = round(float(session.get("current_time") or 0.0) + elapsed, 3)
 
         lap_distance = float(session.get("lap_distance") or 5300.0)

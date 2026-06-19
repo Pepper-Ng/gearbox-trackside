@@ -88,15 +88,16 @@ class SharedMemoryMappingTests(unittest.TestCase):
             SharedMemoryScoringReader(map_name=missing_name)
 
     @unittest.skipUnless(sys.platform == "win32", "Windows shared-memory behavior only")
-    def test_reader_parses_existing_scoring_memory_map(self) -> None:
+    def test_reader_parses_scoring_memory_map_with_wrapper_offset(self) -> None:
         map_name = f"GearboxTracksideScoring-{uuid.uuid4()}"
         scoring = build_fake_scoring_payload()
 
-        with NamedScoringMap(map_name, scoring):
+        with NamedScoringMap(map_name, scoring, payload_offset=MAPPED_BUFFER_WRAPPER_SIZE):
             snapshot = SharedMemoryScoringReader(map_name=map_name).read_snapshot()
 
         self.assertEqual(snapshot["source"], "shared-memory")
         self.assertEqual(snapshot["memory_map"], map_name)
+        self.assertEqual(snapshot["decode_offset"], MAPPED_BUFFER_WRAPPER_SIZE)
         self.assertEqual(snapshot["session"]["track"], "PoC Test Track")
         self.assertEqual(snapshot["session"]["session_type"], "Practice")
         self.assertEqual(snapshot["session"]["vehicle_count"], 1)
@@ -104,15 +105,28 @@ class SharedMemoryMappingTests(unittest.TestCase):
         self.assertEqual(snapshot["drivers"][0]["place"], 1)
         self.assertEqual(snapshot["drivers"][0]["best_lap_time"], 81.234)
 
+    @unittest.skipUnless(sys.platform == "win32", "Windows shared-memory behavior only")
+    def test_reader_parses_scoring_memory_map_at_zero_offset(self) -> None:
+        map_name = f"GearboxTracksideScoring-{uuid.uuid4()}"
+        scoring = build_fake_scoring_payload()
+
+        with NamedScoringMap(map_name, scoring, payload_offset=0):
+            snapshot = SharedMemoryScoringReader(map_name=map_name).read_snapshot()
+
+        self.assertEqual(snapshot["decode_offset"], 0)
+        self.assertEqual(snapshot["session"]["track"], "PoC Test Track")
+        self.assertEqual(snapshot["drivers"][0]["driver_name"], "Setup9")
+
 PAGE_READWRITE = 0x0004
 FILE_MAP_WRITE = 0x0002
 INVALID_HANDLE_VALUE = wintypes.HANDLE(-1).value
 
 
 class NamedScoringMap:
-    def __init__(self, name: str, scoring: rF2Scoring):
+    def __init__(self, name: str, scoring: rF2Scoring, payload_offset: int):
         self.name = name
         self.scoring = scoring
+        self.payload_offset = payload_offset
         self.handle = None
         self.view = None
         self.size = MAPPED_BUFFER_WRAPPER_SIZE + ctypes.sizeof(rF2Scoring)
@@ -164,7 +178,7 @@ class NamedScoringMap:
         wrapper.mVersionUpdateEnd = 7
         ctypes.memmove(int(self.view), ctypes.byref(wrapper), MAPPED_BUFFER_WRAPPER_SIZE)
         ctypes.memmove(
-            int(self.view) + MAPPED_BUFFER_WRAPPER_SIZE,
+            int(self.view) + self.payload_offset,
             ctypes.byref(self.scoring),
             ctypes.sizeof(rF2Scoring),
         )
