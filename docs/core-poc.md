@@ -317,6 +317,53 @@ Use this only for convenience. If the browser says `shared memory unavailable; u
 
 ---
 
+## Inspect Visible Memory Maps
+
+Use this diagnostic when the plugin appears to load but `run_poc.py --source shared-memory` cannot open any map.
+
+Without a dedicated-server PID:
+
+```powershell
+python services/leaderboard/poc/list_memory_maps.py
+```
+
+With a dedicated-server PID:
+
+```powershell
+python services/leaderboard/poc/list_memory_maps.py --pid <PID>
+```
+
+The command does two things:
+
+1. It actively probes known rF2 shared-memory map names with `OpenFileMappingW`, including PID-suffixed dedicated-server variants when `--pid` is supplied.
+2. It enumerates named Windows `Section` objects visible to the current user/session and filters for `rFactor2SMMP` by default.
+
+Example useful output:
+
+```text
+rF2 map open probes:
+  OPEN    $rFactor2SMMP_Scoring$
+  missing $rFactor2SMMP_Scoring$18228 (Windows error 2)
+
+Visible named Section objects:
+  \BaseNamedObjects\$rFactor2SMMP_Scoring$ [Section]
+```
+
+Use `--all` to print all visible named Section objects, not just rF2 matches:
+
+```powershell
+python services/leaderboard/poc/list_memory_maps.py --all
+```
+
+Limitations:
+
+* This lists named Section objects visible to the Windows user/session running the diagnostic.
+* It cannot list private unnamed mappings.
+* It may not show objects in other sessions or namespaces if the current user cannot access them.
+* If the diagnostic finds no rF2 maps, but plugin log files appear, the DLL may be loaded but not creating output maps for that process/session/configuration.
+
+---
+
 ## Viewing From Another Machine
 
 By default, the PoC binds to `127.0.0.1`, so only the host PC can open it.
@@ -428,7 +475,16 @@ If all dedicated-server map names fail but client mode works, the most likely ex
 * the plugin created a map in a Windows namespace/session the PoC process cannot see;
 * the monitor or test tool is only checking the normal client map name and not the dedicated-server PID-suffixed names.
 
-To distinguish those cases, verify the `CustomPluginVariables.json` used by the dedicated server, check the plugin log output under the rFactor 2 `UserData\Log` area if enabled, and confirm that the `Dedicated.exe` process was restarted after changing `" Enabled"`.
+To distinguish those cases:
+
+1. Verify the `CustomPluginVariables.json` used by the dedicated server.
+2. Confirm the shared-memory plugin entry has `" Enabled"` set to `1`.
+3. Confirm `UnsubscribedBuffersMask` does not disable scoring.
+4. Confirm `Dedicated.exe` was restarted after changing `" Enabled"`.
+5. Check the plugin log output under the rFactor 2 `UserData\Log` area.
+6. Run `python services/leaderboard/poc/list_memory_maps.py --pid <PID>` and check whether any rF2 maps are visible/openable.
+
+If plugin log files are created but `RF2SMMP_DebugOutput.txt` remains empty, increase the plugin's debug output settings in `CustomPluginVariables.json` if available for that plugin version. A created-but-empty log file is useful evidence that the DLL loaded, but it is not by itself proof that scoring maps were created.
 
 ### Browser shows impossible values in live mode
 
