@@ -101,7 +101,8 @@ def main() -> None:
     args = parse_args()
     configure_win32_api()
     session_id = get_current_session_id()
-    directories = visible_object_directories(session_id)
+    target_session_id = get_process_session_id(args.pid) if args.pid is not None else None
+    directories = visible_object_directories(session_id, target_session_id)
     probes = probe_rf2_map_names(args.pid)
     entries = enumerate_named_sections(directories)
     filtered_entries = filter_entries(entries, args.filter, args.all)
@@ -111,6 +112,8 @@ def main() -> None:
             json.dumps(
                 {
                     "session_id": session_id,
+                    "target_pid": args.pid,
+                    "target_session_id": target_session_id,
                     "directories": directories,
                     "probes": [asdict(result) for result in probes],
                     "sections": [asdict(entry) for entry in filtered_entries],
@@ -121,6 +124,9 @@ def main() -> None:
         return
 
     print(f"Current Windows session ID: {session_id}")
+    if args.pid is not None:
+        print(f"Target PID: {args.pid}")
+        print(f"Target PID Windows session ID: {target_session_id if target_session_id is not None else '<unavailable>'}")
     print()
     print("rF2 map open probes:")
     for result in probes:
@@ -175,11 +181,21 @@ def get_current_session_id() -> int:
     return int(session_id.value)
 
 
-def visible_object_directories(session_id: int) -> list[str]:
+def get_process_session_id(pid: int | None) -> int | None:
+    if pid is None:
+        return None
+    session_id = wintypes.DWORD(0)
+    if not kernel32.ProcessIdToSessionId(pid, ctypes.byref(session_id)):
+        return None
+    return int(session_id.value)
+
+
+def visible_object_directories(current_session_id: int, target_session_id: int | None) -> list[str]:
     directories = [r"\BaseNamedObjects"]
-    if session_id >= 0:
-        directories.append(rf"\Sessions\{session_id}\BaseNamedObjects")
-    return directories
+    for session_id in dedupe_ints([current_session_id, target_session_id, 0]):
+        if session_id is not None and session_id >= 0:
+            directories.append(rf"\Sessions\{session_id}\BaseNamedObjects")
+    return dedupe(directories)
 
 
 def probe_rf2_map_names(pid: int | None) -> list[ProbeResult]:
@@ -297,6 +313,14 @@ def filter_entries(entries: list[ObjectEntry], filter_text: str, include_all: bo
 
 def dedupe(values: list[str]) -> list[str]:
     result: list[str] = []
+    for value in values:
+        if value not in result:
+            result.append(value)
+    return result
+
+
+def dedupe_ints(values: list[int | None]) -> list[int | None]:
+    result: list[int | None] = []
     for value in values:
         if value not in result:
             result.append(value)

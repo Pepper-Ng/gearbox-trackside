@@ -4,6 +4,8 @@ This PoC answers one narrow question: can rFactor 2 session/player scoring data 
 
 It is intentionally small. It does not implement the final leaderboard architecture, staff controls, persistence, printing, telemetry reports, camera behavior, deployment packaging, or venue hardening.
 
+For source-level details on how `rF2SharedMemoryMapPlugin` loads, creates maps, names dedicated-server maps, logs, and publishes scoring data, see `docs/shared-memory-plugin-investigation.md`.
+
 The expected live validation shape is:
 
 ```text

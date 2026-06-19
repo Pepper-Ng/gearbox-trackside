@@ -51,3 +51,7 @@ Then open `http://127.0.0.1:8877/poc`.
 See `docs/core-poc.md` for detailed host setup, plugin requirements,
 shared-memory explanation, mock boundaries, live-mode commands, and
 troubleshooting.
+
+See `docs/shared-memory-plugin-investigation.md` for the source-level analysis
+of how `rF2SharedMemoryMapPlugin` creates maps, logs startup, and handles
+dedicated-server map names.
