@@ -1,0 +1,795 @@
+
+06/19/2026 09:02:04
+***mGamePhase:Garage(0)
+***mSession:Practice(1)
+***mYellowFlagState:NoFlag(0)
+***mSector:1
+***mCurrentSector:0x80000000
+***mInRealtimeFC:false(0)
+***mInRealtimeSU:false(0)
+***mSectorFlag[0]:Unknown(11)
+***mSectorFlag[1]:Unknown(11)
+***mSectorFlag[2]:Unknown(11)
+***mControl:AI(1)
+***mInPits:true(1)
+***mIsPlayer:true(1)
+***mPlace:1
+***mPitState:Exiting(4)
+***mIndividualPhase:GreenFlag(5)
+***mFlag:Green(0)
+***mUnderYellow:0
+***mCountLapFlag:CountLapButNotTime(1)
+***mInGarageStall:true(1)
+***mFinishStatus:None(0)
+***mLapNumber:0
+***mTotalLaps:0
+***mMaxLaps:2147483647
+***mNumVehicles:3
+***mScheduledStops:false(0)
+***mHeadlights:false(0)
+***mSpeedLimiter:false(0)
+***mFrontTireCompoundIndex:true(3)
+***mRearTireCompoundIndex:true(3)
+***mFrontTireCompoundName:Hard
+***mRearTireCompoundName:Hard
+***mFrontFlapActivated:false(0)
+***mRearFlapActivated:false(0)
+***mRearFlapLegalStatus:Disallowed(0)
+***mIgnitionStarter:Off(0)
+***mSpeedLimiterAvailable:true(1)
+***mAntiStallActivated:false(0)
+***mStartLight:0
+***mNumRedLights:5
+***mNumPitstops:0
+***mNumPenalties:0
+***mLapsBehindNext:0
+***mLapsBehindLeader:0
+***mPlayerHeadlights:false(0)
+***mServerScored:true(1)
+***mQualification:1
+
+06/19/2026 09:02:05
+***mPlace:3
+***mLapsBehindLeader:2
+
+
+************************************************************************************
+* NEW SESSION **********************************************************************
+************************************************************************************
+
+06/19/2026 09:02:10
+***mGamePhase:GreenFlag(5)
+
+06/19/2026 09:02:40
+***mLapsBehindNext:1
+
+06/19/2026 09:03:00
+***mLapsBehindLeader:3
+
+06/19/2026 09:03:55
+***mInRealtimeFC:true(1)
+
+06/19/2026 09:03:56
+***mSpeedLimiter:true(1)
+***mIgnitionStarter:Ignition(1)
+
+06/19/2026 09:03:56
+***mInRealtimeSU:true(1)
+***mControl:Player(0)
+
+06/19/2026 09:04:05
+***mInGarageStall:false(0)
+
+06/19/2026 09:04:08
+***mCurrentSector:0x00000000
+
+06/19/2026 09:04:08
+***mInPits:false(0)
+***mPitState:None(0)
+
+06/19/2026 09:04:09
+***mSpeedLimiter:false(0)
+
+06/19/2026 09:04:24
+***mLapsBehindNext:3
+***mLapsBehindLeader:1
+
+06/19/2026 09:04:47
+***mCurrentSector:0x00000001
+
+06/19/2026 09:04:47
+***mSector:2
+
+06/19/2026 09:05:04
+***mSectorFlag[1]:Pending(1)
+
+06/19/2026 09:05:09
+***mRearFlapLegalStatus:Alllowed(2)
+
+06/19/2026 09:05:10
+***mSectorFlag[1]:Unknown(11)
+
+06/19/2026 09:05:10
+***mSectorFlag[1]:Pending(1)
+
+06/19/2026 09:05:13
+***mLapsBehindLeader:2
+
+06/19/2026 09:05:13
+***mSectorFlag[1]:Unknown(11)
+
+06/19/2026 09:05:13
+***mLapsBehindLeader:1
+
+06/19/2026 09:05:13
+***mLapsBehindLeader:2
+
+06/19/2026 09:05:25
+***mSectorFlag[1]:Pending(1)
+
+06/19/2026 09:05:43
+***mLapsBehindNext:4
+
+06/19/2026 09:07:11
+***mLapsBehindLeader:3
+
+06/19/2026 09:07:33
+***mLapsBehindNext:5
+
+06/19/2026 09:08:59
+***mLapsBehindLeader:4
+
+06/19/2026 09:09:00
+***mPitState:Request(1)
+
+06/19/2026 09:09:19
+***mLapsBehindNext:6
+
+06/19/2026 09:09:22
+***mSectorFlag[1]:Unknown(11)
+
+06/19/2026 09:09:23
+***mSectorFlag[1]:Pending(1)
+
+06/19/2026 09:09:24
+***mSectorFlag[1]:Unknown(11)
+
+06/19/2026 09:09:39
+***mRearFlapLegalStatus:Disallowed(0)
+
+06/19/2026 09:09:56
+***mSectorFlag[1]:Pending(1)
+
+06/19/2026 09:10:01
+***mSectorFlag[1]:Unknown(11)
+
+06/19/2026 09:10:08
+***mCurrentSector:0x00000002
+
+06/19/2026 09:10:08
+***mSector:3
+
+06/19/2026 09:10:20
+***mSectorFlag[2]:Pending(1)
+
+06/19/2026 09:10:34
+***mSectorFlag[2]:Unknown(11)
+
+06/19/2026 09:10:45
+***mSectorFlag[2]:Pending(1)
+
+06/19/2026 09:10:55
+***mNumVehicles:4
+
+06/19/2026 09:10:56
+***mNumVehicles:5
+
+06/19/2026 09:10:56
+***mNumVehicles:6
+
+06/19/2026 09:10:57
+***mNumVehicles:7
+
+06/19/2026 09:10:57
+***mNumVehicles:8
+
+06/19/2026 09:10:58
+***mNumVehicles:9
+
+06/19/2026 09:11:27
+***mLapsBehindLeader:5
+
+06/19/2026 09:11:52
+***mLapsBehindNext:7
+
+06/19/2026 09:13:16
+***mLapsBehindLeader:6
+
+06/19/2026 09:13:23
+***mSectorFlag[2]:Unknown(11)
+
+06/19/2026 09:13:36
+***mRearFlapLegalStatus:Alllowed(2)
+
+06/19/2026 09:13:37
+***mCurrentSector:0x00000000
+***mLapNumber:1
+
+06/19/2026 09:13:37
+***mSector:1
+***mCountLapFlag:CountLapAndTime(2)
+***mTotalLaps:1
+
+06/19/2026 09:13:46
+***mRearFlapLegalStatus:Disallowed(0)
+
+06/19/2026 09:13:49
+***mSectorFlag[0]:Pending(1)
+
+06/19/2026 09:13:50
+***mSectorFlag[0]:Unknown(11)
+
+06/19/2026 09:13:52
+***mSectorFlag[0]:Pending(1)
+
+06/19/2026 09:14:05
+***mSectorFlag[0]:Unknown(11)
+
+06/19/2026 09:14:06
+***mLapsBehindNext:8
+
+06/19/2026 09:14:09
+***mSectorFlag[0]:Pending(1)
+
+06/19/2026 09:14:10
+***mSectorFlag[0]:Unknown(11)
+
+06/19/2026 09:14:13
+***mSectorFlag[0]:Pending(1)
+
+06/19/2026 09:14:14
+***mCountLapFlag:CountLapButNotTime(1)
+
+06/19/2026 09:14:14
+***mSectorFlag[0]:Unknown(11)
+
+06/19/2026 09:14:18
+***mSectorFlag[0]:Pending(1)
+
+06/19/2026 09:14:22
+***mSectorFlag[0]:Unknown(11)
+
+06/19/2026 09:14:37
+***mSectorFlag[0]:Pending(1)
+
+06/19/2026 09:15:14
+***mPlace:4
+***mLapsBehindNext:0
+
+06/19/2026 09:15:22
+***mInRealtimeFC:false(0)
+
+06/19/2026 09:15:29
+***mCurrentSector:0x80000000
+***mLapNumber:2
+***mIgnitionStarter:Off(0)
+
+06/19/2026 09:15:30
+***mInRealtimeSU:false(0)
+***mSectorFlag[0]:Unknown(11)
+***mControl:AI(1)
+***mInPits:true(1)
+***mPitState:Exiting(4)
+***mInGarageStall:true(1)
+***mTotalLaps:2
+
+06/19/2026 09:15:39
+***mPlace:5
+
+06/19/2026 09:15:55
+***mPlace:6
+
+06/19/2026 09:16:08
+***mPlace:7
+
+06/19/2026 09:16:26
+***mInRealtimeFC:true(1)
+
+06/19/2026 09:16:27
+***mSpeedLimiter:true(1)
+***mIgnitionStarter:Ignition(1)
+
+06/19/2026 09:16:27
+***mInRealtimeSU:true(1)
+***mControl:Player(0)
+
+06/19/2026 09:16:29
+***mPlace:8
+
+06/19/2026 09:16:39
+***mGamePhase:SessionOver(8)
+
+06/19/2026 09:16:39
+***mSectorFlag[2]:PitLeadLap(3)
+
+06/19/2026 09:16:40
+***mInGarageStall:false(0)
+
+06/19/2026 09:16:41
+***mSpeedLimiter:false(0)
+
+06/19/2026 09:16:43
+***mSectorFlag[0]:Pending(1)
+
+06/19/2026 09:16:44
+***mSectorFlag[0]:Unknown(11)
+
+06/19/2026 09:16:48
+***mSectorFlag[0]:Pending(1)
+
+06/19/2026 09:16:52
+***mSectorFlag[0]:Unknown(11)
+
+06/19/2026 09:16:52
+***mPlace:9
+
+06/19/2026 09:16:55
+***mCurrentSector:0x00000000
+
+06/19/2026 09:16:55
+***mInPits:false(0)
+***mPitState:None(0)
+***mNumPenalties:2
+
+06/19/2026 09:17:04
+***mSectorFlag[0]:Pending(1)
+
+06/19/2026 09:17:17
+***mSectorFlag[0]:Unknown(11)
+***mSectorFlag[2]:Unknown(11)
+
+06/19/2026 09:17:18
+***mInRealtimeFC:false(0)
+
+06/19/2026 09:17:23
+***mGamePhase:Garage(0)
+***mSession:Qualification(5)
+***mCurrentSector:0x80000000
+***mInRealtimeSU:false(0)
+***mControl:AI(1)
+***mInPits:true(1)
+***mPitState:Exiting(4)
+***mInGarageStall:true(1)
+***mFinishStatus:Finished(1)
+***mLapNumber:3
+***mTotalLaps:3
+***mIgnitionStarter:Off(0)
+
+06/19/2026 09:17:29
+***mFinishStatus:None(0)
+***mLapNumber:0
+***mTotalLaps:0
+***mNumPenalties:0
+***mLapsBehindLeader:0
+
+06/19/2026 09:17:42
+***mInRealtimeFC:true(1)
+
+06/19/2026 09:17:43
+***mSpeedLimiter:true(1)
+***mIgnitionStarter:Ignition(1)
+
+06/19/2026 09:17:43
+***mInRealtimeSU:true(1)
+***mControl:Player(0)
+
+
+************************************************************************************
+* NEW SESSION **********************************************************************
+************************************************************************************
+
+06/19/2026 09:17:46
+***mGamePhase:GreenFlag(5)
+
+06/19/2026 09:18:01
+***mInGarageStall:false(0)
+
+06/19/2026 09:18:02
+***mHeadlights:true(1)
+***mPlayerHeadlights:true(1)
+
+06/19/2026 09:18:05
+***mCurrentSector:0x00000000
+
+06/19/2026 09:18:05
+***mInPits:false(0)
+***mPitState:None(0)
+
+06/19/2026 09:18:05
+***mSpeedLimiter:false(0)
+
+06/19/2026 09:18:40
+***mSectorFlag[0]:Pending(1)
+
+06/19/2026 09:18:43
+***mSectorFlag[0]:Unknown(11)
+
+06/19/2026 09:18:48
+***mSectorFlag[1]:Pending(1)
+
+06/19/2026 09:18:49
+***mSectorFlag[1]:Unknown(11)
+
+06/19/2026 09:18:53
+***mSectorFlag[1]:Pending(1)
+
+06/19/2026 09:19:03
+***mSectorFlag[1]:Unknown(11)
+
+06/19/2026 09:19:06
+***mSectorFlag[1]:Pending(1)
+
+06/19/2026 09:19:13
+***mFinishStatus:Dq(3)
+
+06/19/2026 09:19:15
+***mCurrentSector:0x80000000
+***mInRealtimeFC:false(0)
+***mRearFlapLegalStatus:Alllowed(2)
+***mIgnitionStarter:Off(0)
+
+06/19/2026 09:19:15
+***mInRealtimeSU:false(0)
+***mControl:AI(1)
+***mInPits:true(1)
+***mPitState:Exiting(4)
+***mInGarageStall:true(1)
+***mHeadlights:false(0)
+***mPlayerHeadlights:false(0)
+
+06/19/2026 09:19:16
+***mSectorFlag[1]:Unknown(11)
+
+06/19/2026 09:22:01
+***mLapsBehindLeader:1
+
+06/19/2026 09:22:05
+***mLapsBehindLeader:2
+
+06/19/2026 09:22:17
+***mLapsBehindLeader:1
+
+06/19/2026 09:22:21
+***mLapsBehindLeader:2
+
+06/19/2026 09:24:11
+***mLapsBehindLeader:3
+
+06/19/2026 09:24:31
+***mLapsBehindNext:1
+
+06/19/2026 09:26:00
+***mLapsBehindLeader:4
+
+06/19/2026 09:26:23
+***mLapsBehindNext:0
+
+06/19/2026 09:27:23
+***mLapsBehindNext:1
+
+06/19/2026 09:27:46
+***mGamePhase:SessionOver(8)
+
+06/19/2026 09:27:47
+***mSectorFlag[2]:PitLeadLap(3)
+
+06/19/2026 09:27:49
+***mLapsBehindLeader:5
+
+06/19/2026 09:28:07
+***mSectorFlag[0]:Pending(1)
+
+06/19/2026 09:28:27
+***mSectorFlag[1]:PitClosed(2)
+
+06/19/2026 09:29:16
+***mSectorFlag[2]:PitClosed(2)
+
+06/19/2026 09:30:08
+***mQualification:9
+
+06/19/2026 09:30:09
+***mSectorFlag[0]:Unknown(11)
+***mSectorFlag[1]:Unknown(11)
+***mSectorFlag[2]:Unknown(11)
+
+06/19/2026 09:30:20
+***mGamePhase:Garage(0)
+***mSession:Race(10)
+***mIndividualPhase:Formation(3)
+***mCountLapFlag:DoNotCountLap(0)
+***mFinishStatus:None(0)
+***mMaxLaps:5
+***mRearFlapLegalStatus:Disallowed(0)
+***mStartLight:1
+***mLapsBehindNext:0
+***mLapsBehindLeader:0
+
+
+************************************************************************************
+* NEW SESSION **********************************************************************
+************************************************************************************
+
+06/19/2026 09:30:44
+***mGamePhase:Formation(3)
+
+06/19/2026 09:30:44
+***mStartLight:0
+
+06/19/2026 09:34:55
+***mGamePhase:Countdown(4)
+***mCountLapFlag:CountLapAndTime(2)
+
+06/19/2026 09:34:58
+***mStartLight:1
+
+06/19/2026 09:34:59
+***mStartLight:2
+
+06/19/2026 09:35:00
+***mStartLight:3
+
+06/19/2026 09:35:01
+***mStartLight:4
+
+06/19/2026 09:35:02
+***mStartLight:5
+
+06/19/2026 09:35:04
+***mGamePhase:GreenFlag(5)
+***mIndividualPhase:GreenFlag(5)
+***mStartLight:6
+
+06/19/2026 09:35:04
+***mPlace:1
+
+06/19/2026 09:35:08
+***mPlace:2
+
+06/19/2026 09:35:09
+***mPlace:3
+
+06/19/2026 09:35:09
+***mPlace:5
+
+06/19/2026 09:35:09
+***mPlace:7
+
+06/19/2026 09:35:10
+***mPlace:8
+
+06/19/2026 09:35:10
+***mPlace:9
+
+06/19/2026 09:35:13
+***mStartLight:0
+
+06/19/2026 09:37:01
+***mLapsBehindLeader:1
+
+06/19/2026 09:37:05
+***mLapsBehindNext:1
+
+06/19/2026 09:38:50
+***mLapsBehindLeader:2
+
+06/19/2026 09:38:56
+***mLapsBehindNext:2
+
+06/19/2026 09:39:04
+***mSectorFlag[0]:Pending(1)
+
+06/19/2026 09:39:06
+***mSectorFlag[0]:Unknown(11)
+
+06/19/2026 09:39:07
+***mSectorFlag[0]:Pending(1)
+
+06/19/2026 09:39:07
+***mSectorFlag[0]:Unknown(11)
+
+06/19/2026 09:40:40
+***mLapsBehindLeader:3
+
+06/19/2026 09:40:48
+***mLapsBehindNext:3
+
+06/19/2026 09:42:29
+***mLapsBehindLeader:4
+
+06/19/2026 09:42:38
+***mLapsBehindNext:4
+
+06/19/2026 09:44:10
+***mSectorFlag[2]:PitLeadLap(3)
+
+06/19/2026 09:44:13
+***mGamePhase:SessionOver(8)
+
+06/19/2026 09:44:17
+***mLapsBehindLeader:5
+
+06/19/2026 09:44:28
+***mLapsBehindNext:5
+
+06/19/2026 09:45:41
+***mLapsBehindLeader:4
+
+06/19/2026 09:45:53
+***mLapsBehindNext:4
+
+06/19/2026 09:47:04
+***mGamePhase:Garage(0)
+***mSession:Practice(1)
+***mSectorFlag[2]:Unknown(11)
+***mPlace:1
+***mCountLapFlag:CountLapButNotTime(1)
+***mMaxLaps:2147483647
+***mNumVehicles:1
+***mLapsBehindNext:0
+***mLapsBehindLeader:0
+***mQualification:1
+
+
+************************************************************************************
+* NEW SESSION **********************************************************************
+************************************************************************************
+
+06/19/2026 09:47:05
+***mGamePhase:GreenFlag(5)
+
+06/19/2026 10:05:36
+***mGamePhase:Garage(0)
+***mSession:Qualification(5)
+***mNumVehicles:18
+
+06/19/2026 10:05:36
+***mPlace:18
+***mLapsBehindNext:1
+***mLapsBehindLeader:4
+
+
+************************************************************************************
+* NEW SESSION **********************************************************************
+************************************************************************************
+
+06/19/2026 10:05:42
+***mGamePhase:GreenFlag(5)
+
+06/19/2026 10:06:11
+***mLapsBehindNext:0
+
+06/19/2026 10:06:57
+***mLapsBehindNext:1
+
+06/19/2026 10:07:06
+***mInRealtimeFC:true(1)
+
+06/19/2026 10:07:07
+***mSpeedLimiter:true(1)
+***mIgnitionStarter:Ignition(1)
+
+06/19/2026 10:07:07
+***mInRealtimeSU:true(1)
+***mControl:Player(0)
+
+06/19/2026 10:07:10
+***mInGarageStall:false(0)
+***mHeadlights:true(1)
+***mPlayerHeadlights:true(1)
+
+06/19/2026 10:07:10
+***mLapsBehindLeader:5
+
+06/19/2026 10:07:24
+***mSpeedLimiter:false(0)
+
+06/19/2026 10:07:25
+***mCurrentSector:0x00000000
+
+06/19/2026 10:07:25
+***mInPits:false(0)
+***mPitState:None(0)
+***mNumPenalties:1
+
+06/19/2026 10:07:28
+***mFlag:Blue(6)
+
+06/19/2026 10:07:31
+***mFlag:Green(0)
+
+06/19/2026 10:07:38
+***mSectorFlag[0]:Pending(1)
+
+06/19/2026 10:07:38
+***mSectorFlag[0]:Unknown(11)
+
+06/19/2026 10:07:42
+***mFlag:Blue(6)
+
+06/19/2026 10:07:55
+***mFlag:Green(0)
+
+06/19/2026 10:07:56
+***mFlag:Blue(6)
+
+06/19/2026 10:07:57
+***mFlag:Green(0)
+
+06/19/2026 10:07:57
+***mGamePhase:SessionOver(8)
+
+06/19/2026 10:07:58
+***mSectorFlag[2]:PitLeadLap(3)
+
+06/19/2026 10:08:00
+***mSectorFlag[0]:Pending(1)
+
+06/19/2026 10:08:05
+***mSectorFlag[0]:Unknown(11)
+
+06/19/2026 10:08:12
+***mSectorFlag[0]:Pending(1)
+
+06/19/2026 10:08:12
+***mSectorFlag[0]:Unknown(11)
+
+06/19/2026 10:08:14
+***mSectorFlag[0]:Pending(1)
+
+06/19/2026 10:08:43
+***mSectorFlag[0]:Unknown(11)
+
+06/19/2026 10:08:45
+***mSector:2
+***mCurrentSector:0x00000001
+
+06/19/2026 10:08:48
+***mSectorFlag[0]:Pending(1)
+
+06/19/2026 10:08:59
+***mSectorFlag[0]:Unknown(11)
+
+06/19/2026 10:09:02
+***mSectorFlag[1]:Pending(1)
+
+06/19/2026 10:09:28
+***mSpeedLimiter:true(1)
+
+06/19/2026 10:09:32
+***mFinishStatus:Dq(3)
+
+06/19/2026 10:09:32
+***mSectorFlag[1]:PitClosed(2)
+
+06/19/2026 10:09:34
+***mCurrentSector:0x80000001
+***mInRealtimeFC:false(0)
+***mSpeedLimiter:false(0)
+***mIgnitionStarter:Off(0)
+
+06/19/2026 10:09:34
+***mInRealtimeSU:false(0)
+***mControl:AI(1)
+***mInPits:true(1)
+***mPitState:Exiting(4)
+***mInGarageStall:true(1)
+***mHeadlights:false(0)
+***mLapsBehindNext:2
+***mLapsBehindLeader:6
+***mPlayerHeadlights:false(0)
+
+
+************************************************************************************
+* NEW SESSION **********************************************************************
+************************************************************************************
