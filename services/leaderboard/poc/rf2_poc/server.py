@@ -161,6 +161,8 @@ def poc_html(poll_seconds: float) -> str:
       setText(sessionEl, 'Track', session.track);
       setText(sessionEl, 'Session', session.session_type || session.session_code);
       setText(sessionEl, 'Vehicles', session.vehicle_count ?? (snapshot.drivers || []).length);
+      setText(sessionEl, 'Raw vehicles', session.raw_vehicle_count);
+      setText(sessionEl, 'Decode offset', snapshot.decode_offset);
       setText(sessionEl, 'Current time', fmtTime(session.current_time));
       setText(sessionEl, 'End time', fmtTime(session.end_time));
       setText(sessionEl, 'Ambient temp', session.ambient_temp);
