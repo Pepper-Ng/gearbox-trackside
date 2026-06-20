@@ -156,6 +156,7 @@ def report_html(report_id: str) -> str:
     canvas {{ width: 100%; height: 260px; border-bottom: 1px solid color-mix(in srgb, CanvasText 25%, transparent); }}
     .legend {{ font-size: 13px; opacity: .85; margin-top: 4px; }}
     .empty {{ opacity: .75; padding: 20px 0; }}
+    .tooltip {{ position: fixed; z-index: 20; display: none; max-width: 320px; padding: 8px 10px; border: 1px solid color-mix(in srgb, CanvasText 28%, transparent); background: Canvas; color: CanvasText; box-shadow: 0 8px 18px color-mix(in srgb, CanvasText 18%, transparent); font-size: 12px; pointer-events: none; white-space: pre-line; }}
   </style>
 </head>
 <body>
@@ -163,12 +164,14 @@ def report_html(report_id: str) -> str:
   <section class="meta" id="meta"></section>
   <label>Driver <select id="driverSelect"></select></label>
   <section id="charts"></section>
+  <div class="tooltip" id="tooltip"></div>
   <script>
     const reportId = '{safe_report_id}';
     const statusEl = document.getElementById('status');
     const metaEl = document.getElementById('meta');
     const selectEl = document.getElementById('driverSelect');
     const chartsEl = document.getElementById('charts');
+    const tooltipEl = document.getElementById('tooltip');
     let report = null;
 
     function fmt(value) {{
@@ -214,7 +217,10 @@ def report_html(report_id: str) -> str:
       let max = Math.max(...values);
       if (channel.key === 'delta_time') {{ min = Math.min(min, 0); max = Math.max(max, 0); }}
       if (min === max) {{ min -= 1; max += 1; }}
-      const xFor = index => padding.left + (cssWidth - padding.left - padding.right) * (axis[index] / 100);
+      const chartWidth = cssWidth - padding.left - padding.right;
+      const chartHeight = cssHeight - padding.top - padding.bottom;
+      const xForPercent = percent => padding.left + chartWidth * (percent / 100);
+      const xFor = index => xForPercent(axis[index]);
       const yFor = value => padding.top + (cssHeight - padding.top - padding.bottom) * (1 - (value - min) / (max - min));
       ctx.strokeStyle = 'rgba(128,128,128,.45)';
       ctx.lineWidth = 1;
@@ -226,12 +232,22 @@ def report_html(report_id: str) -> str:
       ctx.fillStyle = getComputedStyle(document.body).color;
       ctx.font = '12px Segoe UI, Arial';
       ctx.fillText(`${{channel.label}} ${{channel.unit || ''}}`, padding.left, 12);
-      ctx.fillText('0%', padding.left, cssHeight - 6);
-      ctx.fillText('100%', cssWidth - padding.right - 32, cssHeight - 6);
       ctx.fillText(fmt(max), 4, padding.top + 4);
       ctx.fillText(fmt(min), 4, cssHeight - padding.bottom);
+      for (let tick = 0; tick <= 100; tick += 10) {{
+        const x = xForPercent(tick);
+        ctx.strokeStyle = tick === 0 || tick === 100 ? 'rgba(128,128,128,.45)' : 'rgba(128,128,128,.18)';
+        ctx.beginPath();
+        ctx.moveTo(x, padding.top);
+        ctx.lineTo(x, cssHeight - padding.bottom);
+        ctx.stroke();
+        ctx.fillText(`${{tick}}%`, x - (tick === 100 ? 26 : 10), cssHeight - 6);
+      }}
       drawSeries(ctx, axis, reference, xFor, yFor, '#d97706');
       drawSeries(ctx, axis, selected, xFor, yFor, '#2563eb');
+      canvas._chartData = {{ axis, selected, reference, channel, selectedLabel, referenceLabel }};
+      canvas.onmousemove = showTooltip;
+      canvas.onmouseleave = hideTooltip;
     }}
 
     function drawSeries(ctx, axis, values, xFor, yFor, color) {{
@@ -249,12 +265,60 @@ def report_html(report_id: str) -> str:
       if (started) ctx.stroke();
     }}
 
+    function fmt4(value) {{
+      if (value === null || value === undefined || !Number.isFinite(Number(value))) return '-';
+      return Number(value).toFixed(4).replace(/[.]0+$/, '').replace(/([.][0-9]*?)0+$/, '$1');
+    }}
+
+    function nearestAxisIndex(axis, percent) {{
+      let bestIndex = 0;
+      let bestDistance = Number.POSITIVE_INFINITY;
+      axis.forEach((value, index) => {{
+        const distance = Math.abs(value - percent);
+        if (distance < bestDistance) {{ bestDistance = distance; bestIndex = index; }}
+      }});
+      return bestIndex;
+    }}
+
+    function showTooltip(event) {{
+      const canvas = event.currentTarget;
+      const data = canvas._chartData;
+      if (!data || !data.axis || !data.axis.length) return;
+      const rect = canvas.getBoundingClientRect();
+      const paddingLeft = 46;
+      const paddingRight = 16;
+      const x = Math.max(paddingLeft, Math.min(rect.width - paddingRight, event.clientX - rect.left));
+      const percent = (x - paddingLeft) / (rect.width - paddingLeft - paddingRight) * 100;
+      const index = nearestAxisIndex(data.axis, percent);
+      const selectedValue = data.selected ? data.selected[index] : null;
+      const referenceValue = data.reference ? data.reference[index] : null;
+      const lines = [
+        `Track: ${{fmt4(data.axis[index])}}%`,
+        `${{data.channel.label}}`,
+        `${{data.selectedLabel}}: ${{fmt4(selectedValue)}} ${{data.channel.unit || ''}}`,
+      ];
+      if (data.reference && data.reference.length) {{
+        lines.push(`${{data.referenceLabel}}: ${{fmt4(referenceValue)}} ${{data.channel.unit || ''}}`);
+      }}
+      tooltipEl.textContent = lines.join('\n');
+      tooltipEl.style.display = 'block';
+      tooltipEl.style.left = `${{event.clientX + 12}}px`;
+      tooltipEl.style.top = `${{event.clientY + 12}}px`;
+    }}
+
+    function hideTooltip() {{
+      tooltipEl.style.display = 'none';
+    }}
+
     function render() {{
       metaEl.replaceChildren();
       chartsEl.replaceChildren();
       statusEl.textContent = `${{fmt(report.track)}} ${{fmt(report.session_type)}} status=${{fmt(report.status)}}`;
       metric('Reference fastest lap', report.reference_lap ? `${{report.reference_lap.driver_name}} lap ${{report.reference_lap.lap_number}} ${{fmtTime(report.reference_lap.lap_time)}}` : '-');
       metric('Drivers with telemetry laps', (report.laps || []).length);
+      metric('Graph points', `${{fmt((report.axis || []).length)}} per channel`);
+      metric('Axis strategy', report.axis_strategy);
+      metric('Report build time', report.build_seconds ? `${{fmt(report.build_seconds)}}s` : '-');
       metric('Report ID', report.session_id);
       selectEl.replaceChildren();
       for (const lap of report.laps || []) {{
@@ -265,7 +329,10 @@ def report_html(report_id: str) -> str:
       }}
       if (!(report.laps || []).length) {{
         chartsEl.className = 'empty';
-        chartsEl.textContent = 'No completed telemetry laps were available for this finalized session.';
+        chartsEl.textContent = report.status === 'building'
+          ? 'Telemetry report is still being generated. Refresh this page shortly.'
+          : (report.error || 'No completed telemetry laps were available for this finalized session.');
+        if (report.status === 'building') setTimeout(loadReport, 1000);
         return;
       }}
       renderCharts();
@@ -296,10 +363,14 @@ def report_html(report_id: str) -> str:
     }}
 
     selectEl.addEventListener('change', renderCharts);
-    fetch(`/api/reports/${{reportId}}`, {{ cache: 'no-store' }})
-      .then(response => response.ok ? response.json() : Promise.reject(response.statusText))
-      .then(payload => {{ report = payload; render(); }})
-      .catch(error => {{ statusEl.textContent = `error=${{error}}`; }});
+    function loadReport() {{
+      fetch(`/api/reports/${{reportId}}`, {{ cache: 'no-store' }})
+        .then(response => response.ok ? response.json() : Promise.reject(response.statusText))
+        .then(payload => {{ report = payload; render(); }})
+        .catch(error => {{ statusEl.textContent = `error=${{error}}`; }});
+    }}
+
+    loadReport();
   </script>
 </body>
 </html>"""

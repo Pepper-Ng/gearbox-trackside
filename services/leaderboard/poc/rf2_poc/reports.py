@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import re
+import time
 from typing import Any
 
 
 Snapshot = dict[str, Any]
-AXIS = [float(value) for value in range(101)]
+DEFAULT_AXIS = [float(value) for value in range(101)]
+TICK_AXIS = [float(value) for value in range(0, 101, 10)]
 SERIES_FIELDS = [
     "time_seconds",
     "speed_kph",
@@ -166,6 +168,7 @@ def assign_lap_times_from_history(driver_record: Snapshot) -> None:
 def build_report(record: Snapshot) -> Snapshot | None:
     if not record:
         return None
+    started_at = time.perf_counter()
 
     best_laps = []
     for driver in record.get("drivers", {}).values():
@@ -180,17 +183,21 @@ def build_report(record: Snapshot) -> Snapshot | None:
             "track": record.get("track"),
             "session_type": record.get("session_type"),
             "status": "no completed telemetry laps",
-            "axis": AXIS,
+            "axis": DEFAULT_AXIS,
+            "axis_strategy": "default 1 percent",
+            "axis_sample_count": len(DEFAULT_AXIS),
+            "build_seconds": round(time.perf_counter() - started_at, 4),
             "channels": CHANNELS,
             "laps": [],
             "reference_lap": None,
         }
 
     reference = min(best_laps, key=lambda lap: lap.get("lap_time") or 999999.0)
-    reference_series = resample_lap(reference, AXIS)
+    axis = build_adaptive_axis(best_laps)
+    reference_series = resample_lap(reference, axis)
     report_laps = []
     for lap in best_laps:
-        series = resample_lap(lap, AXIS)
+        series = resample_lap(lap, axis)
         series["delta_time"] = delta_series(series.get("time_seconds"), reference_series.get("time_seconds"))
         report_laps.append(
             {
@@ -201,6 +208,7 @@ def build_report(record: Snapshot) -> Snapshot | None:
                 "lap_time": lap.get("lap_time"),
                 "sample_count": len(lap.get("samples") or []),
                 "coverage": lap_coverage(lap.get("samples") or []),
+                "raw_lap_percents": raw_lap_percents(lap.get("samples") or []),
                 "is_reference": lap is reference,
                 "series": series,
             }
@@ -214,7 +222,10 @@ def build_report(record: Snapshot) -> Snapshot | None:
         "finalized": record.get("finalized"),
         "completion_reason": record.get("completion_reason"),
         "status": "ready",
-        "axis": AXIS,
+        "axis": axis,
+        "axis_strategy": "adaptive union of recorded lap-percent samples plus 10 percent ticks",
+        "axis_sample_count": len(axis),
+        "build_seconds": round(time.perf_counter() - started_at, 4),
         "channels": CHANNELS,
         "reference_lap": {
             "driver_id": reference.get("driver_id"),
@@ -224,6 +235,24 @@ def build_report(record: Snapshot) -> Snapshot | None:
         },
         "laps": sorted(report_laps, key=lambda lap: lap.get("lap_time") or 999999.0),
     }
+
+
+def placeholder_report(session_id: str, status: str, error: str | None = None) -> Snapshot:
+    report = {
+        "session_id": session_id,
+        "track": None,
+        "session_type": None,
+        "status": status,
+        "axis": DEFAULT_AXIS,
+        "axis_strategy": "placeholder",
+        "axis_sample_count": len(DEFAULT_AXIS),
+        "channels": CHANNELS,
+        "laps": [],
+        "reference_lap": None,
+    }
+    if error:
+        report["error"] = error
+    return report
 
 
 def best_lap_for_driver(driver: Snapshot) -> Snapshot | None:
@@ -248,6 +277,29 @@ def best_lap_for_driver(driver: Snapshot) -> Snapshot | None:
     if not candidates:
         return None
     return min(candidates, key=lambda lap: lap.get("lap_time") or 999999.0)
+
+
+def build_adaptive_axis(laps: list[Snapshot]) -> list[float]:
+    axis_values = set(TICK_AXIS)
+    for lap in laps:
+        for sample in lap.get("samples") or []:
+            lap_percent = numeric(sample.get("lap_percent"))
+            if lap_percent is None:
+                continue
+            if 0.0 <= lap_percent <= 100.0:
+                axis_values.add(round(lap_percent, 4))
+    if len(axis_values) < 2:
+        return DEFAULT_AXIS
+    return sorted(axis_values)
+
+
+def raw_lap_percents(samples: list[Snapshot]) -> list[float]:
+    values = []
+    for sample in samples:
+        lap_percent = numeric(sample.get("lap_percent"))
+        if lap_percent is not None:
+            values.append(round(lap_percent, 4))
+    return values
 
 
 def resample_lap(lap: Snapshot, axis: list[float]) -> Snapshot:

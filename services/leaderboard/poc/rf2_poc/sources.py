@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from typing import Any, Protocol
 
-from .reports import append_sample_to_record, build_report, make_session_id, sample_from_driver
+from .reports import append_sample_to_record, build_report, make_session_id, placeholder_report, sample_from_driver
 from .rf2_shared_memory import SharedMemoryScoringReader, SharedMemoryUnavailable
 
 
@@ -205,6 +205,7 @@ class RecordingScoringSource:
         self._stop_event.set()
         if self._thread is not None:
             self._thread.join(timeout=2.0)
+        self._recorder.close()
         self._source.close()
 
     def _sample_loop(self) -> None:
@@ -231,6 +232,9 @@ class SessionRecorder:
         self._current: Snapshot | None = None
         self._completed: list[Snapshot] = []
         self._reports: dict[str, Snapshot] = {}
+        self._report_threads: dict[str, threading.Thread] = {}
+        self._report_errors: dict[str, str] = {}
+        self._report_lock = threading.RLock()
         self._output_dir = output_dir
         self._target_hz = target_hz
 
@@ -254,8 +258,23 @@ class SessionRecorder:
         }
 
     def report(self, session_id: str) -> Snapshot | None:
-        report = self._reports.get(session_id)
-        return copy.deepcopy(report) if report is not None else None
+        with self._report_lock:
+            report = self._reports.get(session_id)
+            if report is not None:
+                return copy.deepcopy(report)
+            thread = self._report_threads.get(session_id)
+            if thread is not None and thread.is_alive():
+                return placeholder_report(session_id, "building")
+            error = self._report_errors.get(session_id)
+            if error:
+                return placeholder_report(session_id, "error", error=error)
+        return None
+
+    def close(self) -> None:
+        with self._report_lock:
+            threads = list(self._report_threads.values())
+        for thread in threads:
+            thread.join(timeout=2.0)
 
     def _record_telemetry_samples(self, snapshot: Snapshot) -> None:
         if self._current is None:
@@ -284,13 +303,9 @@ class SessionRecorder:
             return
         self._current["finalized"] = True
         self._current["completion_reason"] = reason
-        report = build_report(self._current)
-        if report is not None:
-            session_id = str(self._current.get("id"))
-            self._reports[session_id] = report
-            self._current["report_url"] = f"/reports/{session_id}"
-            self._current["report_status"] = report.get("status")
-            self._write_report(session_id, report)
+        session_id = str(self._current.get("id"))
+        self._current["report_url"] = f"/reports/{session_id}"
+        self._current["report_status"] = "building"
         drivers = list(self._current.get("drivers", {}).values())
         self._current["finishing_order"] = [
             {
@@ -305,6 +320,41 @@ class SessionRecorder:
         ]
         self._completed.insert(0, copy.deepcopy(self._current))
         self._completed = self._completed[:20]
+        self._start_report_build(session_id, copy.deepcopy(self._current))
+
+    def _start_report_build(self, session_id: str, record: Snapshot) -> None:
+        thread = threading.Thread(
+            target=self._build_report_job,
+            args=(session_id, record),
+            name=f"rf2-poc-report-{session_id}",
+            daemon=True,
+        )
+        with self._report_lock:
+            self._report_threads[session_id] = thread
+        thread.start()
+
+    def _build_report_job(self, session_id: str, record: Snapshot) -> None:
+        try:
+            report = build_report(record)
+            if report is None:
+                report = placeholder_report(session_id, "no completed telemetry laps")
+            with self._report_lock:
+                self._reports[session_id] = report
+                self._report_errors.pop(session_id, None)
+            self._write_report(session_id, report)
+            self._set_report_status(session_id, str(report.get("status") or "ready"))
+        except Exception as exc:
+            with self._report_lock:
+                self._report_errors[session_id] = str(exc)
+            self._set_report_status(session_id, "error")
+
+    def _set_report_status(self, session_id: str, status: str) -> None:
+        if self._current and self._current.get("id") == session_id:
+            self._current["report_status"] = status
+        for record in self._completed:
+            if record.get("id") == session_id:
+                record["report_status"] = status
+                break
 
     def _write_report(self, session_id: str, report: Snapshot) -> None:
         if self._output_dir is None:

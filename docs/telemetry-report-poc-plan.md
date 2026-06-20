@@ -65,9 +65,14 @@ Each telemetry sample stores at least:
 * Completed sessions in `/history` link to `/reports/<session-id>`.
 * The report keeps the best completed telemetry lap per driver.
 * The fastest lap in the session becomes the reference lap.
-* Laps are resampled onto a common 0-100% axis.
+* Laps are resampled onto an adaptive common 0-100% axis built from the union of recorded lap-percent sample positions, plus fixed 10% tick points.
 * The report page plots selected driver vs reference driver for speed, throttle, brake, steering, gear, lateral G, longitudinal G, vertical G, and delta time.
+* The X axis labels every 10%.
+* Hovering a graph shows the nearest track-percent point and selected/reference values rounded to 4 decimals.
 * Delta time is aligned to track percent and is shown as selected driver time minus fastest-lap time.
+* Report JSON generation starts on a background thread when a session finalizes. If the page is opened early, `/api/reports/<session-id>` can return `building` and the page polls until the report is ready.
+
+The first version used exactly 101 graph points, one per percent. That was enough to prove the report concept but was not full resolution. The current version plots at every distinct recorded lap-percent value available in the selected best laps. If lap-percent values repeat because scoring updates slower than telemetry, multiple telemetry samples can still collapse to one track-position point; final report quality should be checked with live captured data.
 
 ## Next validation checklist
 

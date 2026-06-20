@@ -92,6 +92,7 @@ class MockScoringSourceTests(unittest.TestCase):
             recorder = SessionRecorder(output_dir=Path(temp_dir), target_hz=50.0)
             for snapshot in build_report_snapshots():
                 recorder.record(snapshot)
+            recorder.close()
 
             history = recorder.history()
             completed = history["completed_sessions"][0]
@@ -101,7 +102,9 @@ class MockScoringSourceTests(unittest.TestCase):
         self.assertIsNotNone(report)
         self.assertEqual(report["status"], "ready")
         self.assertEqual(report["reference_lap"]["driver_name"], "Setup1")
-        self.assertEqual(len(report["axis"]), 101)
+        self.assertNotEqual(len(report["axis"]), 101)
+        self.assertIn(93.75, report["axis"])
+        self.assertEqual(report["axis_strategy"], "adaptive union of recorded lap-percent samples plus 10 percent ticks")
         self.assertIn("delta_time", report["laps"][0]["series"])
 
     def test_report_api_helper_is_module_scoped_and_page_selects_driver(self) -> None:

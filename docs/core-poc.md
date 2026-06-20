@@ -446,7 +446,8 @@ The page currently displays a diagnostic dashboard rather than a polished leader
 * flag summary: green, local yellow, full-course yellow/safety car, race halt/stopped, and sector yellow values when scoring exposes them;
 * current in-memory recorded session history;
 * completed in-memory session history at `/history` and `/api/history`;
-* finalized-session telemetry report links at `/reports/<session-id>` and JSON at `/api/reports/<session-id>`.
+* finalized-session telemetry report links at `/reports/<session-id>` and JSON at `/api/reports/<session-id>`;
+* report graphs using an adaptive common track-position axis built from recorded lap-percent samples, with 10% X-axis labels and hover tooltips.
 
 The in-memory history is deliberately temporary. It is built by observing snapshots while the PoC process is running. It is useful for proving whether lap/sector values can be captured at the time they appear, but it is not durable storage and is not the final historical leaderboard implementation.
 
@@ -457,6 +458,7 @@ Important shared-memory interpretation notes:
 * The plugin requests all-vehicle telemetry when telemetry is subscribed. The dashboard reports the observed telemetry scope by comparing telemetry rows with scored vehicle rows.
 * The browser can redraw once per second while the recorder samples faster in the background. This means visible dashboard update cadence is not the telemetry-map cadence.
 * G-force values come from local vehicle acceleration. The PoC records lateral (`x`), vertical (`y`), longitudinal (`z`), and magnitude values.
+* Report generation starts on a background thread when a session finalizes. If the report page is opened while generation is still running, it displays a building state and polls the report API until data is ready.
 * Some rFactor 2 sector fields are cumulative to sector 2. The PoC derives split values where there is enough information and leaves unavailable values blank.
 * Full per-lap history is not directly dumped as a complete archive by the scoring snapshot. The PoC records lap/sector values as they are observed so we can prove whether a future service can compile history live.
 * Report sample files are written under `services/leaderboard/poc/telemetry-recordings/`, which is gitignored.
