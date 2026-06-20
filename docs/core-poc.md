@@ -255,6 +255,14 @@ If port `8877` is already in use:
 python services/leaderboard/poc/run_poc.py --source mock --port 8890
 ```
 
+The browser refresh interval is controlled separately from telemetry recording:
+
+```powershell
+python services/leaderboard/poc/run_poc.py --source mock --poll-seconds 1 --telemetry-record-hz 50
+```
+
+`--poll-seconds` controls how often the browser redraws. `--telemetry-record-hz` controls the PoC background sampler that records telemetry samples for report graphs. Use `--telemetry-record-hz 0` to disable background sampling and record only when the browser or API asks for a snapshot.
+
 ---
 
 ## Run Against rFactor 2 Shared Memory
@@ -434,9 +442,11 @@ The page currently displays a diagnostic dashboard rather than a polished leader
 * time behind leader;
 * finish status and race order fields;
 * joined telemetry per driver when available: throttle, brake, steering, gear, G-force, speed, engine RPM, tire compounds, fuel, impact values, and related status fields;
-* raw JSON for the selected driver/telemetry focus row;
+* telemetry recording status and sample count;
+* flag summary: green, local yellow, full-course yellow/safety car, race halt/stopped, and sector yellow values when scoring exposes them;
 * current in-memory recorded session history;
-* completed in-memory session history at `/history` and `/api/history`.
+* completed in-memory session history at `/history` and `/api/history`;
+* finalized-session telemetry report links at `/reports/<session-id>` and JSON at `/api/reports/<session-id>`.
 
 The in-memory history is deliberately temporary. It is built by observing snapshots while the PoC process is running. It is useful for proving whether lap/sector values can be captured at the time they appear, but it is not durable storage and is not the final historical leaderboard implementation.
 
@@ -445,8 +455,13 @@ Important shared-memory interpretation notes:
 * The scoring map is still the required live source.
 * The telemetry map is optional. If it is missing, the dashboard still shows scoring and reports telemetry as unavailable.
 * The plugin requests all-vehicle telemetry when telemetry is subscribed. The dashboard reports the observed telemetry scope by comparing telemetry rows with scored vehicle rows.
+* The browser can redraw once per second while the recorder samples faster in the background. This means visible dashboard update cadence is not the telemetry-map cadence.
+* G-force values come from local vehicle acceleration. The PoC records lateral (`x`), vertical (`y`), longitudinal (`z`), and magnitude values.
 * Some rFactor 2 sector fields are cumulative to sector 2. The PoC derives split values where there is enough information and leaves unavailable values blank.
 * Full per-lap history is not directly dumped as a complete archive by the scoring snapshot. The PoC records lap/sector values as they are observed so we can prove whether a future service can compile history live.
+* Report sample files are written under `services/leaderboard/poc/telemetry-recordings/`, which is gitignored.
+
+For the report/printing proof-of-concept tracker, see `docs/telemetry-report-poc-plan.md`.
 
 The goal is not to make this page pretty. The goal is to reveal what data is present and whether it updates.
 
@@ -482,6 +497,7 @@ Expected:
 * `/history` returns HTTP `200`.
 * `/api/snapshot` returns `source=mock`, a track name, one or more drivers, `field_coverage`, `highlights`, and mock telemetry values.
 * `/api/history` returns the current in-memory session record and any completed sessions observed since the PoC process started.
+* Once a live or synthetic session finalizes, `/history` shows a telemetry report link for that completed session.
 
 ---
 

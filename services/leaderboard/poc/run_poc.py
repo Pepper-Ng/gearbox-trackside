@@ -32,6 +32,18 @@ def parse_args() -> argparse.Namespace:
         help="Browser polling interval for /api/snapshot.",
     )
     parser.add_argument(
+        "--telemetry-record-hz",
+        type=float,
+        default=50.0,
+        help="Background telemetry recording target rate. Use 0 to record only when the browser/API asks for a snapshot.",
+    )
+    parser.add_argument(
+        "--telemetry-output-dir",
+        type=Path,
+        default=Path(__file__).parent / "telemetry-recordings",
+        help="Directory for runtime telemetry JSONL samples and finalized report JSON files.",
+    )
+    parser.add_argument(
         "--map-name",
         help="Exact Windows memory-map name to read, for example '$rFactor2SMMP_Scoring$' or 'Global\\$rFactor2SMMP_Scoring$12345'.",
     )
@@ -55,6 +67,8 @@ def main() -> None:
         map_name=args.map_name,
         pid=args.pid,
         telemetry_map_name=args.telemetry_map_name,
+        telemetry_output_dir=args.telemetry_output_dir,
+        telemetry_record_hz=args.telemetry_record_hz,
     )
     run_server(
         source=source,

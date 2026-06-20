@@ -329,6 +329,7 @@ class SharedMemoryScoringReader:
 
         raw_vehicle_count = int(info.mNumVehicles)
         session_lap_distance = none_if_negative(float(info.mLapDist))
+        sector_flags = [int(value) for value in info.mSectorFlag]
         scan_limit = raw_vehicle_count if 0 <= raw_vehicle_count <= MAX_MAPPED_VEHICLES else MAX_MAPPED_VEHICLES
         drivers: list[dict[str, Any]] = []
         for index in range(scan_limit):
@@ -373,7 +374,10 @@ class SharedMemoryScoringReader:
                 "game_phase": int(info.mGamePhase),
                 "game_phase_name": game_phase_name(int(info.mGamePhase)),
                 "yellow_flag_state": int(info.mYellowFlagState),
-                "sector_flags": [int(value) for value in info.mSectorFlag],
+                "yellow_flag_state_name": yellow_flag_state_name(int(info.mYellowFlagState)),
+                "sector_flags": sector_flags,
+                "sector_flags_detail": sector_flags_detail(sector_flags),
+                "overall_flag": overall_flag_name(int(info.mGamePhase), int(info.mYellowFlagState), sector_flags),
                 "start_light": int(info.mStartLight),
                 "num_red_lights": int(info.mNumRedLights),
                 "in_realtime": bool(info.mInRealtime),
@@ -631,8 +635,10 @@ def scoring_vehicle_to_dict(vehicle: rF2VehicleScoring, session_lap_distance: fl
         "local_rotation_acceleration": vec_to_dict(vehicle.mLocalRotAccel),
         "headlights": bool(vehicle.mHeadlights),
         "flag": int(vehicle.mFlag),
+        "flag_name": primary_flag_name(int(vehicle.mFlag)),
         "under_yellow": bool(vehicle.mUnderYellow),
         "count_lap_flag": int(vehicle.mCountLapFlag),
+        "count_lap_flag_name": count_lap_flag_name(int(vehicle.mCountLapFlag)),
         "in_garage_stall": bool(vehicle.mInGarageStall),
         "upgrade_pack": list(bytes(vehicle.mUpgradePack)),
     }
@@ -655,6 +661,9 @@ def telemetry_vehicle_to_dict(vehicle: rF2VehicleTelemetry) -> dict[str, Any] | 
         "speed_kph": speed_kph(vehicle.mLocalVel),
         "local_acceleration": vec_to_dict(vehicle.mLocalAccel),
         "g_force": g_force_dict(vehicle.mLocalAccel),
+        "lateral_g": round(float(vehicle.mLocalAccel.x) / STANDARD_GRAVITY, 3),
+        "vertical_g": round(float(vehicle.mLocalAccel.y) / STANDARD_GRAVITY, 3),
+        "longitudinal_g": round(float(vehicle.mLocalAccel.z) / STANDARD_GRAVITY, 3),
         "local_rotation": vec_to_dict(vehicle.mLocalRot),
         "local_rotation_acceleration": vec_to_dict(vehicle.mLocalRotAccel),
         "gear": int(vehicle.mGear),
@@ -767,7 +776,15 @@ def g_force_dict(value: rF2Vec3) -> dict[str, float]:
     x = float(value.x) / STANDARD_GRAVITY
     y = float(value.y) / STANDARD_GRAVITY
     z = float(value.z) / STANDARD_GRAVITY
-    return {"x": round(x, 3), "y": round(y, 3), "z": round(z, 3), "magnitude": round((x * x + y * y + z * z) ** 0.5, 3)}
+    return {
+        "x": round(x, 3),
+        "y": round(y, 3),
+        "z": round(z, 3),
+        "lateral": round(x, 3),
+        "vertical": round(y, 3),
+        "longitudinal": round(z, 3),
+        "magnitude": round((x * x + y * y + z * z) ** 0.5, 3),
+    }
 
 
 def sector_delta(cumulative: float | None, previous_cumulative: float | None) -> float | None:
@@ -820,8 +837,55 @@ def game_phase_name(game_phase: int) -> str:
     return names.get(game_phase, f"Unknown ({game_phase})")
 
 
+def yellow_flag_state_name(yellow_flag_state: int) -> str:
+    names = {
+        -1: "invalid",
+        0: "none",
+        1: "pending",
+        2: "pits closed",
+        3: "pit lead lap",
+        4: "pits open",
+        5: "last lap",
+        6: "resume",
+        7: "race halt",
+    }
+    return names.get(yellow_flag_state, f"unknown ({yellow_flag_state})")
+
+
+def sector_flags_detail(sector_flags: list[int]) -> list[dict[str, Any]]:
+    return [
+        {"sector": index + 1, "value": value, "flag": "yellow" if value else "green"}
+        for index, value in enumerate(sector_flags)
+    ]
+
+
+def overall_flag_name(game_phase: int, yellow_flag_state: int, sector_flags: list[int]) -> str:
+    if game_phase == 8:
+        return "SESSION OVER"
+    if game_phase == 7 or yellow_flag_state == 7:
+        return "RED / RACE HALT"
+    if game_phase == 6:
+        return "SAFETY CAR / FULL COURSE YELLOW"
+    if any(sector_flags):
+        return "LOCAL YELLOW"
+    if yellow_flag_state not in (-1, 0):
+        return "YELLOW"
+    if game_phase == 5:
+        return "GREEN"
+    return game_phase_name(game_phase).upper()
+
+
 def finish_status_name(finish_status: int) -> str:
     return {0: "none", 1: "finished", 2: "dnf", 3: "dq"}.get(finish_status, f"unknown ({finish_status})")
+
+
+def primary_flag_name(flag: int) -> str:
+    return {0: "green", 6: "blue"}.get(flag, f"unknown ({flag})")
+
+
+def count_lap_flag_name(flag: int) -> str:
+    names = {0: "do not count lap", 1: "count lap, not time", 2: "count lap and time"}
+    return names.get(flag, f"unknown ({flag})")
 
 
 def control_name(control: int) -> str:

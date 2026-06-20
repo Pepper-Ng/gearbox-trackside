@@ -28,7 +28,7 @@ from rf2_poc.rf2_shared_memory import (  # noqa: E402
     c_string,
     session_type_name,
 )
-from rf2_poc.sources import MockScoringSource, build_source  # noqa: E402
+from rf2_poc.sources import MockScoringSource, SessionRecorder, build_source  # noqa: E402
 
 
 class MockScoringSourceTests(unittest.TestCase):
@@ -68,6 +68,40 @@ class MockScoringSourceTests(unittest.TestCase):
         self.assertEqual(snapshot["telemetry"]["scope"], "fixture")
         self.assertTrue(snapshot["highlights"]["fastest_lap"])
         self.assertTrue(any(item["key"] == "telemetry.throttle" and item["available"] for item in snapshot["field_coverage"]))
+
+    def test_build_source_records_telemetry_samples_to_jsonl(self) -> None:
+        fixture_path = POC_ROOT / "fixtures" / "mock_scoring_snapshot.json"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source = build_source("mock", fixture_path, telemetry_output_dir=Path(temp_dir))
+            snapshot = source.read()
+            history = snapshot["history"]["current_session"]
+            sample_file = Path(history["telemetry_samples_file"])
+
+            self.assertGreater(history["telemetry_sample_count"], 0)
+            self.assertTrue(sample_file.exists())
+            first_sample = json.loads(sample_file.read_text(encoding="utf-8").splitlines()[0])
+
+        self.assertIn("lap_distance", first_sample)
+        self.assertIn("lap_percent", first_sample)
+        self.assertIn("throttle_percent", first_sample)
+        self.assertIn("lateral_g", first_sample)
+
+    def test_session_recorder_builds_finalized_report_with_delta_series(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            recorder = SessionRecorder(output_dir=Path(temp_dir), target_hz=50.0)
+            for snapshot in build_report_snapshots():
+                recorder.record(snapshot)
+
+            history = recorder.history()
+            completed = history["completed_sessions"][0]
+            report = recorder.report(completed["id"])
+
+        self.assertEqual(completed["report_status"], "ready")
+        self.assertIsNotNone(report)
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["reference_lap"]["driver_name"], "Setup1")
+        self.assertEqual(len(report["axis"]), 101)
+        self.assertIn("delta_time", report["laps"][0]["series"])
 
 
 class SharedMemoryMappingTests(unittest.TestCase):
@@ -160,6 +194,77 @@ class SharedMemoryMappingTests(unittest.TestCase):
         self.assertEqual(snapshot["drivers"][0]["telemetry"]["throttle_percent"], 73.0)
         self.assertEqual(snapshot["drivers"][0]["telemetry"]["brake_percent"], 12.0)
         self.assertEqual(snapshot["drivers"][0]["telemetry"]["gear_label"], "4")
+
+
+def build_report_snapshots() -> list[dict]:
+    snapshots = []
+    for timestamp, phase, rows in [
+        (1.0, 5, [(1, "Setup1", 0, None, 10.0, 10.0, 1, 5.0), (2, "Setup2", 0, None, 12.0, 12.0, 1, 6.0)]),
+        (2.0, 5, [(1, "Setup1", 0, None, 3000.0, 93.75, 1, 78.0), (2, "Setup2", 0, None, 2980.0, 93.125, 1, 82.0)]),
+        (3.0, 8, [(1, "Setup1", 1, 80.0, 20.0, 0.625, 2, 1.0), (2, "Setup2", 1, 86.0, 18.0, 0.5625, 2, 1.2)]),
+    ]:
+        snapshots.append(
+            {
+                "source": "test",
+                "timestamp": timestamp,
+                "session": {
+                    "track": "Report Test Track",
+                    "session_code": 10,
+                    "session_type": "Race",
+                    "start_time": 100.0,
+                    "current_time": timestamp,
+                    "game_phase": phase,
+                    "lap_distance": 3200.0,
+                },
+                "telemetry": {"update_counter": int(timestamp * 100)},
+                "drivers": [
+                    build_report_driver(*row)
+                    for row in rows
+                ],
+            }
+        )
+    return snapshots
+
+
+def build_report_driver(
+    driver_id: int,
+    name: str,
+    laps: int,
+    last_lap_time: float | None,
+    lap_distance: float,
+    lap_percent: float,
+    telemetry_lap: int,
+    current_lap_time: float,
+) -> dict:
+    return {
+        "id": driver_id,
+        "driver_name": name,
+        "vehicle_name": "Formula Test",
+        "laps": laps,
+        "place": driver_id,
+        "best_lap_time": last_lap_time,
+        "last_lap_time": last_lap_time,
+        "last_sector_1": 25.0 if last_lap_time else None,
+        "last_sector_2_split": 27.0 if last_lap_time else None,
+        "last_sector_3": (last_lap_time - 52.0) if last_lap_time else None,
+        "current_lap_time": current_lap_time,
+        "lap_distance": lap_distance,
+        "track_position_percent": lap_percent,
+        "finish_status": 1 if laps else 0,
+        "finish_status_name": "finished" if laps else "none",
+        "telemetry": {
+            "id": driver_id,
+            "lap_number": telemetry_lap,
+            "speed_kph": 180.0 + driver_id,
+            "throttle_percent": 60.0 + driver_id,
+            "brake_percent": 5.0,
+            "gear": 4,
+            "gear_label": "4",
+            "steering_percent": 2.0,
+            "g_force": {"lateral": 0.2, "longitudinal": 0.1, "vertical": 1.0, "magnitude": 1.03},
+        },
+    }
+
 
 PAGE_READWRITE = 0x0004
 FILE_MAP_WRITE = 0x0002
