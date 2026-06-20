@@ -28,6 +28,7 @@ from rf2_poc.rf2_shared_memory import (  # noqa: E402
     c_string,
     session_type_name,
 )
+from rf2_poc.server import read_report_safely, report_html  # noqa: E402
 from rf2_poc.sources import MockScoringSource, SessionRecorder, build_source  # noqa: E402
 
 
@@ -102,6 +103,32 @@ class MockScoringSourceTests(unittest.TestCase):
         self.assertEqual(report["reference_lap"]["driver_name"], "Setup1")
         self.assertEqual(len(report["axis"]), 101)
         self.assertIn("delta_time", report["laps"][0]["series"])
+
+    def test_report_api_helper_is_module_scoped_and_page_selects_driver(self) -> None:
+        report = {"session_id": "abc", "status": "ready", "axis": [], "channels": [], "laps": []}
+        source = self.StaticReportSource(report)
+
+        self.assertEqual(read_report_safely(source, "abc"), report)
+        html = report_html("abc")
+
+        self.assertIn("Driver <select", html)
+        self.assertNotIn("Driver lap <select", html)
+
+    class StaticReportSource:
+        def __init__(self, report: dict):
+            self._report = report
+
+        def read(self) -> dict:
+            return {}
+
+        def history(self) -> dict:
+            return {}
+
+        def report(self, session_id: str) -> dict:
+            return self._report
+
+        def close(self) -> None:
+            return None
 
 
 class SharedMemoryMappingTests(unittest.TestCase):

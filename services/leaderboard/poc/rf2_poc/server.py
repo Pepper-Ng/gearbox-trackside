@@ -118,10 +118,10 @@ def read_history_safely(source: ScoringSource) -> dict[str, Any]:
         }
 
 
-    def read_report_safely(source: ScoringSource, report_id: str) -> dict[str, Any] | None:
-      try:
+def read_report_safely(source: ScoringSource, report_id: str) -> dict[str, Any] | None:
+    try:
         return source.report(report_id)
-      except Exception as exc:
+    except Exception as exc:
         return {"session_id": report_id, "status": "error", "error": str(exc), "axis": [], "channels": [], "laps": []}
 
 
@@ -161,7 +161,7 @@ def report_html(report_id: str) -> str:
 <body>
   <header><div><h1>Telemetry Report</h1><div id="status">Loading...</div></div><nav><a href="/history">History</a> <a href="/poc">Dashboard</a></nav></header>
   <section class="meta" id="meta"></section>
-  <label>Driver lap <select id="driverSelect"></select></label>
+  <label>Driver <select id="driverSelect"></select></label>
   <section id="charts"></section>
   <script>
     const reportId = '{safe_report_id}';
@@ -253,14 +253,14 @@ def report_html(report_id: str) -> str:
       metaEl.replaceChildren();
       chartsEl.replaceChildren();
       statusEl.textContent = `${{fmt(report.track)}} ${{fmt(report.session_type)}} status=${{fmt(report.status)}}`;
-      metric('Fastest lap', report.reference_lap ? `${{report.reference_lap.driver_name}} lap ${{report.reference_lap.lap_number}} ${{fmtTime(report.reference_lap.lap_time)}}` : '-');
-      metric('Compared lap count', (report.laps || []).length);
+      metric('Reference fastest lap', report.reference_lap ? `${{report.reference_lap.driver_name}} lap ${{report.reference_lap.lap_number}} ${{fmtTime(report.reference_lap.lap_time)}}` : '-');
+      metric('Drivers with telemetry laps', (report.laps || []).length);
       metric('Report ID', report.session_id);
       selectEl.replaceChildren();
       for (const lap of report.laps || []) {{
         const option = document.createElement('option');
         option.value = String(lap.driver_id);
-        option.textContent = `${{lap.driver_name}} lap ${{lap.lap_number}} ${{fmtTime(lap.lap_time)}}`;
+        option.textContent = `${{lap.driver_name}} (${{fmtTime(lap.lap_time)}})`;
         selectEl.appendChild(option);
       }}
       if (!(report.laps || []).length) {{
@@ -275,7 +275,7 @@ def report_html(report_id: str) -> str:
       chartsEl.replaceChildren();
       const selected = (report.laps || []).find(lap => String(lap.driver_id) === selectEl.value) || report.laps[0];
       const reference = (report.laps || []).find(lap => lap.is_reference) || report.laps[0];
-      const selectedLabel = `${{selected.driver_name}} lap ${{selected.lap_number}}`;
+      const selectedLabel = `${{selected.driver_name}} fastest lap ${{selected.lap_number}}`;
       const referenceLabel = `${{reference.driver_name}} lap ${{reference.lap_number}}`;
       for (const channel of report.channels || []) {{
         const wrapper = document.createElement('div');
