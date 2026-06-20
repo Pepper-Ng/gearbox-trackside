@@ -17,15 +17,18 @@ from rf2_poc.rf2_shared_memory import (  # noqa: E402
     MAPPED_BUFFER_WRAPPER_SIZE,
     MAX_MAPPED_VEHICLES,
     SCORING_MAP_NAME,
+    TELEMETRY_MAP_NAME,
     SharedMemoryScoringReader,
     SharedMemoryUnavailable,
     candidate_scoring_map_names,
+    candidate_telemetry_map_names,
     rF2MappedBufferVersionBlock,
     rF2Scoring,
+    rF2Telemetry,
     c_string,
     session_type_name,
 )
-from rf2_poc.sources import MockScoringSource  # noqa: E402
+from rf2_poc.sources import MockScoringSource, build_source  # noqa: E402
 
 
 class MockScoringSourceTests(unittest.TestCase):
@@ -53,6 +56,19 @@ class MockScoringSourceTests(unittest.TestCase):
         self.assertEqual(snapshot["drivers"], [])
         self.assertEqual(snapshot["source"], "mock")
 
+    def test_build_source_enriches_fixture_for_dashboard(self) -> None:
+        fixture_path = POC_ROOT / "fixtures" / "mock_scoring_snapshot.json"
+        source = build_source("mock", fixture_path)
+
+        snapshot = source.read()
+
+        self.assertIn("field_coverage", snapshot)
+        self.assertIn("highlights", snapshot)
+        self.assertIn("history", snapshot)
+        self.assertEqual(snapshot["telemetry"]["scope"], "fixture")
+        self.assertTrue(snapshot["highlights"]["fastest_lap"])
+        self.assertTrue(any(item["key"] == "telemetry.throttle" and item["available"] for item in snapshot["field_coverage"]))
+
 
 class SharedMemoryMappingTests(unittest.TestCase):
     def test_candidate_names_include_dedicated_pid_variants_and_base_name(self) -> None:
@@ -61,6 +77,13 @@ class SharedMemoryMappingTests(unittest.TestCase):
         self.assertEqual(names[0], f"{SCORING_MAP_NAME}12345")
         self.assertIn(f"Global\\{SCORING_MAP_NAME}12345", names)
         self.assertEqual(names[-1], SCORING_MAP_NAME)
+
+    def test_telemetry_candidate_names_include_dedicated_pid_variants_and_base_name(self) -> None:
+        names = candidate_telemetry_map_names(pid=12345)
+
+        self.assertEqual(names[0], f"{TELEMETRY_MAP_NAME}12345")
+        self.assertIn(f"Global\\{TELEMETRY_MAP_NAME}12345", names)
+        self.assertEqual(names[-1], TELEMETRY_MAP_NAME)
 
     def test_explicit_map_name_is_tried_first(self) -> None:
         names = candidate_scoring_map_names(map_name="CustomMap", pid=42)
@@ -117,6 +140,27 @@ class SharedMemoryMappingTests(unittest.TestCase):
         self.assertEqual(snapshot["session"]["track"], "PoC Test Track")
         self.assertEqual(snapshot["drivers"][0]["driver_name"], "Setup9")
 
+    @unittest.skipUnless(sys.platform == "win32", "Windows shared-memory behavior only")
+    def test_reader_joins_telemetry_memory_map_by_vehicle_id(self) -> None:
+        scoring_map_name = f"GearboxTracksideScoring-{uuid.uuid4()}"
+        telemetry_map_name = f"GearboxTracksideTelemetry-{uuid.uuid4()}"
+        scoring = build_fake_scoring_payload()
+        telemetry = build_fake_telemetry_payload()
+
+        with NamedScoringMap(scoring_map_name, scoring, payload_offset=MAPPED_BUFFER_WRAPPER_SIZE):
+            with NamedTelemetryMap(telemetry_map_name, telemetry, payload_offset=MAPPED_BUFFER_WRAPPER_SIZE):
+                snapshot = SharedMemoryScoringReader(
+                    map_name=scoring_map_name,
+                    telemetry_map_name=telemetry_map_name,
+                ).read_snapshot()
+
+        self.assertEqual(snapshot["telemetry"]["status"], "connected")
+        self.assertEqual(snapshot["telemetry"]["scope"], "all scoring vehicles")
+        self.assertTrue(snapshot["drivers"][0]["telemetry_available"])
+        self.assertEqual(snapshot["drivers"][0]["telemetry"]["throttle_percent"], 73.0)
+        self.assertEqual(snapshot["drivers"][0]["telemetry"]["brake_percent"], 12.0)
+        self.assertEqual(snapshot["drivers"][0]["telemetry"]["gear_label"], "4")
+
 PAGE_READWRITE = 0x0004
 FILE_MAP_WRITE = 0x0002
 INVALID_HANDLE_VALUE = wintypes.HANDLE(-1).value
@@ -129,7 +173,8 @@ class NamedScoringMap:
         self.payload_offset = payload_offset
         self.handle = None
         self.view = None
-        self.size = MAPPED_BUFFER_WRAPPER_SIZE + ctypes.sizeof(rF2Scoring)
+        self.payload_size = ctypes.sizeof(rF2Scoring)
+        self.size = MAPPED_BUFFER_WRAPPER_SIZE + self.payload_size
         self.kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
         self.kernel32.CreateFileMappingW.argtypes = [
             wintypes.HANDLE,
@@ -180,7 +225,7 @@ class NamedScoringMap:
         ctypes.memmove(
             int(self.view) + self.payload_offset,
             ctypes.byref(self.scoring),
-            ctypes.sizeof(rF2Scoring),
+            self.payload_size,
         )
         return self
 
@@ -189,6 +234,37 @@ class NamedScoringMap:
             self.kernel32.UnmapViewOfFile(self.view)
         if self.handle:
             self.kernel32.CloseHandle(self.handle)
+
+
+class NamedTelemetryMap(NamedScoringMap):
+    def __init__(self, name: str, telemetry: rF2Telemetry, payload_offset: int):
+        self.name = name
+        self.scoring = telemetry
+        self.payload_offset = payload_offset
+        self.handle = None
+        self.view = None
+        self.payload_size = ctypes.sizeof(rF2Telemetry)
+        self.size = MAPPED_BUFFER_WRAPPER_SIZE + self.payload_size
+        self.kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        self.kernel32.CreateFileMappingW.argtypes = [
+            wintypes.HANDLE,
+            wintypes.LPVOID,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            wintypes.LPCWSTR,
+        ]
+        self.kernel32.CreateFileMappingW.restype = wintypes.HANDLE
+        self.kernel32.MapViewOfFile.argtypes = [
+            wintypes.HANDLE,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            ctypes.c_size_t,
+        ]
+        self.kernel32.MapViewOfFile.restype = wintypes.LPVOID
+        self.kernel32.UnmapViewOfFile.argtypes = [wintypes.LPCVOID]
+        self.kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
 
 
 def build_fake_scoring_payload() -> rF2Scoring:
@@ -221,6 +297,38 @@ def build_fake_scoring_payload() -> rF2Scoring:
     vehicle.mLapDist = 512.0
     vehicle.mServerScored = 1
     return scoring
+
+
+def build_fake_telemetry_payload() -> rF2Telemetry:
+    telemetry = rF2Telemetry()
+    telemetry.mVersionUpdateBegin = 13
+    telemetry.mVersionUpdateEnd = 13
+    telemetry.mBytesUpdatedHint = ctypes.sizeof(rF2Telemetry)
+    telemetry.mNumVehicles = 1
+
+    vehicle = telemetry.mVehicles[0]
+    vehicle.mID = 9
+    vehicle.mElapsedTime = 123.456
+    vehicle.mDeltaTime = 0.02
+    vehicle.mLapNumber = 4
+    vehicle.mLapStartET = 111.0
+    write_c_string(vehicle.mVehicleName, "Formula Test")
+    write_c_string(vehicle.mTrackName, "PoC Test Track")
+    vehicle.mGear = 4
+    vehicle.mEngineRPM = 11234.0
+    vehicle.mUnfilteredThrottle = 0.73
+    vehicle.mUnfilteredBrake = 0.12
+    vehicle.mUnfilteredSteering = -0.25
+    vehicle.mLocalVel.x = 0.0
+    vehicle.mLocalVel.y = 0.0
+    vehicle.mLocalVel.z = 58.0
+    vehicle.mLocalAccel.x = 3.2
+    vehicle.mLocalAccel.y = 9.8
+    vehicle.mLocalAccel.z = -1.1
+    vehicle.mPos.x = 512.0
+    vehicle.mPos.y = 0.0
+    vehicle.mPos.z = -128.0
+    return telemetry
 
 
 def write_c_string(buffer, value: str) -> None:  # type: ignore[no-untyped-def]

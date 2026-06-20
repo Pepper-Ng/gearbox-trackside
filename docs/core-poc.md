@@ -1,8 +1,8 @@
 # Phase 0A Core Live-Data PoC
 
-This PoC answers one narrow question: can rFactor 2 session/player scoring data reach a browser with minimal software?
+This PoC answers one narrow question: what useful rFactor 2 scoring and telemetry data can reach a browser with minimal software?
 
-It is intentionally small. It does not implement the final leaderboard architecture, staff controls, persistence, printing, telemetry reports, camera behavior, deployment packaging, or venue hardening.
+It is intentionally small. It does not implement the final leaderboard architecture, staff controls, durable persistence, printing, telemetry reports, camera behavior, deployment packaging, or venue hardening. It does include a broad diagnostic dashboard so later phases can see which shared-memory fields are available from the chosen host process.
 
 For source-level details on how `rF2SharedMemoryMapPlugin` loads, creates maps, names dedicated-server maps, logs, and publishes scoring data, see `docs/shared-memory-plugin-investigation.md`.
 
@@ -23,6 +23,8 @@ The expected live validation shape is:
 ```
 
 The browser may run on the same machine or, if the PoC is bound to a LAN interface and firewall rules allow it, another machine. The Python PoC process itself must run on the Windows machine that can see the rFactor 2 shared-memory map.
+
+The page now reads scoring as the required map and telemetry as an optional second map. If telemetry is available, the dashboard joins telemetry rows to scoring rows by vehicle ID and reports whether telemetry appears to cover all scored vehicles, a single vehicle, or only a partial vehicle set.
 
 ---
 
@@ -96,6 +98,12 @@ The relevant live scoring map names are:
 * normal rFactor 2 client: `$rFactor2SMMP_Scoring$`;
 * dedicated server, non-global map: `$rFactor2SMMP_Scoring$<PID>`;
 * dedicated server, global map enabled: `Global\$rFactor2SMMP_Scoring$<PID>`.
+
+The matching telemetry map names are:
+
+* normal rFactor 2 client: `$rFactor2SMMP_Telemetry$`;
+* dedicated server, non-global map: `$rFactor2SMMP_Telemetry$<PID>`;
+* dedicated server, global map enabled: `Global\$rFactor2SMMP_Telemetry$<PID>`.
 
 `<PID>` is the Windows process ID of `Dedicated.exe`.
 
@@ -307,6 +315,12 @@ If needed, pass the exact map name:
 python services/leaderboard/poc/run_poc.py --source shared-memory --map-name 'Global\$rFactor2SMMP_Scoring$12345'
 ```
 
+If scoring and telemetry need different exact names, pass both:
+
+```powershell
+python services/leaderboard/poc/run_poc.py --source shared-memory --map-name 'Global\$rFactor2SMMP_Scoring$12345' --telemetry-map-name 'Global\$rFactor2SMMP_Telemetry$12345'
+```
+
 ### Auto fallback mode
 
 `auto` tries shared memory first and falls back to fixture replay if the map cannot be opened:
@@ -388,26 +402,51 @@ This may require a Windows Firewall rule for the selected port. Do not expose th
 
 ## Current PoC Output
 
-The page currently displays:
+The page currently displays a diagnostic dashboard rather than a polished leaderboard. It shows:
 
 * data source and status;
 * update counter;
+* scoring and telemetry map names;
+* scoring and telemetry decode offsets;
+* telemetry status and scope: unavailable, single vehicle, partial vehicle set, or all scoring vehicles;
 * track;
 * session type/code;
+* game phase and realtime state;
 * vehicle count;
 * current/end session time;
 * ambient and track temperatures when available;
-* rain value when available;
+* rain, cloud, path wetness, and wind when available;
+* a field coverage matrix for the project-critical data points;
+* fastest lap and fastest sector summaries from currently visible scoring data;
 * driver name;
 * vehicle name;
 * laps;
 * place;
 * best lap;
+* best-sector and best-lap sector split data where the scoring map exposes it;
 * last lap;
+* last-lap sector split data where available;
 * current lap time;
-* sector;
+* current sector;
+* lap distance and percentage of track completed;
+* world coordinates;
+* local velocity, acceleration, and speed where available;
 * time behind leader;
-* source vehicle ID.
+* finish status and race order fields;
+* joined telemetry per driver when available: throttle, brake, steering, gear, G-force, speed, engine RPM, tire compounds, fuel, impact values, and related status fields;
+* raw JSON for the selected driver/telemetry focus row;
+* current in-memory recorded session history;
+* completed in-memory session history at `/history` and `/api/history`.
+
+The in-memory history is deliberately temporary. It is built by observing snapshots while the PoC process is running. It is useful for proving whether lap/sector values can be captured at the time they appear, but it is not durable storage and is not the final historical leaderboard implementation.
+
+Important shared-memory interpretation notes:
+
+* The scoring map is still the required live source.
+* The telemetry map is optional. If it is missing, the dashboard still shows scoring and reports telemetry as unavailable.
+* The plugin requests all-vehicle telemetry when telemetry is subscribed. The dashboard reports the observed telemetry scope by comparing telemetry rows with scored vehicle rows.
+* Some rFactor 2 sector fields are cumulative to sector 2. The PoC derives split values where there is enough information and leaves unavailable values blank.
+* Full per-lap history is not directly dumped as a complete archive by the scoring snapshot. The PoC records lap/sector values as they are observed so we can prove whether a future service can compile history live.
 
 The goal is not to make this page pretty. The goal is to reveal what data is present and whether it updates.
 
@@ -432,13 +471,17 @@ In another terminal:
 
 ```powershell
 curl.exe --noproxy "*" -s -o NUL -w "%{http_code}" http://127.0.0.1:8877/poc
+curl.exe --noproxy "*" -s -o NUL -w "%{http_code}" http://127.0.0.1:8877/history
 Invoke-RestMethod http://127.0.0.1:8877/api/snapshot
+Invoke-RestMethod http://127.0.0.1:8877/api/history
 ```
 
 Expected:
 
 * `/poc` returns HTTP `200`.
-* `/api/snapshot` returns `source=mock`, a track name, and one or more drivers.
+* `/history` returns HTTP `200`.
+* `/api/snapshot` returns `source=mock`, a track name, one or more drivers, `field_coverage`, `highlights`, and mock telemetry values.
+* `/api/history` returns the current in-memory session record and any completed sessions observed since the PoC process started.
 
 ---
 

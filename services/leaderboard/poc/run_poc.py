@@ -36,6 +36,10 @@ def parse_args() -> argparse.Namespace:
         help="Exact Windows memory-map name to read, for example '$rFactor2SMMP_Scoring$' or 'Global\\$rFactor2SMMP_Scoring$12345'.",
     )
     parser.add_argument(
+        "--telemetry-map-name",
+        help="Exact telemetry memory-map name to read, for example '$rFactor2SMMP_Telemetry$' or 'Global\\$rFactor2SMMP_Telemetry$12345'.",
+    )
+    parser.add_argument(
         "--pid",
         type=int,
         help="Dedicated.exe process ID. When supplied, the reader tries dedicated-server scoring map name variants.",
@@ -50,6 +54,7 @@ def main() -> None:
         fixture_path=args.fixture,
         map_name=args.map_name,
         pid=args.pid,
+        telemetry_map_name=args.telemetry_map_name,
     )
     run_server(
         source=source,
