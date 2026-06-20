@@ -116,6 +116,10 @@ class MockScoringSourceTests(unittest.TestCase):
 
         self.assertIn("Driver <select", html)
         self.assertNotIn("Driver lap <select", html)
+        self.assertIn("lines.join('\\n')", html)
+        self.assertNotIn("lines.join('\n')", html)
+        self.assertIn("Waiting for /api/reports response", html)
+        self.assertIn("timed out waiting for /api/reports response", html)
 
     def test_client_disconnect_errors_are_expected(self) -> None:
         self.assertTrue(is_client_disconnect(ConnectionAbortedError()))

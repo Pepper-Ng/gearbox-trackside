@@ -319,7 +319,7 @@ def report_html(report_id: str) -> str:
       if (data.reference && data.reference.length) {{
         lines.push(`${{data.referenceLabel}}: ${{fmt4(referenceValue)}} ${{data.channel.unit || ''}}`);
       }}
-      tooltipEl.textContent = lines.join('\n');
+      tooltipEl.textContent = lines.join('\\n');
       tooltipEl.style.display = 'block';
       tooltipEl.style.left = `${{event.clientX + 12}}px`;
       tooltipEl.style.top = `${{event.clientY + 12}}px`;
@@ -383,10 +383,25 @@ def report_html(report_id: str) -> str:
 
     selectEl.addEventListener('change', renderCharts);
     function loadReport() {{
-      fetch(`/api/reports/${{reportId}}`, {{ cache: 'no-store' }})
-        .then(response => response.ok ? response.json() : Promise.reject(response.statusText))
-        .then(payload => {{ report = payload; render(); }})
-        .catch(error => {{ statusEl.textContent = `error=${{error}}`; }});
+      statusEl.textContent = `Fetching report data for ${{reportId}}...`;
+      chartsEl.className = 'empty';
+      chartsEl.textContent = 'Waiting for /api/reports response...';
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      fetch(`/api/reports/${{reportId}}`, {{ cache: 'no-store', signal: controller.signal }})
+        .then(response => response.ok ? response.json() : Promise.reject(`${{response.status}} ${{response.statusText}}`))
+        .then(payload => {{
+          clearTimeout(timeoutId);
+          report = payload;
+          render();
+        }})
+        .catch(error => {{
+          clearTimeout(timeoutId);
+          const detail = error && error.name === 'AbortError' ? 'timed out waiting for /api/reports response' : String(error);
+          statusEl.textContent = `error=${{detail}}`;
+          chartsEl.className = 'empty';
+          chartsEl.textContent = `Could not load report data: ${{detail}}`;
+        }});
     }}
 
     loadReport();
