@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import json
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -62,22 +63,40 @@ def make_handler(source: ScoringSource, poll_seconds: float) -> type[BaseHTTPReq
 
         def _send_html(self, body: str) -> None:
             data = body.encode("utf-8")
-            self.send_response(HTTPStatus.OK)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(data)))
-            self.end_headers()
-            self.wfile.write(data)
+            self._send_bytes(data, "text/html; charset=utf-8")
 
         def _send_json(self, payload: dict[str, Any]) -> None:
             data = json.dumps(payload, indent=2).encode("utf-8")
-            self.send_response(HTTPStatus.OK)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("Content-Length", str(len(data)))
-            self.end_headers()
-            self.wfile.write(data)
+            self._send_bytes(data, "application/json; charset=utf-8", {"Cache-Control": "no-store"})
+
+        def _send_bytes(self, data: bytes, content_type: str, extra_headers: dict[str, str] | None = None) -> None:
+            try:
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", content_type)
+                for name, value in (extra_headers or {}).items():
+                    self.send_header(name, value)
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+            except OSError as exc:
+                if is_client_disconnect(exc):
+                    self.close_connection = True
+                    return
+                raise
 
     return PocRequestHandler
+
+
+def is_client_disconnect(exc: OSError) -> bool:
+    if isinstance(exc, (BrokenPipeError, ConnectionAbortedError, ConnectionResetError)):
+        return True
+    if getattr(exc, "winerror", None) in (10053, 10054, 10058):
+        return True
+    return getattr(exc, "errno", None) in {
+        errno.EPIPE,
+        errno.ECONNABORTED,
+        errno.ECONNRESET,
+    }
 
 
 def normalize_path(raw_path: str) -> str:

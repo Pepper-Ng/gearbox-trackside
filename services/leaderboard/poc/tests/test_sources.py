@@ -28,7 +28,7 @@ from rf2_poc.rf2_shared_memory import (  # noqa: E402
     c_string,
     session_type_name,
 )
-from rf2_poc.server import read_report_safely, report_html  # noqa: E402
+from rf2_poc.server import is_client_disconnect, read_report_safely, report_html  # noqa: E402
 from rf2_poc.sources import MockScoringSource, SessionRecorder, build_source  # noqa: E402
 
 
@@ -116,6 +116,12 @@ class MockScoringSourceTests(unittest.TestCase):
 
         self.assertIn("Driver <select", html)
         self.assertNotIn("Driver lap <select", html)
+
+    def test_client_disconnect_errors_are_expected(self) -> None:
+        self.assertTrue(is_client_disconnect(ConnectionAbortedError()))
+        self.assertTrue(is_client_disconnect(ConnectionResetError()))
+        self.assertTrue(is_client_disconnect(BrokenPipeError()))
+        self.assertFalse(is_client_disconnect(OSError("not a disconnect")))
 
     class StaticReportSource:
         def __init__(self, report: dict):
