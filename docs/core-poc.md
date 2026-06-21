@@ -456,7 +456,7 @@ The page currently displays a diagnostic dashboard rather than a polished leader
 * completed in-memory session history at `/history` and `/api/history`;
 * finalized-session telemetry viewer links at `/telemetry?session=<session-id>` and JSON at `/api/reports/<session-id>`;
 * a telemetry viewer at `/telemetry` that can list stored recordings, load old `report.json` files after a collector restart, or open local `report.json` / `telemetry_samples.jsonl` files;
-* full-resolution report graphs from the recorded telemetry samples, preserving the collector's 50 Hz sample stream instead of resampling to a smaller graph axis;
+* full-resolution report graphs from the recorded telemetry samples, preserving the collector's captured sample stream instead of resampling to a smaller graph axis;
 * lap classification for telemetry reports: proper laps, partial laps, outlaps, inlaps, and formation/non-timed laps. Only proper laps are used for fastest/reference report laps, while the viewer still allows selecting other laps for diagnosis.
 
 The in-memory history is deliberately temporary. It is built by observing snapshots while the PoC process is running. It is useful for proving whether lap/sector values can be captured at the time they appear, but it is not durable storage and is not the final historical leaderboard implementation.

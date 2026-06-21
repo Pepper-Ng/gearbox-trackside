@@ -52,6 +52,10 @@ See `docs/core-poc.md` for detailed host setup, plugin requirements,
 shared-memory explanation, mock boundaries, live-mode commands, and
 troubleshooting.
 
+See `docs/telemetry-report-poc-plan.md` for telemetry report findings,
+captured-data cadence measurements, and the final PoC decision plan for
+central server collection versus rig-local telemetry collectors.
+
 See `docs/shared-memory-plugin-investigation.md` for the source-level analysis
 of how `rF2SharedMemoryMapPlugin` creates maps, logs startup, and handles
 dedicated-server map names.
