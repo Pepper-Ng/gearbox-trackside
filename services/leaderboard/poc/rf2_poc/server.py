@@ -6,9 +6,10 @@ import logging
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from .sources import ScoringSource
+from .viewer import telemetry_viewer_html
 
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,9 @@ def make_handler(source: ScoringSource, poll_seconds: float) -> type[BaseHTTPReq
             if path == "/api/history" or path.endswith("/api/history"):
                 self._send_json(read_history_safely(source))
                 return
+            if path == "/api/recordings" or path.endswith("/api/recordings"):
+              self._send_json(read_recordings_safely(source))
+              return
             if path.startswith("/api/reports/"):
                 report_id = path.rsplit("/", 1)[-1]
                 report = read_report_safely(source, report_id)
@@ -63,9 +67,13 @@ def make_handler(source: ScoringSource, poll_seconds: float) -> type[BaseHTTPReq
             if path == "/history" or path.endswith("/history"):
                 self._send_html(history_html(poll_seconds=poll_seconds))
                 return
+            if path == "/telemetry" or path.endswith("/telemetry"):
+                session_id = parse_qs(urlparse(self.path).query).get("session", [""])[0]
+                self._send_html(telemetry_viewer_html(session_id))
+                return
             if path.startswith("/reports/"):
                 report_id = path.rsplit("/", 1)[-1]
-                self._send_html(report_html(report_id))
+                self._send_html(telemetry_viewer_html(report_id))
                 return
             self.send_error(HTTPStatus.NOT_FOUND, f"Not found: {self.path!r} normalized={path!r}")
 
@@ -158,6 +166,13 @@ def read_history_safely(source: ScoringSource) -> dict[str, Any]:
             "completed_sessions": [],
             "completed_session_count": 0,
         }
+
+def read_recordings_safely(source: ScoringSource) -> dict[str, Any]:
+    try:
+        return source.recordings()
+    except Exception as exc:
+        logger.exception("Failed to list recordings")
+        return {"error": str(exc), "recordings": []}
 
 
 def read_report_safely(source: ScoringSource, report_id: str) -> dict[str, Any] | None:
@@ -679,7 +694,7 @@ def dashboard_html(poll_seconds: float, initial_view: str) -> str:
       const timing = document.createElement('div');
       timing.textContent = `Started ${fmtDateTime(session.started_at)}  Last seen ${fmtDateTime(session.last_seen_at)}  Finalized ${fmtDateTime(session.finalized_at)}`;
       parent.appendChild(timing);
-      if (session.report_url) {
+      if (session.report_url && !['no telemetry laps', 'no proper telemetry laps', 'no completed telemetry laps'].includes(String(session.report_status || '').toLowerCase())) {
         const reportLink = document.createElement('a');
         reportLink.href = session.report_url;
         reportLink.textContent = `Telemetry report (${fmt(session.report_status)})`;

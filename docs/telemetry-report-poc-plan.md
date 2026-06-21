@@ -43,7 +43,7 @@ services/leaderboard/poc/telemetry-recordings/
 This folder is gitignored. Each session gets:
 
 * `telemetry_samples.jsonl`: raw observed samples, one JSON object per driver sample;
-* `report.json`: finalized, resampled best-lap report data when the session finalizes.
+* `report.json`: finalized telemetry report data when the session finalizes.
 
 The PoC writes rotating runtime logs under:
 
@@ -70,17 +70,19 @@ Each telemetry sample stores at least:
 ## Implemented PoC report behavior
 
 * The recorder samples independently from browser polling.
-* Completed sessions in `/history` link to `/reports/<session-id>`.
-* The report keeps the best completed telemetry lap per driver.
-* The fastest lap in the session becomes the reference lap.
-* Laps are resampled onto an adaptive common 0-100% axis built from the union of recorded lap-percent sample positions, plus fixed 10% tick points, capped to keep report responses bounded after long recordings.
-* The report page plots selected driver vs reference driver for speed, throttle, brake, steering, gear, lateral G, longitudinal G, vertical G, and delta time.
-* The X axis labels every 10%.
-* Hovering a graph shows the nearest track-percent point and selected/reference values rounded to 4 decimals.
-* Delta time is aligned to track percent and is shown as selected driver time minus fastest-lap time.
+* Completed sessions in `/history` link to `/telemetry?session=<session-id>` when there is reportable telemetry.
+* `/telemetry` lists stored recordings from `services/leaderboard/poc/telemetry-recordings/`, can load old reports after a collector restart, and can open local `report.json` or `telemetry_samples.jsonl` files.
+* The report classifies laps as proper, partial, outlap, inlap, or formation/non-timed.
+* Only proper laps are considered for fastest personal/overall report references.
+* The viewer can still select and compare any stored lap, including excluded partial/out/in/formation laps, for diagnosis.
+* The report stores and displays full-resolution recorded telemetry samples. It does not resample reports down to a reduced graph axis.
+* Each graph can compare two selected laps from the same or different drivers for speed, throttle, brake, steering, gear, lateral G, longitudinal G, and vertical G.
+* Fastest personal and fastest overall proper laps are marked in the lap selectors.
+* The X axis can use track percent or raw sample index.
+* Hovering a graph shows the nearest selected samples and values for the compared laps.
 * Report JSON generation starts on a background thread when a session finalizes. If the page is opened early, `/api/reports/<session-id>` can return `building` and the page polls until the report is ready.
 
-The first version used exactly 101 graph points, one per percent. That was enough to prove the report concept but was not full resolution. The current version plots at every distinct recorded lap-percent value available in the selected best laps. If lap-percent values repeat because scoring updates slower than telemetry, multiple telemetry samples can still collapse to one track-position point; final report quality should be checked with live captured data.
+The first versions used resampled graph axes, first one point per percent and later a capped adaptive track-percent axis. The current version keeps the recorded samples in the report so 50 Hz telemetry can be reviewed directly. If processing larger sessions becomes slow, preserve the full raw sample files and add background/indexed report preparation rather than reducing stored telemetry resolution.
 
 ## Next validation checklist
 

@@ -9,10 +9,15 @@ from typing import Any
 Snapshot = dict[str, Any]
 DEFAULT_AXIS = [float(value) for value in range(101)]
 TICK_AXIS = [float(value) for value in range(0, 101, 10)]
-MAX_AXIS_POINTS = 501
-MAX_RAW_LAP_PERCENT_POINTS = 1000
+MIN_PROPER_LAP_SAMPLES = 2
+PROPER_LAP_START_MAX_PERCENT = 5.0
+PROPER_LAP_END_MIN_PERCENT = 95.0
+PROPER_LAP_MIN_SPAN_PERCENT = 90.0
 SERIES_FIELDS = [
+    "lap_percent",
     "time_seconds",
+    "timestamp",
+    "session_time",
     "speed_kph",
     "throttle_percent",
     "brake_percent",
@@ -65,6 +70,10 @@ def sample_from_driver(snapshot: Snapshot, driver: Snapshot) -> Snapshot | None:
     return {
         "timestamp": snapshot.get("timestamp"),
         "session_time": (snapshot.get("session") or {}).get("current_time"),
+        "session_track": (snapshot.get("session") or {}).get("track"),
+        "session_type": (snapshot.get("session") or {}).get("session_type"),
+        "session_game_phase": (snapshot.get("session") or {}).get("game_phase"),
+        "session_game_phase_name": (snapshot.get("session") or {}).get("game_phase_name"),
         "telemetry_update_counter": (snapshot.get("telemetry") or {}).get("update_counter"),
         "driver_id": driver.get("id"),
         "driver_name": driver.get("driver_name"),
@@ -83,6 +92,13 @@ def sample_from_driver(snapshot: Snapshot, driver: Snapshot) -> Snapshot | None:
         "longitudinal_g": numeric(g_force.get("longitudinal") if isinstance(g_force, dict) else None) or numeric(g_force.get("z") if isinstance(g_force, dict) else None),
         "vertical_g": numeric(g_force.get("vertical") if isinstance(g_force, dict) else None) or numeric(g_force.get("y") if isinstance(g_force, dict) else None),
         "g_magnitude": numeric(g_force.get("magnitude") if isinstance(g_force, dict) else None),
+        "count_lap_flag": driver.get("count_lap_flag"),
+        "count_lap_flag_name": driver.get("count_lap_flag_name"),
+        "in_pits": driver.get("in_pits"),
+        "pit_state": driver.get("pit_state"),
+        "pit_state_name": driver.get("pit_state_name"),
+        "finish_status": driver.get("finish_status"),
+        "finish_status_name": driver.get("finish_status_name"),
     }
 
 
@@ -202,49 +218,39 @@ def build_report(record: Snapshot) -> Snapshot | None:
         return None
     started_at = time.perf_counter()
 
-    best_laps = []
+    all_laps = []
     for driver in record.get("drivers", {}).values():
         assign_lap_times_from_history(driver)
-        best_lap = best_lap_for_driver(driver)
-        if best_lap:
-            best_laps.append(best_lap)
+        all_laps.extend(report_laps_for_driver(driver))
 
-    if not best_laps:
+    proper_laps = [lap for lap in all_laps if lap.get("eligible_for_report")]
+    mark_fastest_laps(all_laps, proper_laps)
+
+    if not all_laps:
         return {
             "session_id": record.get("id"),
             "track": record.get("track"),
             "session_type": record.get("session_type"),
-            "status": "no completed telemetry laps",
+            "status": "no telemetry laps",
             "axis": DEFAULT_AXIS,
-            "axis_strategy": "default 1 percent",
+            "axis_strategy": "raw samples",
             "axis_sample_count": len(DEFAULT_AXIS),
             "build_seconds": round(time.perf_counter() - started_at, 4),
             "channels": CHANNELS,
             "laps": [],
+            "all_laps": [],
+            "proper_lap_count": 0,
+            "excluded_lap_count": 0,
+            "telemetry_sample_count": int(record.get("telemetry_sample_count") or 0),
             "reference_lap": None,
         }
 
-    reference = min(best_laps, key=lambda lap: lap.get("lap_time") or 999999.0)
-    axis = build_adaptive_axis(best_laps)
-    reference_series = resample_lap(reference, axis)
-    report_laps = []
-    for lap in best_laps:
-        series = resample_lap(lap, axis)
-        series["delta_time"] = delta_series(series.get("time_seconds"), reference_series.get("time_seconds"))
-        report_laps.append(
-            {
-                "driver_id": lap.get("driver_id"),
-                "driver_name": lap.get("driver_name"),
-                "vehicle_name": lap.get("vehicle_name"),
-                "lap_number": lap.get("lap_number"),
-                "lap_time": lap.get("lap_time"),
-                "sample_count": len(lap.get("samples") or []),
-                "coverage": lap_coverage(lap.get("samples") or []),
-                "raw_lap_percents": raw_lap_percents(lap.get("samples") or []),
-                "is_reference": lap is reference,
-                "series": series,
-            }
-        )
+    reference = min(proper_laps, key=lambda lap: lap.get("lap_time") or 999999.0) if proper_laps else None
+    if reference is not None:
+        reference["is_reference"] = True
+    sorted_proper_laps = sorted(proper_laps, key=lambda lap: lap.get("lap_time") or 999999.0)
+    sorted_all_laps = sorted(all_laps, key=lap_sort_key)
+    status = "ready" if proper_laps else "no proper telemetry laps"
 
     return {
         "session_id": record.get("id"),
@@ -253,19 +259,23 @@ def build_report(record: Snapshot) -> Snapshot | None:
         "started_at": record.get("started_at"),
         "finalized": record.get("finalized"),
         "completion_reason": record.get("completion_reason"),
-        "status": "ready",
-        "axis": axis,
-        "axis_strategy": f"adaptive union of recorded lap-percent samples plus 10 percent ticks, capped at {MAX_AXIS_POINTS} points",
-        "axis_sample_count": len(axis),
+        "status": status,
+        "axis": [],
+        "axis_strategy": "raw recorded samples at collector frequency",
+        "axis_sample_count": 0,
         "build_seconds": round(time.perf_counter() - started_at, 4),
         "channels": CHANNELS,
+        "proper_lap_count": len(proper_laps),
+        "excluded_lap_count": len(all_laps) - len(proper_laps),
+        "telemetry_sample_count": int(record.get("telemetry_sample_count") or 0),
         "reference_lap": {
             "driver_id": reference.get("driver_id"),
             "driver_name": reference.get("driver_name"),
             "lap_number": reference.get("lap_number"),
             "lap_time": reference.get("lap_time"),
-        },
-        "laps": sorted(report_laps, key=lambda lap: lap.get("lap_time") or 999999.0),
+        } if reference is not None else None,
+        "laps": sorted_proper_laps,
+        "all_laps": sorted_all_laps,
     }
 
 
@@ -280,6 +290,10 @@ def placeholder_report(session_id: str, status: str, error: str | None = None) -
         "axis_sample_count": len(DEFAULT_AXIS),
         "channels": CHANNELS,
         "laps": [],
+        "all_laps": [],
+        "proper_lap_count": 0,
+        "excluded_lap_count": 0,
+        "telemetry_sample_count": 0,
         "reference_lap": None,
     }
     if error:
@@ -287,28 +301,124 @@ def placeholder_report(session_id: str, status: str, error: str | None = None) -
     return report
 
 
-def best_lap_for_driver(driver: Snapshot) -> Snapshot | None:
-    candidates = []
-    for lap in driver.get("telemetry_laps", {}).values():
+def report_laps_for_driver(driver: Snapshot) -> list[Snapshot]:
+    laps = []
+    for lap_key, lap in driver.get("telemetry_laps", {}).items():
         samples = [sample for sample in lap.get("samples", []) if sample.get("lap_percent") is not None]
-        if len(samples) < 2:
-            continue
-        lap_time = lap.get("lap_time")
-        if lap_time is None:
-            continue
-        candidates.append(
+        classification = classify_lap(lap, samples)
+        laps.append(
             {
+                "lap_id": f"{driver.get('id')}:{lap_key}",
                 "driver_id": driver.get("id"),
                 "driver_name": driver.get("driver_name"),
                 "vehicle_name": driver.get("vehicle_name"),
                 "lap_number": lap.get("lap_number"),
-                "lap_time": lap_time,
-                "samples": samples,
+                "lap_time": lap.get("lap_time"),
+                "sample_count": len(samples),
+                "coverage": lap_coverage(samples),
+                "raw_lap_percents": raw_lap_percents(samples),
+                "lap_classification": classification["classification"],
+                "classification_reasons": classification["reasons"],
+                "eligible_for_report": classification["eligible_for_report"],
+                "is_reference": False,
+                "is_fastest_personal": False,
+                "is_fastest_overall": False,
+                "series": raw_series_from_samples(samples),
             }
         )
-    if not candidates:
+    return laps
+
+
+def classify_lap(lap: Snapshot, samples: list[Snapshot]) -> Snapshot:
+    sample_count = len(samples)
+    coverage = lap_coverage(samples)
+    min_percent = numeric(coverage.get("min_percent"))
+    max_percent = numeric(coverage.get("max_percent"))
+    span = (max_percent - min_percent) if min_percent is not None and max_percent is not None else None
+    lap_time = numeric(lap.get("lap_time"))
+    reasons = []
+    count_flags = int_values(samples, "count_lap_flag")
+    game_phases = int_values(samples, "session_game_phase")
+    pit_type = lap_pit_type(samples)
+
+    if not samples:
+        return lap_classification("partial", False, ["no telemetry samples"])
+    if any(phase in {1, 2, 3, 4} for phase in game_phases):
+        return lap_classification("formation", False, ["session was not green flag"])
+    if count_flags and 2 not in count_flags and lap_time is None:
+        return lap_classification("formation", False, ["lap was not timed by rFactor 2"])
+    if pit_type is not None:
+        return lap_classification(pit_type, False, ["pit state/in-pits was observed"])
+    if lap_time is None:
+        reasons.append("no counted lap time was observed")
+    if sample_count < MIN_PROPER_LAP_SAMPLES:
+        reasons.append(f"only {sample_count} telemetry samples")
+    if min_percent is None or max_percent is None or span is None:
+        reasons.append("lap-percent coverage is unavailable")
+    else:
+        if min_percent > PROPER_LAP_START_MAX_PERCENT:
+            reasons.append(f"missing lap start before {min_percent:.1f}%")
+        if max_percent < PROPER_LAP_END_MIN_PERCENT:
+            reasons.append(f"missing lap end after {max_percent:.1f}%")
+        if span < PROPER_LAP_MIN_SPAN_PERCENT:
+            reasons.append(f"only {span:.1f}% lap coverage")
+    if count_flags and 2 not in count_flags:
+        reasons.append("lap was not marked count lap and time")
+    if reasons:
+        return lap_classification("partial", False, reasons)
+    return lap_classification("proper", True, [])
+
+
+def lap_classification(name: str, eligible: bool, reasons: list[str]) -> Snapshot:
+    return {"classification": name, "eligible_for_report": eligible, "reasons": reasons}
+
+
+def lap_pit_type(samples: list[Snapshot]) -> str | None:
+    if not any(sample_in_pit(sample) for sample in samples):
         return None
-    return min(candidates, key=lambda lap: lap.get("lap_time") or 999999.0)
+    edge_count = max(1, min(10, len(samples) // 10 or 1))
+    if any(sample_in_pit(sample) for sample in samples[:edge_count]):
+        return "outlap"
+    if any(sample_in_pit(sample) for sample in samples[-edge_count:]):
+        return "inlap"
+    return "inlap"
+
+
+def sample_in_pit(sample: Snapshot) -> bool:
+    pit_state = sample.get("pit_state")
+    return bool(sample.get("in_pits")) or pit_state in (2, 3, 4)
+
+
+def int_values(samples: list[Snapshot], key: str) -> set[int]:
+    values = set()
+    for sample in samples:
+        value = sample.get(key)
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, int):
+            values.add(value)
+    return values
+
+
+def mark_fastest_laps(all_laps: list[Snapshot], proper_laps: list[Snapshot]) -> None:
+    if not proper_laps:
+        return
+    overall = min(proper_laps, key=lambda lap: lap.get("lap_time") or 999999.0)
+    overall["is_fastest_overall"] = True
+    by_driver: dict[str, list[Snapshot]] = {}
+    for lap in proper_laps:
+        by_driver.setdefault(str(lap.get("driver_id")), []).append(lap)
+    for laps in by_driver.values():
+        fastest = min(laps, key=lambda lap: lap.get("lap_time") or 999999.0)
+        fastest["is_fastest_personal"] = True
+
+
+def lap_sort_key(lap: Snapshot) -> tuple[str, float, float]:
+    return (
+        str(lap.get("driver_name") or lap.get("driver_id") or ""),
+        numeric(lap.get("lap_number")) or 0.0,
+        numeric(lap.get("lap_time")) or 999999.0,
+    )
 
 
 def build_adaptive_axis(laps: list[Snapshot]) -> list[float]:
@@ -322,23 +432,7 @@ def build_adaptive_axis(laps: list[Snapshot]) -> list[float]:
                 axis_values.add(round(lap_percent, 4))
     if len(axis_values) < 2:
         return DEFAULT_AXIS
-    axis = sorted(axis_values)
-    if len(axis) <= MAX_AXIS_POINTS:
-        return axis
-    return cap_axis(axis, MAX_AXIS_POINTS)
-
-
-def cap_axis(axis: list[float], max_points: int) -> list[float]:
-    if len(axis) <= max_points:
-        return axis
-    last_index = len(axis) - 1
-    sampled_indexes = {
-        round(index * last_index / (max_points - 1))
-        for index in range(max_points)
-    }
-    capped = {axis[index] for index in sampled_indexes}
-    capped.update(TICK_AXIS)
-    return sorted(capped)
+    return sorted(axis_values)
 
 
 def raw_lap_percents(samples: list[Snapshot]) -> list[float]:
@@ -347,14 +441,14 @@ def raw_lap_percents(samples: list[Snapshot]) -> list[float]:
         lap_percent = numeric(sample.get("lap_percent"))
         if lap_percent is not None:
             values.append(round(lap_percent, 4))
-    if len(values) <= MAX_RAW_LAP_PERCENT_POINTS:
-        return values
-    last_index = len(values) - 1
-    sampled_indexes = {
-        round(index * last_index / (MAX_RAW_LAP_PERCENT_POINTS - 1))
-        for index in range(MAX_RAW_LAP_PERCENT_POINTS)
-    }
-    return [values[index] for index in sorted(sampled_indexes)]
+    return values
+
+
+def raw_series_from_samples(samples: list[Snapshot]) -> Snapshot:
+    output = {}
+    for field in SERIES_FIELDS:
+        output[field] = [numeric(sample.get(field)) for sample in samples]
+    return output
 
 
 def resample_lap(lap: Snapshot, axis: list[float]) -> Snapshot:

@@ -3,6 +3,8 @@ from __future__ import annotations
 import copy
 import json
 import logging
+import re
+import shutil
 import threading
 import time
 from datetime import datetime, timezone
@@ -15,6 +17,8 @@ from .rf2_shared_memory import SharedMemoryScoringReader, SharedMemoryUnavailabl
 
 Snapshot = dict[str, Any]
 logger = logging.getLogger(__name__)
+MIN_MEANINGFUL_SESSION_SECONDS = 10.0
+MIN_MEANINGFUL_SAMPLE_SECONDS = 5.0
 
 
 class ScoringSource(Protocol):
@@ -26,6 +30,9 @@ class ScoringSource(Protocol):
 
     def report(self, session_id: str) -> Snapshot | None:
         """Return a finalized telemetry report by session ID."""
+
+    def recordings(self) -> Snapshot:
+        """Return stored telemetry recordings known to the PoC."""
 
     def close(self) -> None:
         """Release background resources."""
@@ -91,6 +98,9 @@ class MockScoringSource:
     def report(self, session_id: str) -> Snapshot | None:
         return None
 
+    def recordings(self) -> Snapshot:
+        return {"recordings": []}
+
     def close(self) -> None:
         return None
 
@@ -116,6 +126,9 @@ class SharedMemoryScoringSource:
 
     def report(self, session_id: str) -> Snapshot | None:
         return None
+
+    def recordings(self) -> Snapshot:
+        return {"recordings": []}
 
     def close(self) -> None:
         return None
@@ -161,6 +174,11 @@ class AutoScoringSource:
             return self._live.report(session_id)
         return self._fallback.report(session_id)
 
+    def recordings(self) -> Snapshot:
+        if self._live is not None:
+            return self._live.recordings()
+        return self._fallback.recordings()
+
     def close(self) -> None:
         if self._live is not None:
             self._live.close()
@@ -204,6 +222,9 @@ class RecordingScoringSource:
 
     def report(self, session_id: str) -> Snapshot | None:
         return self._recorder.report(session_id)
+
+    def recordings(self) -> Snapshot:
+        return self._recorder.recordings()
 
     def close(self) -> None:
         logger.info("Stopping telemetry recorder")
@@ -303,7 +324,10 @@ class SessionRecorder:
             error = self._report_errors.get(session_id)
             if error:
                 return placeholder_report(session_id, "error", error=error)
-        return None
+        return self._read_stored_report(session_id)
+
+    def recordings(self) -> Snapshot:
+        return {"recordings": self._list_recordings()}
 
     def close(self) -> None:
         with self._report_lock:
@@ -370,12 +394,15 @@ class SessionRecorder:
     def _finalize_current(self, reason: str) -> None:
         if self._current is None or self._current.get("finalized"):
             return
+        if not is_meaningful_session_record(self._current):
+            self._discard_current(f"discarded {reason}: too short or empty")
+            return
         self._current["finalized"] = True
         self._current["completion_reason"] = reason
         self._current["finalized_at"] = time.time()
         self._current["finalized_at_iso"] = iso_timestamp(self._current["finalized_at"])
         session_id = str(self._current.get("id"))
-        self._current["report_url"] = f"/reports/{session_id}"
+        self._current["report_url"] = f"/telemetry?session={session_id}"
         self._current["report_status"] = "building"
         drivers = list(self._current.get("drivers", {}).values())
         self._current["finishing_order"] = [
@@ -399,6 +426,25 @@ class SessionRecorder:
         )
         self._start_report_build(session_id, copy.deepcopy(self._current))
 
+    def _discard_current(self, reason: str) -> None:
+        if self._current is None:
+            return
+        session_id = self._current.get("id")
+        sample_file = self._current.get("telemetry_samples_file")
+        logger.info(
+            "Discarding recorded session: id=%s reason=%s samples=%s duration=%.3f",
+            session_id,
+            reason,
+            self._current.get("telemetry_sample_count"),
+            session_duration_seconds(self._current),
+        )
+        self._close_sample_file()
+        if sample_file:
+            session_dir = Path(sample_file).parent
+            if session_dir.exists() and self._output_dir is not None and session_dir.parent == self._output_dir:
+                shutil.rmtree(session_dir, ignore_errors=True)
+        self._current = None
+
     def _start_report_build(self, session_id: str, record: Snapshot) -> None:
         thread = threading.Thread(
             target=self._build_report_job,
@@ -416,7 +462,7 @@ class SessionRecorder:
         try:
             report = build_report(record)
             if report is None:
-                report = placeholder_report(session_id, "no completed telemetry laps")
+                report = placeholder_report(session_id, "no telemetry laps")
             with self._report_lock:
                 self._reports[session_id] = report
                 self._report_errors.pop(session_id, None)
@@ -450,6 +496,41 @@ class SessionRecorder:
         report_file.parent.mkdir(parents=True, exist_ok=True)
         report_file.write_text(json.dumps(report, indent=2), encoding="utf-8")
         logger.info("Telemetry report written: id=%s file=%s", session_id, report_file)
+
+    def _read_stored_report(self, session_id: str) -> Snapshot | None:
+        report_file = self._recording_report_file(session_id)
+        if report_file is None or not report_file.exists():
+            return None
+        try:
+            return json.loads(report_file.read_text(encoding="utf-8"))
+        except Exception:
+            logger.exception("Failed to read stored telemetry report: id=%s file=%s", session_id, report_file)
+            return None
+
+    def _list_recordings(self) -> list[Snapshot]:
+        if self._output_dir is None or not self._output_dir.exists():
+            return []
+        recordings = []
+        for session_dir in self._output_dir.iterdir():
+            if not session_dir.is_dir():
+                continue
+            sample_file = session_dir / "telemetry_samples.jsonl"
+            report_file = session_dir / "report.json"
+            if not sample_file.exists() and not report_file.exists():
+                continue
+            report = None
+            if report_file.exists():
+                try:
+                    report = json.loads(report_file.read_text(encoding="utf-8"))
+                except Exception:
+                    logger.exception("Failed to read recording summary: %s", report_file)
+            recordings.append(recording_summary(session_dir, sample_file, report_file, report))
+        return sorted(recordings, key=lambda item: item.get("last_modified") or 0, reverse=True)
+
+    def _recording_report_file(self, session_id: str) -> Path | None:
+        if self._output_dir is None or not is_safe_recording_id(session_id):
+            return None
+        return self._output_dir / session_id / "report.json"
 
 
 def enrich_snapshot(snapshot: Snapshot, history: Snapshot) -> None:
@@ -656,10 +737,57 @@ def is_session_complete(snapshot: Snapshot) -> bool:
     return False
 
 
+def is_meaningful_session_record(record: Snapshot) -> bool:
+    if any((driver.get("lap_history") or []) for driver in record.get("drivers", {}).values()):
+        return True
+    sample_count = int(record.get("telemetry_sample_count") or 0)
+    target_hz = float(record.get("telemetry_target_hz") or 0.0)
+    if target_hz > 0 and sample_count >= int(target_hz * MIN_MEANINGFUL_SAMPLE_SECONDS):
+        return True
+    if target_hz <= 0 and sample_count > 0 and session_duration_seconds(record) >= MIN_MEANINGFUL_SESSION_SECONDS:
+        return True
+    return session_duration_seconds(record) >= MIN_MEANINGFUL_SESSION_SECONDS and bool(record.get("drivers"))
+
+
+def session_duration_seconds(record: Snapshot) -> float:
+    started = record.get("started_at")
+    last_seen = record.get("last_seen_at")
+    if not isinstance(started, (int, float)) or not isinstance(last_seen, (int, float)):
+        return 0.0
+    return max(0.0, float(last_seen) - float(started))
+
+
 def iso_timestamp(timestamp: Any) -> str | None:
     if not isinstance(timestamp, (int, float)):
         return None
     return datetime.fromtimestamp(float(timestamp), timezone.utc).astimezone().isoformat(timespec="seconds")
+
+
+def is_safe_recording_id(session_id: str) -> bool:
+    return bool(re.fullmatch(r"[A-Za-z0-9_.-]+", session_id))
+
+
+def recording_summary(session_dir: Path, sample_file: Path, report_file: Path, report: Snapshot | None) -> Snapshot:
+    latest_mtime = max(
+        path.stat().st_mtime
+        for path in (sample_file, report_file)
+        if path.exists()
+    )
+    return {
+        "session_id": session_dir.name,
+        "track": (report or {}).get("track"),
+        "session_type": (report or {}).get("session_type"),
+        "status": (report or {}).get("status") or ("samples only" if sample_file.exists() else "report only"),
+        "started_at": (report or {}).get("started_at"),
+        "proper_lap_count": (report or {}).get("proper_lap_count"),
+        "excluded_lap_count": (report or {}).get("excluded_lap_count"),
+        "telemetry_sample_count": (report or {}).get("telemetry_sample_count"),
+        "sample_file": str(sample_file) if sample_file.exists() else None,
+        "report_file": str(report_file) if report_file.exists() else None,
+        "last_modified": latest_mtime,
+        "last_modified_iso": iso_timestamp(latest_mtime),
+        "viewer_url": f"/telemetry?session={session_dir.name}",
+    }
 
 
 def public_session_record(record: Snapshot | None) -> Snapshot | None:
