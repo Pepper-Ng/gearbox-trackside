@@ -40,7 +40,7 @@ def telemetry_viewer_html(initial_session_id: str | None = None) -> str:
   <section>
     <label>Stored session <select id="recordingSelect"></select></label>
     <button id="loadSelected">Load</button>
-    <label>X axis <select id="xMode"><option value="track">Track %</option><option value="sample">Sample</option></select></label>
+    <label>X axis <select id="xMode"><option value="time" selected>Time</option><option value="track">Track %</option><option value="sample">Sample</option></select></label>
     <label>Open file <input id="fileInput" type="file" accept=".json,.jsonl,application/json"></label>
   </section>
   <section class="meta" id="meta"></section>
@@ -90,6 +90,70 @@ def telemetry_viewer_html(initial_session_id: str | None = None) -> str:
       return (report && (report.all_laps || report.laps)) || [];
     }
 
+    function normalizeReport(payload) {
+      const normalized = payload || {};
+      const laps = (normalized.all_laps || normalized.laps || []).map((lap, index) => normalizeLap(lap, index));
+      normalized.all_laps = sortLaps(laps);
+      normalized.laps = sortLaps((normalized.laps || []).map((lap, index) => normalizeLap(lap, index)));
+      if (!normalized.laps.length) normalized.laps = normalized.all_laps.filter(lap => lap.eligible_for_report);
+      markFastestLaps(normalized.all_laps);
+      markFastestLaps(normalized.laps);
+      if (!normalized.reference_lap) {
+        const fastest = normalized.all_laps.find(lap => lap.is_fastest_overall);
+        if (fastest) normalized.reference_lap = {
+          driver_id: fastest.driver_id,
+          driver_name: fastest.driver_name,
+          lap_number: fastest.lap_number,
+          lap_time: fastest.lap_time,
+        };
+      }
+      normalized.proper_lap_count = normalized.proper_lap_count ?? normalized.all_laps.filter(lap => lap.eligible_for_report).length;
+      normalized.excluded_lap_count = normalized.excluded_lap_count ?? Math.max(0, normalized.all_laps.length - normalized.proper_lap_count);
+      return normalized;
+    }
+
+    function normalizeLap(lap, index) {
+      const normalized = { ...lap };
+      normalized.lap_id = normalized.lap_id || `${normalized.driver_id ?? normalized.driver_name ?? 'driver'}:${normalized.lap_number ?? index}:${index}`;
+      normalized.series = normalized.series || {};
+      normalized.sample_count = normalized.sample_count ?? Math.max(0, ...Object.values(normalized.series).map(values => Array.isArray(values) ? values.length : 0));
+      normalized.lap_time = normalized.lap_time ?? derivedLapTime(normalized);
+      normalized.lap_classification = normalized.lap_classification || (normalized.eligible_for_report ? 'proper' : 'uploaded');
+      return normalized;
+    }
+
+    function derivedLapTime(lap) {
+      const times = ((lap.series || {}).time_seconds || []).map(value => Number(value)).filter(Number.isFinite);
+      if (times.length < 2) return null;
+      const start = times.find(value => value >= 0);
+      const end = times[times.length - 1];
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+      return Number((end - start).toFixed(3));
+    }
+
+    function sortLaps(laps) {
+      return [...laps].sort((left, right) => {
+        const driverCompare = String(left.driver_name || left.driver_id || '').localeCompare(String(right.driver_name || right.driver_id || ''), undefined, { numeric: true });
+        if (driverCompare) return driverCompare;
+        return Number(left.lap_number || 0) - Number(right.lap_number || 0);
+      });
+    }
+
+    function markFastestLaps(laps) {
+      if (!laps.length) return;
+      const candidates = laps.filter(lap => Number.isFinite(Number(lap.lap_time)) && (lap.eligible_for_report || !laps.some(item => item.eligible_for_report)));
+      if (!candidates.length) return;
+      const overall = candidates.reduce((best, lap) => Number(lap.lap_time) < Number(best.lap_time) ? lap : best, candidates[0]);
+      overall.is_fastest_overall = true;
+      const byDriver = new Map();
+      for (const lap of candidates) {
+        const key = String(lap.driver_id ?? lap.driver_name ?? 'driver');
+        const previous = byDriver.get(key);
+        if (!previous || Number(lap.lap_time) < Number(previous.lap_time)) byDriver.set(key, lap);
+      }
+      for (const lap of byDriver.values()) lap.is_fastest_personal = true;
+    }
+
     function lapLabel(lap) {
       const tags = [];
       if (lap.is_fastest_overall) tags.push('Fastest Ovrl.');
@@ -97,6 +161,13 @@ def telemetry_viewer_html(initial_session_id: str | None = None) -> str:
       const tagText = tags.length ? ` (${tags.join(', ')})` : '';
       const kind = lap.lap_classification || (lap.eligible_for_report ? 'proper' : 'partial');
       return `${lap.driver_name || lap.driver_id} lap ${fmt(lap.lap_number)} ${fmtTime(lap.lap_time)} ${kind}${tagText}`;
+    }
+
+    function noneOption() {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = 'None';
+      return option;
     }
 
     function optionForLap(lap) {
@@ -131,12 +202,12 @@ def telemetry_viewer_html(initial_session_id: str | None = None) -> str:
     }
 
     function renderReport(payload) {
-      report = payload;
+      report = normalizeReport(payload);
       const laps = allLaps();
       const proper = laps.filter(lap => lap.eligible_for_report);
       const reference = laps.find(lap => lap.is_fastest_overall) || proper[0] || laps[0];
       defaultA = reference ? reference.lap_id : '';
-      defaultB = (proper.find(lap => lap.lap_id !== defaultA) || laps.find(lap => lap.lap_id !== defaultA) || reference || {}).lap_id || '';
+      defaultB = '';
       statusEl.textContent = `${fmt(report.track)} ${fmt(report.session_type)} status=${fmt(report.status)}`;
       metaEl.replaceChildren();
       metric('Session', report.session_id);
@@ -168,8 +239,8 @@ def telemetry_viewer_html(initial_session_id: str | None = None) -> str:
       wrapper.appendChild(heading);
       const controls = document.createElement('div');
       controls.className = 'chart-controls';
-      const selectA = lapSelect(defaultA);
-      const selectB = lapSelect(defaultB);
+      const selectA = lapSelect(defaultA, false);
+      const selectB = lapSelect(defaultB, true);
       controls.appendChild(labeled('Driver A', selectA));
       controls.appendChild(labeled('Driver B', selectB));
       wrapper.appendChild(controls);
@@ -195,8 +266,9 @@ def telemetry_viewer_html(initial_session_id: str | None = None) -> str:
       return label;
     }
 
-    function lapSelect(selectedValue) {
+    function lapSelect(selectedValue, allowNone) {
       const select = document.createElement('select');
+      if (allowNone) select.appendChild(noneOption());
       for (const lap of allLaps()) select.appendChild(optionForLap(lap));
       select.value = selectedValue;
       return select;
@@ -229,8 +301,8 @@ def telemetry_viewer_html(initial_session_id: str | None = None) -> str:
       let min = Math.min(...values);
       let max = Math.max(...values);
       if (min === max) { min -= 1; max += 1; }
-      const minX = xMode.value === 'sample' ? 0 : 0;
-      const maxX = xMode.value === 'sample' ? Math.max(seriesA.length, seriesB.length, 1) - 1 : 100;
+      const minX = 0;
+      const maxX = maxXAxisValue(xA, xB, seriesA.length, seriesB.length);
       const chartWidth = width - padding.left - padding.right;
       const chartHeight = height - padding.top - padding.bottom;
       const xFor = value => padding.left + chartWidth * ((value - minX) / Math.max(1, maxX - minX));
@@ -246,35 +318,83 @@ def telemetry_viewer_html(initial_session_id: str | None = None) -> str:
       ctx.font = '12px Segoe UI, Arial';
       ctx.fillText(fmt(max), 4, padding.top + 4);
       ctx.fillText(fmt(min), 4, height - padding.bottom);
-      drawSeries(ctx, xA, seriesA, xFor, yFor, '#2563eb');
-      drawSeries(ctx, xB, seriesB, xFor, yFor, '#d97706');
+      drawSeries(ctx, xA, seriesA, xFor, yFor, '#2563eb', channel.kind === 'step');
+      drawSeries(ctx, xB, seriesB, xFor, yFor, '#d97706', channel.kind === 'step');
       canvas._chartData = { channel, lapA, lapB, xA, xB, seriesA, seriesB };
       legend.textContent = `blue=${lapA ? lapLabel(lapA) : '-'}  orange=${lapB ? lapLabel(lapB) : '-'}`;
     }
 
-    function drawSeries(ctx, xValues, values, xFor, yFor, color) {
+    function drawSeries(ctx, xValues, values, xFor, yFor, color, step) {
       ctx.strokeStyle = color;
       ctx.lineWidth = 2;
       ctx.beginPath();
       let started = false;
+      let lastY = null;
       values.forEach((value, index) => {
         if (typeof value !== 'number' || !Number.isFinite(value)) return;
         const x = xFor(xValues[index]);
         const y = yFor(value);
-        if (!started) { ctx.moveTo(x, y); started = true; } else { ctx.lineTo(x, y); }
+        if (!started) {
+          ctx.moveTo(x, y);
+          started = true;
+          lastY = y;
+          return;
+        }
+        if (step) {
+          ctx.lineTo(x, lastY);
+          ctx.lineTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+        lastY = y;
       });
       if (started) ctx.stroke();
     }
 
     function valuesFor(lap, key) {
+      if (key === 'gear') return gearDisplayValues(lap);
       return ((lap.series || {})[key] || []).map(value => Number.isFinite(Number(value)) ? Number(value) : null);
+    }
+
+    function gearDisplayValues(lap) {
+      const raw = ((lap.series || {}).gear || []).map(value => Number.isFinite(Number(value)) ? Number(value) : null);
+      const speed = ((lap.series || {}).speed_kph || []).map(value => Number.isFinite(Number(value)) ? Number(value) : null);
+      return raw.map((value, index) => {
+        if (value !== 0 || !(speed[index] > 5)) return value;
+        const previous = nearestNonZeroGear(raw, index, -1);
+        const next = nearestNonZeroGear(raw, index, 1);
+        if (previous !== null && next !== null) return previous;
+        return value;
+      });
+    }
+
+    function nearestNonZeroGear(values, startIndex, direction) {
+      for (let index = startIndex + direction; index >= 0 && index < values.length && Math.abs(index - startIndex) <= 3; index += direction) {
+        const value = values[index];
+        if (Number.isFinite(value) && value !== 0) return value;
+      }
+      return null;
     }
 
     function xValues(lap, length) {
       if (xMode.value === 'sample') return Array.from({ length }, (_, index) => index);
+      if (xMode.value === 'time') {
+        const times = valuesFor(lap, 'time_seconds');
+        if (times.length === length && times.some(value => Number.isFinite(value))) return times.map((value, index) => Number.isFinite(value) ? value : index);
+        return Array.from({ length }, (_, index) => index);
+      }
       const percents = valuesFor(lap, 'lap_percent');
       if (percents.length === length) return percents.map((value, index) => Number.isFinite(value) ? value : index / Math.max(1, length - 1) * 100);
       return Array.from({ length }, (_, index) => index / Math.max(1, length - 1) * 100);
+    }
+
+    function maxXAxisValue(xA, xB, lengthA, lengthB) {
+      if (xMode.value === 'sample') return Math.max(lengthA, lengthB, 1) - 1;
+      if (xMode.value === 'time') {
+        const values = [...xA, ...xB].filter(value => Number.isFinite(value));
+        return values.length ? Math.max(...values, 1) : Math.max(lengthA, lengthB, 1) - 1;
+      }
+      return 100;
     }
 
     function nearestIndex(values, target) {
@@ -294,6 +414,8 @@ def telemetry_viewer_html(initial_session_id: str | None = None) -> str:
       const percent = Math.max(0, Math.min(1, (event.clientX - rect.left - 46) / Math.max(1, rect.width - 62)));
       const maxX = xMode.value === 'sample'
         ? Math.max(data.seriesA.length, data.seriesB.length, 1) - 1
+        : xMode.value === 'time'
+        ? maxXAxisValue(data.xA || [], data.xB || [], data.seriesA.length, data.seriesB.length)
         : 100;
       const target = percent * maxX;
       const indexA = nearestIndex(data.xA || [], target);
@@ -302,7 +424,7 @@ def telemetry_viewer_html(initial_session_id: str | None = None) -> str:
         data.channel.label,
         `A ${data.lapA ? data.lapA.driver_name : '-'}: ${fmt((data.seriesA || [])[indexA])}`,
         `B ${data.lapB ? data.lapB.driver_name : '-'}: ${fmt((data.seriesB || [])[indexB])}`,
-      ].join('\n');
+      ].join('\\n');
       tooltipEl.style.display = 'block';
       tooltipEl.style.left = `${event.clientX + 12}px`;
       tooltipEl.style.top = `${event.clientY + 12}px`;
@@ -313,7 +435,7 @@ def telemetry_viewer_html(initial_session_id: str | None = None) -> str:
     }
 
     function reportFromJsonl(text) {
-      const samples = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => JSON.parse(line));
+      const samples = text.split(/\\r?\\n/).map(line => line.trim()).filter(Boolean).map(line => JSON.parse(line));
       const groups = new Map();
       for (const sample of samples) {
         const key = `${sample.driver_id}:${sample.lap_number}`;
@@ -377,6 +499,15 @@ def telemetry_viewer_html(initial_session_id: str | None = None) -> str:
       ];
     }
 
+    function reportFromText(text, fileName) {
+      if ((fileName || '').toLowerCase().endsWith('.jsonl')) return reportFromJsonl(text);
+      try {
+        return JSON.parse(text);
+      } catch (error) {
+        return reportFromJsonl(text);
+      }
+    }
+
     loadSelected.onclick = () => loadReport(recordingSelect.value).catch(error => { statusEl.textContent = `error=${error}`; });
     fileInput.onchange = () => {
       const file = fileInput.files && fileInput.files[0];
@@ -385,7 +516,7 @@ def telemetry_viewer_html(initial_session_id: str | None = None) -> str:
       reader.onload = () => {
         try {
           const text = String(reader.result || '');
-          const payload = text.trim().startsWith('{') ? JSON.parse(text) : reportFromJsonl(text);
+          const payload = reportFromText(text, file.name);
           renderReport(payload);
         } catch (error) {
           statusEl.textContent = `error=${error}`;

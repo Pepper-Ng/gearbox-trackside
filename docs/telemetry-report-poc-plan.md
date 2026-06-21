@@ -32,6 +32,8 @@ The shared-memory plugin telemetry path is designed around about 50 Hz frames. T
 
 Caveat: lap distance / lap percent currently come from the scoring row, while throttle/brake/steer/gear/G/speed come from telemetry. If scoring updates slower than telemetry, the high-rate samples can contain repeated lap-percent values with changing telemetry values. That is still useful for this proof, but final report quality should be validated live.
 
+The real Bahrain practice/qualifying captures in `services/leaderboard/poc/tests/data/` show that the current Python server-side PoC did not consistently record effective 50 Hz per-driver telemetry. The qualifying proper laps are around 28-30 Hz, while the practice proper laps are much lower and uneven. Treat this as a collector implementation finding, not yet as proof that the dedicated-server shared-memory source is insufficient. The next collector iteration should measure and optimize telemetry read-loop timing before deciding to distribute collectors to each rig.
+
 ## Runtime files
 
 The PoC writes runtime report data under:
@@ -82,7 +84,7 @@ Each telemetry sample stores at least:
 * Hovering a graph shows the nearest selected samples and values for the compared laps.
 * Report JSON generation starts on a background thread when a session finalizes. If the page is opened early, `/api/reports/<session-id>` can return `building` and the page polls until the report is ready.
 
-The first versions used resampled graph axes, first one point per percent and later a capped adaptive track-percent axis. The current version keeps the recorded samples in the report so 50 Hz telemetry can be reviewed directly. If processing larger sessions becomes slow, preserve the full raw sample files and add background/indexed report preparation rather than reducing stored telemetry resolution.
+The first versions used resampled graph axes, first one point per percent and later a capped adaptive track-percent axis. The current version keeps every recorded sample in the report so telemetry can be reviewed at captured resolution. If processing larger sessions becomes slow, preserve the full raw sample files and add background/indexed report preparation rather than reducing stored telemetry resolution.
 
 ## Next validation checklist
 

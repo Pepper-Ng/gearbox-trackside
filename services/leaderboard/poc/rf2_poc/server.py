@@ -167,6 +167,7 @@ def read_history_safely(source: ScoringSource) -> dict[str, Any]:
             "completed_session_count": 0,
         }
 
+
 def read_recordings_safely(source: ScoringSource) -> dict[str, Any]:
     try:
         return source.recordings()

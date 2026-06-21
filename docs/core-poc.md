@@ -473,6 +473,34 @@ Important shared-memory interpretation notes:
 * Full per-lap history is not directly dumped as a complete archive by the scoring snapshot. The PoC records lap/sector values as they are observed so we can prove whether a future service can compile history live.
 * Report sample files are written under `services/leaderboard/poc/telemetry-recordings/`, which is gitignored. The `/api/recordings` endpoint lists stored recording folders visible to the current PoC process.
 
+### Telemetry Cadence Finding From Real Captures
+
+Two real captured sessions are kept as regression fixtures under `services/leaderboard/poc/tests/data/`:
+
+* `bahrain-gp-2014-practice-ac00312535`;
+* `bahrain-gp-2014-qualifying-e07b77aca6`.
+
+These captures support the user's observation that the current server-side PoC telemetry is not consistently near 50 Hz per driver:
+
+* Practice capture: 48,181 stored telemetry samples, 24 proper laps, 10 excluded laps. Proper-lap effective sample rate ranged from about 1.4 Hz to 14.2 Hz, with an 8.2 Hz median.
+* Qualifying capture: 54,269 stored telemetry samples, 7 proper laps, 6 excluded laps. Proper-lap effective sample rate ranged from about 26.5 Hz to 30.0 Hz, with a 28.0 Hz median.
+* In both captures, `lap_percent` repeats for most adjacent samples. This is expected because lap distance / track percent currently comes from scoring, while throttle, brake, steering, gear, speed, and G-force come from telemetry.
+* Speed changes in almost every adjacent sample, steering changes often, but throttle and brake change less frequently. This suggests that some visual coarseness is real captured data cadence or channel quantization, not only graphing.
+* `gear = 0` appears frequently in the raw data, including proper laps. Some of this is expected for cars stopped or in neutral, but moving single-sample neutral values can look like unrealistic spikes. The viewer smooths short moving-neutral blips for display only; raw samples remain unchanged.
+
+This evidence does **not** yet prove that dedicated-server shared memory cannot provide adequate telemetry. It proves that the current Python PoC collector, running against the server-side maps and combining scoring plus telemetry reads, did not capture stable 50 Hz per-driver telemetry in these sessions.
+
+Recommended next implementation step: keep the central server-side collector as the preferred architecture for the next PoC iteration, but optimize and measure it before introducing six rig-local collectors. For a maximum of six drivers, the server-side all-car telemetry volume should be manageable and it avoids installing and synchronizing services on every simulator. The next collector should:
+
+* decouple high-rate telemetry reading from lower-rate scoring/session reading;
+* sample the telemetry map on its own target loop at 50 Hz or faster;
+* read scoring/lap/session state at a lower rate and join cached scoring data to telemetry samples;
+* batch or queue writes so file I/O and JSON serialization do not block the telemetry read loop;
+* log actual loop timing, dropped/late samples, and per-driver effective sample rates;
+* prefer a time-based report axis for telemetry channels, while using track percent only as a positional aid until a higher-resolution distance source is proven.
+
+If an optimized central collector still cannot sustain roughly 45-50 Hz per active driver on the venue server, then run a bounded fallback spike with one rig-local collector. A rig-local collector may provide better own-car telemetry fidelity, but it adds deployment and operational cost: shared-memory plugin installation on every setup, a service on every setup, six more points of failure, and post-session synchronization back to the central service. The final architecture should only move telemetry capture to each rig if the optimized server-side collector cannot meet the report-quality target.
+
 For the report/printing proof-of-concept tracker, see `docs/telemetry-report-poc-plan.md`.
 
 The goal is not to make this page pretty. The goal is to reveal what data is present and whether it updates.

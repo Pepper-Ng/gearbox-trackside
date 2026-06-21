@@ -11,6 +11,7 @@ from ctypes import wintypes
 from pathlib import Path
 
 POC_ROOT = Path(__file__).resolve().parents[1]
+REAL_TELEMETRY_DATA = POC_ROOT / "tests" / "data"
 sys.path.insert(0, str(POC_ROOT))
 
 from rf2_poc.rf2_shared_memory import (  # noqa: E402
@@ -292,6 +293,25 @@ class MockScoringSourceTests(unittest.TestCase):
         self.assertEqual(report["session_id"], completed["id"])
         self.assertEqual(report["status"], "ready")
 
+    def test_real_recording_reports_are_listed_and_loadable(self) -> None:
+        recorder = SessionRecorder(output_dir=REAL_TELEMETRY_DATA, target_hz=50.0)
+        recordings = recorder.recordings()["recordings"]
+        reports = {item["session_id"]: recorder.report(item["session_id"]) for item in recordings}
+        recorder.close()
+
+        self.assertIn("bahrain-gp-2014-practice-ac00312535", reports)
+        self.assertIn("bahrain-gp-2014-qualifying-e07b77aca6", reports)
+        for report in reports.values():
+            self.assertIsNotNone(report)
+            self.assertEqual(report["status"], "ready")
+            self.assertGreater(report["proper_lap_count"], 0)
+            self.assertGreater(report["telemetry_sample_count"], 0)
+            self.assertGreater(len(report["all_laps"]), 0)
+            first_lap = report["all_laps"][0]
+            self.assertIn("series", first_lap)
+            self.assertGreater(len(first_lap["series"]["speed_kph"]), 0)
+            self.assertEqual(len(first_lap["series"]["speed_kph"]), first_lap["sample_count"])
+
     def test_recordings_api_helper_is_module_scoped(self) -> None:
         source = self.StaticReportSource({})
 
@@ -321,6 +341,22 @@ class MockScoringSourceTests(unittest.TestCase):
         self.assertIn("const initialSessionId = 'abc'", viewer)
         self.assertIn("/api/recordings", viewer)
         self.assertIn("Fastest Ovrl.", viewer)
+        self.assertIn("<option value=\"time\" selected>Time</option>", viewer)
+        self.assertIn("function normalizeReport", viewer)
+        self.assertIn("function markFastestLaps", viewer)
+        self.assertIn("function noneOption", viewer)
+        self.assertIn("option.textContent = 'None'", viewer)
+        self.assertIn("lapSelect(defaultB, true)", viewer)
+        self.assertIn("sortLaps", viewer)
+        self.assertIn("channel.kind === 'step'", viewer)
+        self.assertIn("function gearDisplayValues", viewer)
+        self.assertIn("nearestNonZeroGear", viewer)
+        self.assertIn("].join('\\n')", viewer)
+        self.assertIn("text.split(/\\r?\\n/)", viewer)
+        self.assertNotIn("text.split(/\r?\n/)", viewer)
+        self.assertIn("function reportFromText", viewer)
+        self.assertIn("endsWith('.jsonl')", viewer)
+        self.assertIn("reportFromText(text, file.name)", viewer)
 
     def test_client_disconnect_errors_are_expected(self) -> None:
         self.assertTrue(is_client_disconnect(ConnectionAbortedError()))
