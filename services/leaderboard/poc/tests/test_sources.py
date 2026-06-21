@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 import ctypes
+import copy
 import uuid
 from ctypes import wintypes
 from pathlib import Path
@@ -28,7 +29,8 @@ from rf2_poc.rf2_shared_memory import (  # noqa: E402
     c_string,
     session_type_name,
 )
-from rf2_poc.server import is_client_disconnect, read_report_safely, report_html  # noqa: E402
+from rf2_poc.reports import MAX_AXIS_POINTS, MAX_RAW_LAP_PERCENT_POINTS, append_sample_to_record, build_report  # noqa: E402
+from rf2_poc.server import dashboard_html, is_client_disconnect, read_report_safely, report_html  # noqa: E402
 from rf2_poc.sources import MockScoringSource, SessionRecorder, build_source  # noqa: E402
 
 
@@ -77,6 +79,7 @@ class MockScoringSourceTests(unittest.TestCase):
             snapshot = source.read()
             history = snapshot["history"]["current_session"]
             sample_file = Path(history["telemetry_samples_file"])
+            source.close()
 
             self.assertGreater(history["telemetry_sample_count"], 0)
             self.assertTrue(sample_file.exists())
@@ -102,10 +105,92 @@ class MockScoringSourceTests(unittest.TestCase):
         self.assertIsNotNone(report)
         self.assertEqual(report["status"], "ready")
         self.assertEqual(report["reference_lap"]["driver_name"], "Setup1")
+        self.assertEqual(report["reference_lap"]["lap_time"], 80.0)
         self.assertNotEqual(len(report["axis"]), 101)
         self.assertIn(93.75, report["axis"])
-        self.assertEqual(report["axis_strategy"], "adaptive union of recorded lap-percent samples plus 10 percent ticks")
+        self.assertIn("capped", report["axis_strategy"])
         self.assertIn("delta_time", report["laps"][0]["series"])
+
+    def test_report_generation_caps_long_recording_axis_and_raw_points(self) -> None:
+        samples = [
+            {
+                "lap_percent": round(index * 100.0 / 1999, 4),
+                "time_seconds": round(index * 80.0 / 1999, 4),
+                "speed_kph": 180.0 + index % 20,
+                "throttle_percent": 70.0,
+            }
+            for index in range(2000)
+        ]
+        record = {
+            "id": "long-report",
+            "track": "Long Report Track",
+            "session_type": "Race",
+            "drivers": {
+                "1": {
+                    "id": 1,
+                    "driver_name": "Setup1",
+                    "vehicle_name": "Formula Test",
+                    "lap_history": [],
+                    "telemetry_laps": {
+                        "1": {"lap_number": 1, "lap_time": 80.0, "completed": True, "samples": samples}
+                    },
+                }
+            },
+        }
+
+        report = build_report(record)
+
+        self.assertIsNotNone(report)
+        self.assertEqual(report["status"], "ready")
+        self.assertLessEqual(len(report["axis"]), MAX_AXIS_POINTS + 11)
+        self.assertLessEqual(len(report["laps"][0]["raw_lap_percents"]), MAX_RAW_LAP_PERCENT_POINTS)
+        self.assertEqual(len(report["laps"][0]["series"]["speed_kph"]), len(report["axis"]))
+
+    def test_append_sample_splits_lap_when_percent_wraps_with_same_lap_number(self) -> None:
+        record: dict = {}
+        first_sample = {
+            "driver_id": 1,
+            "driver_name": "Setup1",
+            "vehicle_name": "Formula Test",
+            "telemetry_update_counter": 1,
+            "lap_number": 1,
+            "lap_distance": 3000.0,
+            "lap_percent": 95.0,
+            "speed_kph": 180.0,
+        }
+        second_sample = dict(first_sample, telemetry_update_counter=2, lap_distance=50.0, lap_percent=1.5, speed_kph=90.0)
+
+        self.assertTrue(append_sample_to_record(record, first_sample))
+        self.assertTrue(append_sample_to_record(record, second_sample))
+
+        laps = record["drivers"]["1"]["telemetry_laps"]
+        self.assertEqual(len(laps), 2)
+        self.assertTrue(laps["1:0"]["completed"])
+        self.assertEqual(laps["1:1"]["lap_number"], 2)
+        self.assertEqual(laps["1:1"]["samples"][0]["lap_percent"], 1.5)
+
+    def test_recorder_starts_new_folder_for_repeated_finalized_session_key(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            recorder = SessionRecorder(output_dir=Path(temp_dir), target_hz=50.0)
+            snapshots = build_report_snapshots()
+            for snapshot in snapshots:
+                recorder.record(snapshot)
+            first_completed = recorder.history()["completed_sessions"][0]
+
+            next_active = copy.deepcopy(snapshots[0])
+            next_active["timestamp"] = 4.0
+            next_active["session"]["current_time"] = 4.0
+            next_active["session"]["game_phase"] = 5
+            recorder.record(next_active)
+            current = recorder.history()["current_session"]
+            recorder.close()
+
+        self.assertFalse(current["finalized"])
+        self.assertNotEqual(current["id"], first_completed["id"])
+        self.assertNotEqual(
+            Path(current["telemetry_samples_file"]).parent,
+            Path(first_completed["telemetry_samples_file"]).parent,
+        )
 
     def test_report_api_helper_is_module_scoped_and_page_selects_driver(self) -> None:
         report = {"session_id": "abc", "status": "ready", "axis": [], "channels": [], "laps": []}
@@ -120,6 +205,11 @@ class MockScoringSourceTests(unittest.TestCase):
         self.assertNotIn("lines.join('\n')", html)
         self.assertIn("Waiting for /api/reports response", html)
         self.assertIn("timed out waiting for /api/reports response", html)
+        self.assertIn("const timeoutId = setTimeout(() => controller.abort(), 30000)", html)
+
+        dashboard = dashboard_html(1.0, "history")
+        self.assertIn("function fmtDateTime", dashboard)
+        self.assertIn("Started ${fmtDateTime(session.started_at)}", dashboard)
 
     def test_client_disconnect_errors_are_expected(self) -> None:
         self.assertTrue(is_client_disconnect(ConnectionAbortedError()))

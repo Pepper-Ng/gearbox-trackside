@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import logging
+import sys
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from rf2_poc.server import run_server
@@ -44,6 +47,12 @@ def parse_args() -> argparse.Namespace:
         help="Directory for runtime telemetry JSONL samples and finalized report JSON files.",
     )
     parser.add_argument(
+        "--log-dir",
+        type=Path,
+        default=Path(__file__).parent / "logs",
+        help="Directory for rotating PoC log files.",
+    )
+    parser.add_argument(
         "--map-name",
         help="Exact Windows memory-map name to read, for example '$rFactor2SMMP_Scoring$' or 'Global\\$rFactor2SMMP_Scoring$12345'.",
     )
@@ -59,8 +68,28 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def configure_logging(log_dir: Path) -> None:
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / "trackside-poc.log"
+    formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+    console = logging.StreamHandler(sys.stdout)
+    console.setLevel(logging.INFO)
+    console.setFormatter(formatter)
+    file_handler = RotatingFileHandler(
+        log_file,
+        maxBytes=2_000_000,
+        backupCount=5,
+        encoding="utf-8",
+    )
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(formatter)
+    logging.basicConfig(level=logging.INFO, handlers=[console, file_handler], force=True)
+    logging.getLogger("rf2_poc.server").info("Logging to %s", log_file)
+
+
 def main() -> None:
     args = parse_args()
+    configure_logging(args.log_dir)
     source = build_source(
         source_kind=args.source,
         fixture_path=args.fixture,

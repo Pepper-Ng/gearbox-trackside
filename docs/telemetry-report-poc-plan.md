@@ -45,6 +45,14 @@ This folder is gitignored. Each session gets:
 * `telemetry_samples.jsonl`: raw observed samples, one JSON object per driver sample;
 * `report.json`: finalized, resampled best-lap report data when the session finalizes.
 
+The PoC writes rotating runtime logs under:
+
+```text
+services/leaderboard/poc/logs/
+```
+
+The logs include session start/finalize events, sample-file write failures, report-build failures, report-build timing, and report API requests. Routine successful dashboard polling is kept out of the normal log output.
+
 Each telemetry sample stores at least:
 
 * `lap_distance`;
@@ -65,7 +73,7 @@ Each telemetry sample stores at least:
 * Completed sessions in `/history` link to `/reports/<session-id>`.
 * The report keeps the best completed telemetry lap per driver.
 * The fastest lap in the session becomes the reference lap.
-* Laps are resampled onto an adaptive common 0-100% axis built from the union of recorded lap-percent sample positions, plus fixed 10% tick points.
+* Laps are resampled onto an adaptive common 0-100% axis built from the union of recorded lap-percent sample positions, plus fixed 10% tick points, capped to keep report responses bounded after long recordings.
 * The report page plots selected driver vs reference driver for speed, throttle, brake, steering, gear, lateral G, longitudinal G, vertical G, and delta time.
 * The X axis labels every 10%.
 * Hovering a graph shows the nearest track-percent point and selected/reference values rounded to 4 decimals.

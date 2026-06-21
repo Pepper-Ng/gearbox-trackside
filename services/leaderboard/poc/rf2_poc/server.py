@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import errno
 import json
+import logging
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -10,16 +11,19 @@ from urllib.parse import urlparse
 from .sources import ScoringSource
 
 
+logger = logging.getLogger(__name__)
+
+
 def run_server(source: ScoringSource, host: str, port: int, poll_seconds: float) -> None:
     handler = make_handler(source=source, poll_seconds=poll_seconds)
     server = ThreadingHTTPServer((host, port), handler)
     url = f"http://{host}:{port}/poc"
-    print(f"rFactor 2 Trackside PoC running at {url}")
-    print("Press Ctrl+C to stop.")
+    logger.info("rFactor 2 Trackside PoC running at %s", url)
+    logger.info("Press Ctrl+C to stop.")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("Stopping PoC server.")
+        logger.info("Stopping PoC server.")
     finally:
         server.server_close()
         source.close()
@@ -39,8 +43,15 @@ def make_handler(source: ScoringSource, poll_seconds: float) -> type[BaseHTTPReq
                 report_id = path.rsplit("/", 1)[-1]
                 report = read_report_safely(source, report_id)
                 if report is None:
+                    logger.warning("Report API requested unknown report: id=%s", report_id)
                     self.send_error(HTTPStatus.NOT_FOUND, f"Report not found: {report_id}")
                     return
+                logger.info(
+                    "Report API served: id=%s status=%s laps=%s",
+                    report_id,
+                    report.get("status"),
+                    len(report.get("laps") or []),
+                )
                 self._send_json(report)
                 return
             if path == "/api/health" or path.endswith("/api/health"):
@@ -58,8 +69,18 @@ def make_handler(source: ScoringSource, poll_seconds: float) -> type[BaseHTTPReq
                 return
             self.send_error(HTTPStatus.NOT_FOUND, f"Not found: {self.path!r} normalized={path!r}")
 
+        def log_request(self, code: int | str = "-", size: int | str = "-") -> None:
+            try:
+                status_code = int(code)
+            except (TypeError, ValueError):
+                status_code = 0
+            if status_code >= 400:
+                logger.warning("HTTP %s %s", code, self.requestline)
+            else:
+                logger.debug("HTTP %s %s", code, self.requestline)
+
         def log_message(self, format: str, *args: Any) -> None:
-            print(f"{self.address_string()} - {format % args}")
+            logger.debug("%s - %s", self.address_string(), format % args)
 
         def _send_html(self, body: str) -> None:
             data = body.encode("utf-8")
@@ -111,6 +132,7 @@ def read_snapshot_safely(source: ScoringSource) -> dict[str, Any]:
     try:
         return source.read()
     except Exception as exc:
+        logger.exception("Failed to read snapshot")
         return {
             "source": "error",
             "status": str(exc),
@@ -129,6 +151,7 @@ def read_history_safely(source: ScoringSource) -> dict[str, Any]:
     try:
         return source.history()
     except Exception as exc:
+        logger.exception("Failed to read history")
         return {
             "error": str(exc),
             "current_session": None,
@@ -141,6 +164,7 @@ def read_report_safely(source: ScoringSource, report_id: str) -> dict[str, Any] 
     try:
         return source.report(report_id)
     except Exception as exc:
+        logger.exception("Failed to read report: id=%s", report_id)
         return {"session_id": report_id, "status": "error", "error": str(exc), "axis": [], "channels": [], "laps": []}
 
 
@@ -387,7 +411,7 @@ def report_html(report_id: str) -> str:
       chartsEl.className = 'empty';
       chartsEl.textContent = 'Waiting for /api/reports response...';
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
       fetch(`/api/reports/${{reportId}}`, {{ cache: 'no-store', signal: controller.signal }})
         .then(response => response.ok ? response.json() : Promise.reject(`${{response.status}} ${{response.statusText}}`))
         .then(payload => {{
@@ -503,6 +527,15 @@ def dashboard_html(poll_seconds: float, initial_view: str) -> str:
       return `${minutes}:${seconds}`;
     }
 
+    function fmtDateTime(value) {
+      if (value === null || value === undefined || value === '') return '-';
+      const number = Number(value);
+      if (Number.isFinite(number)) return new Date(number * 1000).toLocaleString();
+      const date = new Date(value);
+      if (!Number.isNaN(date.getTime())) return date.toLocaleString();
+      return String(value);
+    }
+
     function fmtVec(value) {
       if (!value) return '-';
       return `${fmt(value.x)}, ${fmt(value.y)}, ${fmt(value.z)}`;
@@ -562,6 +595,8 @@ def dashboard_html(poll_seconds: float, initial_view: str) -> str:
       setMetric(recordingEl, 'Target rate', `${fmt(currentHistoryRecord.telemetry_target_hz)} Hz`);
       setMetric(recordingEl, 'Samples in current session', currentHistoryRecord.telemetry_sample_count);
       setMetric(recordingEl, 'Samples file', currentHistoryRecord.telemetry_samples_file);
+      setMetric(recordingEl, 'Write errors', currentHistoryRecord.telemetry_write_error_count);
+      setMetric(recordingEl, 'Last write error', currentHistoryRecord.telemetry_write_error);
       setMetric(recordingEl, 'Telemetry update counter', telemetry.update_counter);
 
       renderCoverage(snapshot.field_coverage || []);
@@ -641,6 +676,9 @@ def dashboard_html(poll_seconds: float, initial_view: str) -> str:
       const title = document.createElement('div');
       title.textContent = `${fmt(session.track)} ${fmt(session.session_type)} finalized=${fmt(session.finalized)} reason=${fmt(session.completion_reason)}`;
       parent.appendChild(title);
+      const timing = document.createElement('div');
+      timing.textContent = `Started ${fmtDateTime(session.started_at)}  Last seen ${fmtDateTime(session.last_seen_at)}  Finalized ${fmtDateTime(session.finalized_at)}`;
+      parent.appendChild(timing);
       if (session.report_url) {
         const reportLink = document.createElement('a');
         reportLink.href = session.report_url;

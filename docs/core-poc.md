@@ -263,6 +263,14 @@ python services/leaderboard/poc/run_poc.py --source mock --poll-seconds 1 --tele
 
 `--poll-seconds` controls how often the browser redraws. `--telemetry-record-hz` controls the PoC background sampler that records telemetry samples for report graphs. Use `--telemetry-record-hz 0` to disable background sampling and record only when the browser or API asks for a snapshot.
 
+The PoC writes its own rotating runtime log files by default under:
+
+```text
+services/leaderboard/poc/logs/
+```
+
+The console also receives important log lines immediately while the process is running. Routine successful `/api/snapshot` poll responses are intentionally not printed.
+
 ---
 
 ## Run Against rFactor 2 Shared Memory
@@ -448,6 +456,7 @@ The page currently displays a diagnostic dashboard rather than a polished leader
 * completed in-memory session history at `/history` and `/api/history`;
 * finalized-session telemetry report links at `/reports/<session-id>` and JSON at `/api/reports/<session-id>`;
 * report graphs using an adaptive common track-position axis built from recorded lap-percent samples, with 10% X-axis labels and hover tooltips.
+  The report axis is capped so long overnight recordings cannot produce excessively large `/api/reports` responses.
 
 The in-memory history is deliberately temporary. It is built by observing snapshots while the PoC process is running. It is useful for proving whether lap/sector values can be captured at the time they appear, but it is not durable storage and is not the final historical leaderboard implementation.
 

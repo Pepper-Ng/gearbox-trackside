@@ -9,6 +9,8 @@ from typing import Any
 Snapshot = dict[str, Any]
 DEFAULT_AXIS = [float(value) for value in range(101)]
 TICK_AXIS = [float(value) for value in range(0, 101, 10)]
+MAX_AXIS_POINTS = 501
+MAX_RAW_LAP_PERCENT_POINTS = 1000
 SERIES_FIELDS = [
     "time_seconds",
     "speed_kph",
@@ -58,6 +60,7 @@ def sample_from_driver(snapshot: Snapshot, driver: Snapshot) -> Snapshot | None:
         time_from_lap_start = round(elapsed_time - lap_start_time, 4)
     elif current_lap_time is not None:
         time_from_lap_start = current_lap_time
+    lap_number = current_lap_number(driver, telemetry)
 
     return {
         "timestamp": snapshot.get("timestamp"),
@@ -66,7 +69,7 @@ def sample_from_driver(snapshot: Snapshot, driver: Snapshot) -> Snapshot | None:
         "driver_id": driver.get("id"),
         "driver_name": driver.get("driver_name"),
         "vehicle_name": driver.get("vehicle_name"),
-        "lap_number": telemetry.get("lap_number") or inferred_current_lap(driver),
+        "lap_number": lap_number,
         "lap_distance": lap_distance,
         "lap_percent": lap_percent,
         "time_seconds": time_from_lap_start,
@@ -90,6 +93,19 @@ def inferred_current_lap(driver: Snapshot) -> int | None:
     return None
 
 
+def current_lap_number(driver: Snapshot, telemetry: Snapshot) -> int | None:
+    candidates = []
+    telemetry_lap = telemetry.get("lap_number")
+    if isinstance(telemetry_lap, int) and telemetry_lap > 0:
+        candidates.append(telemetry_lap)
+    inferred_lap = inferred_current_lap(driver)
+    if inferred_lap is not None and inferred_lap > 0:
+        candidates.append(inferred_lap)
+    if not candidates:
+        return None
+    return max(candidates)
+
+
 def append_sample_to_record(record: Snapshot, sample: Snapshot) -> bool:
     driver_id = str(sample.get("driver_id"))
     if not driver_id or driver_id == "None":
@@ -107,6 +123,8 @@ def append_sample_to_record(record: Snapshot, sample: Snapshot) -> bool:
             "telemetry_laps": {},
             "last_sample_signature": None,
             "last_lap_number": None,
+            "last_lap_key": None,
+            "lap_instance": 0,
         },
     )
 
@@ -127,22 +145,35 @@ def append_sample_to_record(record: Snapshot, sample: Snapshot) -> bool:
     lap_number = sample.get("lap_number")
     if lap_number is None:
         return False
-    lap_key = str(lap_number)
+    lap_instance = int(driver_record.get("lap_instance") or 0)
     previous_lap_number = driver_record.get("last_lap_number")
+    previous_lap_key = driver_record.get("last_lap_key")
     if previous_lap_number is not None and previous_lap_number != lap_number:
-        previous_lap = driver_record.get("telemetry_laps", {}).get(str(previous_lap_number))
+        previous_lap = driver_record.get("telemetry_laps", {}).get(str(previous_lap_key or previous_lap_number))
         if previous_lap:
             previous_lap["completed"] = True
+        lap_instance = 0
+        driver_record["lap_instance"] = lap_instance
     driver_record["last_lap_number"] = lap_number
 
+    lap_key = f"{lap_number}:{lap_instance}"
     lap = driver_record.setdefault("telemetry_laps", {}).setdefault(
         lap_key,
-        {"lap_number": lap_number, "samples": [], "completed": False, "lap_time": None},
+        {"lap_number": lap_number + lap_instance, "samples": [], "completed": False, "lap_time": None},
     )
     samples = lap.setdefault("samples", [])
     if samples and sample.get("lap_percent") is not None and samples[-1].get("lap_percent") is not None:
         if sample["lap_percent"] + 8.0 < samples[-1]["lap_percent"]:
             lap["completed"] = True
+            lap_instance += 1
+            driver_record["lap_instance"] = lap_instance
+            lap_key = f"{lap_number}:{lap_instance}"
+            lap = driver_record.setdefault("telemetry_laps", {}).setdefault(
+                lap_key,
+                {"lap_number": lap_number + lap_instance, "samples": [], "completed": False, "lap_time": None},
+            )
+            samples = lap.setdefault("samples", [])
+    driver_record["last_lap_key"] = lap_key
     samples.append(sample)
     return True
 
@@ -153,9 +184,10 @@ def assign_lap_times_from_history(driver_record: Snapshot) -> None:
         for lap in driver_record.get("lap_history", [])
         if lap.get("lap_number") is not None and lap.get("lap_time") is not None
     }
-    for lap_key, lap in driver_record.get("telemetry_laps", {}).items():
-        if lap.get("lap_time") is None and lap_key in lap_times:
-            lap["lap_time"] = lap_times[lap_key]
+    for lap in driver_record.get("telemetry_laps", {}).values():
+        lap_history_key = str(lap.get("lap_number"))
+        if lap.get("lap_time") is None and lap_history_key in lap_times:
+            lap["lap_time"] = lap_times[lap_history_key]
             lap["completed"] = True
         elif lap.get("lap_time") is None:
             samples = lap.get("samples") or []
@@ -223,7 +255,7 @@ def build_report(record: Snapshot) -> Snapshot | None:
         "completion_reason": record.get("completion_reason"),
         "status": "ready",
         "axis": axis,
-        "axis_strategy": "adaptive union of recorded lap-percent samples plus 10 percent ticks",
+        "axis_strategy": f"adaptive union of recorded lap-percent samples plus 10 percent ticks, capped at {MAX_AXIS_POINTS} points",
         "axis_sample_count": len(axis),
         "build_seconds": round(time.perf_counter() - started_at, 4),
         "channels": CHANNELS,
@@ -290,7 +322,23 @@ def build_adaptive_axis(laps: list[Snapshot]) -> list[float]:
                 axis_values.add(round(lap_percent, 4))
     if len(axis_values) < 2:
         return DEFAULT_AXIS
-    return sorted(axis_values)
+    axis = sorted(axis_values)
+    if len(axis) <= MAX_AXIS_POINTS:
+        return axis
+    return cap_axis(axis, MAX_AXIS_POINTS)
+
+
+def cap_axis(axis: list[float], max_points: int) -> list[float]:
+    if len(axis) <= max_points:
+        return axis
+    last_index = len(axis) - 1
+    sampled_indexes = {
+        round(index * last_index / (max_points - 1))
+        for index in range(max_points)
+    }
+    capped = {axis[index] for index in sampled_indexes}
+    capped.update(TICK_AXIS)
+    return sorted(capped)
 
 
 def raw_lap_percents(samples: list[Snapshot]) -> list[float]:
@@ -299,7 +347,14 @@ def raw_lap_percents(samples: list[Snapshot]) -> list[float]:
         lap_percent = numeric(sample.get("lap_percent"))
         if lap_percent is not None:
             values.append(round(lap_percent, 4))
-    return values
+    if len(values) <= MAX_RAW_LAP_PERCENT_POINTS:
+        return values
+    last_index = len(values) - 1
+    sampled_indexes = {
+        round(index * last_index / (MAX_RAW_LAP_PERCENT_POINTS - 1))
+        for index in range(MAX_RAW_LAP_PERCENT_POINTS)
+    }
+    return [values[index] for index in sorted(sampled_indexes)]
 
 
 def resample_lap(lap: Snapshot, axis: list[float]) -> Snapshot:
@@ -321,6 +376,7 @@ def resample_field(samples: list[Snapshot], axis: list[float], field: str, step:
         return [None for _ in axis]
     points = dedupe_points(points)
     values = []
+    point_index = 1
     for target in axis:
         if target <= points[0][0]:
             values.append(points[0][1])
@@ -328,16 +384,15 @@ def resample_field(samples: list[Snapshot], axis: list[float], field: str, step:
         if target >= points[-1][0]:
             values.append(points[-1][1])
             continue
-        for index in range(1, len(points)):
-            left_x, left_y = points[index - 1]
-            right_x, right_y = points[index]
-            if left_x <= target <= right_x:
-                if step or right_x == left_x:
-                    values.append(left_y)
-                else:
-                    ratio = (target - left_x) / (right_x - left_x)
-                    values.append(round(left_y + ratio * (right_y - left_y), 4))
-                break
+        while point_index < len(points) and points[point_index][0] < target:
+            point_index += 1
+        left_x, left_y = points[point_index - 1]
+        right_x, right_y = points[point_index]
+        if step or right_x == left_x:
+            values.append(left_y)
+        else:
+            ratio = (target - left_x) / (right_x - left_x)
+            values.append(round(left_y + ratio * (right_y - left_y), 4))
     return values
 
 

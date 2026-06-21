@@ -2,16 +2,19 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 import threading
 import time
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, TextIO
 
 from .reports import append_sample_to_record, build_report, make_session_id, placeholder_report, sample_from_driver
 from .rf2_shared_memory import SharedMemoryScoringReader, SharedMemoryUnavailable
 
 
 Snapshot = dict[str, Any]
+logger = logging.getLogger(__name__)
 
 
 class ScoringSource(Protocol):
@@ -176,12 +179,14 @@ class RecordingScoringSource:
         self._lock = threading.RLock()
         self._latest_snapshot: Snapshot | None = None
         self._last_error: Exception | None = None
+        self._consecutive_sample_errors = 0
         self._sample_interval = 1.0 / telemetry_record_hz if telemetry_record_hz > 0 else 0.0
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         if self._sample_interval > 0:
             self._thread = threading.Thread(target=self._sample_loop, name="rf2-poc-telemetry-recorder", daemon=True)
             self._thread.start()
+            logger.info("Telemetry recorder started at %.2f Hz", telemetry_record_hz)
 
     def read(self) -> Snapshot:
         with self._lock:
@@ -198,10 +203,10 @@ class RecordingScoringSource:
             return self._recorder.history()
 
     def report(self, session_id: str) -> Snapshot | None:
-        with self._lock:
-            return self._recorder.report(session_id)
+        return self._recorder.report(session_id)
 
     def close(self) -> None:
+        logger.info("Stopping telemetry recorder")
         self._stop_event.set()
         if self._thread is not None:
             self._thread.join(timeout=2.0)
@@ -216,6 +221,16 @@ class RecordingScoringSource:
                     self._read_and_record_locked()
             except Exception as exc:
                 self._last_error = exc
+                self._consecutive_sample_errors += 1
+                if self._consecutive_sample_errors == 1 or self._consecutive_sample_errors % 50 == 0:
+                    logger.exception(
+                        "Telemetry recorder sample failed (%s consecutive failures)",
+                        self._consecutive_sample_errors,
+                    )
+            else:
+                if self._consecutive_sample_errors:
+                    logger.info("Telemetry recorder recovered after %s failed samples", self._consecutive_sample_errors)
+                self._consecutive_sample_errors = 0
             elapsed = time.monotonic() - started_at
             self._stop_event.wait(max(0.0, self._sample_interval - elapsed))
 
@@ -235,15 +250,35 @@ class SessionRecorder:
         self._report_threads: dict[str, threading.Thread] = {}
         self._report_errors: dict[str, str] = {}
         self._report_lock = threading.RLock()
+        self._sample_file_handle: TextIO | None = None
+        self._sample_file_path: Path | None = None
+        self._session_sequence = 0
         self._output_dir = output_dir
         self._target_hz = target_hz
 
     def record(self, snapshot: Snapshot) -> None:
         key = session_key(snapshot)
-        if self._current is None or self._current.get("key") != key:
-            if self._current is not None and self._current.get("drivers"):
+        needs_new_session = self._current is None or self._current.get("key") != key
+        if self._current is not None and self._current.get("finalized") and not is_session_complete(snapshot):
+            needs_new_session = True
+        if needs_new_session:
+            if self._current is not None and self._current.get("drivers") and not self._current.get("finalized"):
                 self._finalize_current("session changed")
-            self._current = new_session_record(snapshot, key, output_dir=self._output_dir, target_hz=self._target_hz)
+            self._session_sequence += 1
+            self._current = new_session_record(
+                snapshot,
+                key,
+                output_dir=self._output_dir,
+                target_hz=self._target_hz,
+                sequence=self._session_sequence,
+            )
+            logger.info(
+                "Recording session started: id=%s track=%s type=%s samples=%s",
+                self._current.get("id"),
+                self._current.get("track"),
+                self._current.get("session_type"),
+                self._current.get("telemetry_samples_file"),
+            )
 
         update_session_record(self._current, snapshot)
         self._record_telemetry_samples(snapshot)
@@ -275,6 +310,7 @@ class SessionRecorder:
             threads = list(self._report_threads.values())
         for thread in threads:
             thread.join(timeout=2.0)
+        self._close_sample_file()
 
     def _record_telemetry_samples(self, snapshot: Snapshot) -> None:
         if self._current is None:
@@ -287,22 +323,57 @@ class SessionRecorder:
             sample["session_key"] = self._current.get("key")
             if append_sample_to_record(self._current, sample):
                 self._current["telemetry_sample_count"] = int(self._current.get("telemetry_sample_count") or 0) + 1
-                self._write_sample(sample)
+                try:
+                    self._write_sample(sample)
+                except Exception as exc:
+                    error_count = int(self._current.get("telemetry_write_error_count") or 0) + 1
+                    self._current["telemetry_write_error_count"] = error_count
+                    self._current["telemetry_write_error"] = str(exc)
+                    if error_count == 1 or error_count % 50 == 0:
+                        logger.exception(
+                            "Failed to write telemetry sample for session %s (%s write failures)",
+                            self._current.get("id"),
+                            error_count,
+                        )
+                else:
+                    if self._current.get("telemetry_write_error"):
+                        logger.info("Telemetry sample writing recovered for session %s", self._current.get("id"))
+                    self._current.pop("telemetry_write_error", None)
 
     def _write_sample(self, sample: Snapshot) -> None:
         sample_file = (self._current or {}).get("telemetry_samples_file")
         if not sample_file:
             return
         path = Path(sample_file)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(sample, separators=(",", ":")) + "\n")
+        if self._sample_file_path != path or self._sample_file_handle is None:
+            self._close_sample_file()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            self._sample_file_handle = path.open("a", encoding="utf-8", buffering=1)
+            self._sample_file_path = path
+            logger.info("Writing telemetry samples to %s", path)
+        try:
+            self._sample_file_handle.write(json.dumps(sample, separators=(",", ":")) + "\n")
+        except Exception:
+            self._close_sample_file()
+            raise
+
+    def _close_sample_file(self) -> None:
+        if self._sample_file_handle is None:
+            self._sample_file_path = None
+            return
+        try:
+            self._sample_file_handle.close()
+        finally:
+            self._sample_file_handle = None
+            self._sample_file_path = None
 
     def _finalize_current(self, reason: str) -> None:
         if self._current is None or self._current.get("finalized"):
             return
         self._current["finalized"] = True
         self._current["completion_reason"] = reason
+        self._current["finalized_at"] = time.time()
+        self._current["finalized_at_iso"] = iso_timestamp(self._current["finalized_at"])
         session_id = str(self._current.get("id"))
         self._current["report_url"] = f"/reports/{session_id}"
         self._current["report_status"] = "building"
@@ -320,6 +391,12 @@ class SessionRecorder:
         ]
         self._completed.insert(0, copy.deepcopy(self._current))
         self._completed = self._completed[:20]
+        logger.info(
+            "Recording session finalized: id=%s reason=%s samples=%s",
+            session_id,
+            reason,
+            self._current.get("telemetry_sample_count"),
+        )
         self._start_report_build(session_id, copy.deepcopy(self._current))
 
     def _start_report_build(self, session_id: str, record: Snapshot) -> None:
@@ -332,8 +409,10 @@ class SessionRecorder:
         with self._report_lock:
             self._report_threads[session_id] = thread
         thread.start()
+        logger.info("Telemetry report build started: id=%s", session_id)
 
     def _build_report_job(self, session_id: str, record: Snapshot) -> None:
+        started_at = time.monotonic()
         try:
             report = build_report(record)
             if report is None:
@@ -343,10 +422,18 @@ class SessionRecorder:
                 self._report_errors.pop(session_id, None)
             self._write_report(session_id, report)
             self._set_report_status(session_id, str(report.get("status") or "ready"))
+            logger.info(
+                "Telemetry report build finished: id=%s status=%s laps=%s seconds=%.3f",
+                session_id,
+                report.get("status"),
+                len(report.get("laps") or []),
+                time.monotonic() - started_at,
+            )
         except Exception as exc:
             with self._report_lock:
                 self._report_errors[session_id] = str(exc)
             self._set_report_status(session_id, "error")
+            logger.exception("Telemetry report build failed: id=%s", session_id)
 
     def _set_report_status(self, session_id: str, status: str) -> None:
         if self._current and self._current.get("id") == session_id:
@@ -362,6 +449,7 @@ class SessionRecorder:
         report_file = self._output_dir / session_id / "report.json"
         report_file.parent.mkdir(parents=True, exist_ok=True)
         report_file.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        logger.info("Telemetry report written: id=%s file=%s", session_id, report_file)
 
 
 def enrich_snapshot(snapshot: Snapshot, history: Snapshot) -> None:
@@ -446,8 +534,15 @@ def session_key(snapshot: Snapshot) -> str:
     session = snapshot.get("session", {})
     track = session.get("track") or "unknown-track"
     session_code = session.get("session_code") or "unknown-session"
-    start_time = session.get("start_time") or session.get("end_time") or "unknown-start"
+    start_time = first_present(session.get("start_time"), session.get("end_time"), "unknown-start")
     return f"{track}|{session_code}|{start_time}"
+
+
+def first_present(*values: Any) -> Any:
+    for value in values:
+        if value is not None:
+            return value
+    return None
 
 
 def new_session_record(
@@ -455,9 +550,11 @@ def new_session_record(
     key: str,
     output_dir: Path | None = None,
     target_hz: float = 0.0,
+    sequence: int = 0,
 ) -> Snapshot:
     session = snapshot.get("session", {})
-    session_id = make_session_id(snapshot, key)
+    started_at = snapshot.get("timestamp") or time.time()
+    session_id = make_session_id(snapshot, f"{key}|{sequence}|{started_at:.3f}")
     session_dir = output_dir / session_id if output_dir is not None else None
     return {
         "id": session_id,
@@ -465,8 +562,12 @@ def new_session_record(
         "track": session.get("track"),
         "session_type": session.get("session_type"),
         "session_code": session.get("session_code"),
-        "started_at": snapshot.get("timestamp") or time.time(),
-        "last_seen_at": snapshot.get("timestamp") or time.time(),
+        "started_at": started_at,
+        "started_at_iso": iso_timestamp(started_at),
+        "last_seen_at": started_at,
+        "last_seen_at_iso": iso_timestamp(started_at),
+        "finalized_at": None,
+        "finalized_at_iso": None,
         "finalized": False,
         "completion_reason": None,
         "drivers": {},
@@ -478,11 +579,14 @@ def new_session_record(
         "telemetry_sample_count": 0,
         "telemetry_target_hz": target_hz,
         "telemetry_samples_file": str(session_dir / "telemetry_samples.jsonl") if session_dir is not None else None,
+        "telemetry_write_error": None,
+        "telemetry_write_error_count": 0,
     }
 
 
 def update_session_record(record: Snapshot, snapshot: Snapshot) -> None:
     record["last_seen_at"] = snapshot.get("timestamp") or time.time()
+    record["last_seen_at_iso"] = iso_timestamp(record["last_seen_at"])
     record["fastest_lap"] = best_driver_metric(snapshot.get("drivers", []), "best_lap_time")
     fastest_sectors = {}
     for key in ("best_sector_1", "best_sector_2_split", "best_lap_sector_3"):
@@ -550,6 +654,12 @@ def is_session_complete(snapshot: Snapshot) -> bool:
     if session.get("session_type") == "Race" and drivers:
         return all(driver.get("finish_status") in (1, 2, 3) for driver in drivers)
     return False
+
+
+def iso_timestamp(timestamp: Any) -> str | None:
+    if not isinstance(timestamp, (int, float)):
+        return None
+    return datetime.fromtimestamp(float(timestamp), timezone.utc).astimezone().isoformat(timespec="seconds")
 
 
 def public_session_record(record: Snapshot | None) -> Snapshot | None:
