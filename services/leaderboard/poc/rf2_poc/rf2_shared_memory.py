@@ -636,6 +636,7 @@ def scoring_vehicle_to_dict(vehicle: rF2VehicleScoring, session_lap_distance: fl
         "headlights": bool(vehicle.mHeadlights),
         "flag": int(vehicle.mFlag),
         "flag_name": primary_flag_name(int(vehicle.mFlag)),
+        "flag_scope": "primary green/blue only",
         "under_yellow": bool(vehicle.mUnderYellow),
         "count_lap_flag": int(vehicle.mCountLapFlag),
         "count_lap_flag_name": count_lap_flag_name(int(vehicle.mCountLapFlag)),
@@ -854,7 +855,12 @@ def yellow_flag_state_name(yellow_flag_state: int) -> str:
 
 def sector_flags_detail(sector_flags: list[int]) -> list[dict[str, Any]]:
     return [
-        {"sector": index + 1, "value": value, "flag": "yellow" if value else "green"}
+        {
+            "sector": index + 1,
+            "value": value,
+            "flag": sector_flag_name(value),
+            "is_yellow": sector_flag_is_local_yellow(value),
+        }
         for index, value in enumerate(sector_flags)
     ]
 
@@ -866,13 +872,27 @@ def overall_flag_name(game_phase: int, yellow_flag_state: int, sector_flags: lis
         return "RED / RACE HALT"
     if game_phase == 6:
         return "SAFETY CAR / FULL COURSE YELLOW"
-    if any(sector_flags):
+    if any(sector_flag_is_local_yellow(value) for value in sector_flags):
         return "LOCAL YELLOW"
     if yellow_flag_state not in (-1, 0):
         return "YELLOW"
     if game_phase == 5:
         return "GREEN"
     return game_phase_name(game_phase).upper()
+
+
+def sector_flag_name(sector_flag: int) -> str:
+    if sector_flag == 0:
+        return "clear"
+    if sector_flag == 1:
+        return "local yellow"
+    if sector_flag in (-1, 2, 3, 4, 5, 6, 7):
+        return yellow_flag_state_name(sector_flag)
+    return "unclassified"
+
+
+def sector_flag_is_local_yellow(sector_flag: int) -> bool:
+    return sector_flag == 1
 
 
 def finish_status_name(finish_status: int) -> str:

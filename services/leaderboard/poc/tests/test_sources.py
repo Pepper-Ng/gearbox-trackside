@@ -27,6 +27,8 @@ from rf2_poc.rf2_shared_memory import (  # noqa: E402
     rF2Scoring,
     rF2Telemetry,
     c_string,
+    overall_flag_name,
+    sector_flags_detail,
     session_type_name,
 )
 from rf2_poc.reports import append_sample_to_record, build_report  # noqa: E402
@@ -378,6 +380,22 @@ class SharedMemoryMappingTests(unittest.TestCase):
         self.assertEqual(session_type_name(1), "Practice")
         self.assertEqual(session_type_name(5), "Qualifying")
         self.assertEqual(session_type_name(10), "Race")
+
+    def test_unclassified_sector_flags_do_not_force_local_yellow(self) -> None:
+        details = sector_flags_detail([11, 11, 11])
+
+        self.assertEqual([detail["flag"] for detail in details], ["unclassified", "unclassified", "unclassified"])
+        self.assertEqual([detail["value"] for detail in details], [11, 11, 11])
+        self.assertFalse(any(detail["is_yellow"] for detail in details))
+        self.assertEqual(overall_flag_name(5, 0, [11, 11, 11]), "GREEN")
+
+    def test_local_yellow_sector_flag_sets_overall_local_yellow(self) -> None:
+        details = sector_flags_detail([0, 1, 0])
+
+        self.assertEqual(details[0]["flag"], "clear")
+        self.assertEqual(details[1]["flag"], "local yellow")
+        self.assertTrue(details[1]["is_yellow"])
+        self.assertEqual(overall_flag_name(5, 0, [0, 1, 0]), "LOCAL YELLOW")
 
     @unittest.skipUnless(sys.platform == "win32", "Windows shared-memory behavior only")
     def test_missing_map_does_not_create_false_live_connection(self) -> None:

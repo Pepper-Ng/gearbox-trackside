@@ -577,6 +577,18 @@ def dashboard_html(poll_seconds: float, initial_view: str) -> str:
       return cell;
     }
 
+    function sectorFlagText(item) {
+      const value = item && item.value !== undefined && item.value !== null ? ` (${item.value})` : '';
+      return `S${fmt(item && item.sector)}:${fmt(item && item.flag)}${value}`;
+    }
+
+    function driverFlagText(driver) {
+      const value = driver.flag !== undefined && driver.flag !== null ? ` (${driver.flag})` : '';
+      const scope = driver.flag_scope ? `, ${driver.flag_scope}` : '';
+      const yellow = driver.under_yellow ? ', under full-course yellow' : '';
+      return `${fmt(driver.flag_name)}${value}${scope}${yellow}`;
+    }
+
     function render(snapshot) {
       lastSnapshot = snapshot;
       const session = snapshot.session || {};
@@ -602,7 +614,7 @@ def dashboard_html(poll_seconds: float, initial_view: str) -> str:
       flagsEl.replaceChildren();
       setMetric(flagsEl, 'Overall', session.overall_flag);
       setMetric(flagsEl, 'Yellow state', session.yellow_flag_state_name || session.yellow_flag_state);
-      setMetric(flagsEl, 'Sector flags', (session.sector_flags_detail || []).map(item => `S${item.sector}:${item.flag}`).join('  '));
+      setMetric(flagsEl, 'Sector flags', (session.sector_flags_detail || []).map(sectorFlagText).join('  '));
       setMetric(flagsEl, 'Game phase', session.game_phase_name || session.game_phase);
 
       const currentHistoryRecord = (snapshot.history || {}).current_session || {};
@@ -660,7 +672,7 @@ def dashboard_html(poll_seconds: float, initial_view: str) -> str:
           driver.place, driver.driver_name, driver.vehicle_name, driver.laps, fmtTime(driver.best_lap_time), fmtTime(driver.best_sector_1),
           fmtTime(driver.best_sector_2_split), fmtTime(driver.best_lap_sector_3), fmtTime(driver.last_lap_time), fmtTime(driver.last_sector_1),
           fmtTime(driver.last_sector_2_split), fmtTime(driver.last_sector_3), fmtTime(driver.current_lap_time), driver.track_position_percent,
-          fmtVec(driver.position), fmtTime(driver.time_behind_leader), driver.flag_name, driver.finish_status_name, driver.id,
+          fmtVec(driver.position), fmtTime(driver.time_behind_leader), driverFlagText(driver), driver.finish_status_name, driver.id,
         ].forEach(value => row.appendChild(td(value)));
         driversEl.appendChild(row);
       }

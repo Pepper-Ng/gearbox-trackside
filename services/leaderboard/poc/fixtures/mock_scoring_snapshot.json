@@ -18,9 +18,9 @@
     "yellow_flag_state_name": "none",
     "sector_flags": [0, 0, 0],
     "sector_flags_detail": [
-      { "sector": 1, "value": 0, "flag": "green" },
-      { "sector": 2, "value": 0, "flag": "green" },
-      { "sector": 3, "value": 0, "flag": "green" }
+      { "sector": 1, "value": 0, "flag": "clear", "is_yellow": false },
+      { "sector": 2, "value": 0, "flag": "clear", "is_yellow": false },
+      { "sector": 3, "value": 0, "flag": "clear", "is_yellow": false }
     ],
     "overall_flag": "GREEN",
     "in_realtime": true,
