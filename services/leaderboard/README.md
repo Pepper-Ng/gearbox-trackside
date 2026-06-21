@@ -48,6 +48,16 @@ python services/leaderboard/poc/run_poc.py --source mock
 
 Then open `http://127.0.0.1:8877/poc`.
 
+### Telemetry recording analysis
+
+Analyze stored session telemetry recordings and generate cadence/quality metrics:
+
+```powershell
+python services/leaderboard/poc/analyze_recordings.py services/leaderboard/poc/tests/data/bahrain-gp-2014-practice-ac00312535 --json > analysis.json
+```
+
+The analyzer reads `telemetry_samples.jsonl` and `report.json` from each session folder, produces a text summary by default, and can emit machine-readable JSON with `--json`.
+
 See `docs/core-poc.md` for detailed host setup, plugin requirements,
 shared-memory explanation, mock boundaries, live-mode commands, and
 troubleshooting.

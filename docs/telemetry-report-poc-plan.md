@@ -112,34 +112,35 @@ Expected result: the analyzer reproduces the known finding that the qualifying c
 
 ### Step 2 - Baseline the current central server collector
 
-Operator/venue prerequisite:
-
-* Run `Dedicated.exe` with the shared-memory plugin enabled.
-* Start a controlled session with 3-6 cars, preferably the expected venue maximum.
-* Keep the machine otherwise close to normal venue load.
-
 Simple agent procedure on the actual system:
 
-1. Record the dedicated-server PID:
+1. Start the dedicated-server
+
+   ```powershell
+  Start-Process -FilePath "H:\Games\rFactor2\rFactor2 Dedicated.exe" -WorkingDirectory "H:\Games\rFactor2" -ArgumentList "+oneclick"
+   ```
+
+2. Wait approximately 1 minute for the process to start, then record the dedicated-server PID:
 
    ```powershell
    Get-CimInstance Win32_Process | Where-Object { $_.Name -like '*Dedicated*.exe' } | Select-Object ProcessId, Name, ExecutablePath, CommandLine
    ```
 
-2. Start the current PoC collector:
+3. Start the current PoC collector:
 
    ```powershell
    python services/leaderboard/poc/run_poc.py --source shared-memory --pid <PID> --telemetry-record-hz 50 --poll-seconds 1
    ```
 
-3. Run at least three controlled sessions:
+4. Run at least three controlled sessions:
    * one practice session with all cars running at least five timed laps;
    * one qualifying-style session with all cars running at least five timed laps;
    * one race or session-ending flow so finalization and report generation are exercised.
-4. During the run, open `/poc` and confirm telemetry is connected and all scored vehicles are joined.
-5. After each session finalizes, open `/telemetry?session=<session-id>` and confirm proper laps are classified and graphs render.
-6. Run the analyzer over the created recording folders.
-7. Save `trackside-poc.log`, the analyzer JSON/text output, and the generated recording folders as evidence.
+   (These sessions will automatically start after starting the decidated server (Step 1), Practice takes 20 minutes, Qualification 10 minutes, and the race 5 laps.)
+5. During the run, open `/poc` and confirm telemetry is connected and all scored vehicles are joined.
+6. After each session finalizes, open `/telemetry?session=<session-id>` and confirm proper laps are classified and graphs render.
+7. Run the analyzer over the created recording folders.
+8. Save `trackside-poc.log`, the analyzer JSON/text output, and the generated recording folders as evidence.
 
 Decision check:
 
