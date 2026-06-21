@@ -318,8 +318,9 @@ def telemetry_viewer_html(initial_session_id: str | None = None) -> str:
       ctx.font = '12px Segoe UI, Arial';
       ctx.fillText(fmt(max), 4, padding.top + 4);
       ctx.fillText(fmt(min), 4, height - padding.bottom);
-      drawSeries(ctx, xA, seriesA, xFor, yFor, '#2563eb', channel.kind === 'step');
-      drawSeries(ctx, xB, seriesB, xFor, yFor, '#d97706', channel.kind === 'step');
+      const step = channel.key === 'gear' || channel.kind === 'step';
+      drawSeries(ctx, xA, seriesA, xFor, yFor, '#2563eb', step);
+      drawSeries(ctx, xB, seriesB, xFor, yFor, '#d97706', step);
       canvas._chartData = { channel, lapA, lapB, xA, xB, seriesA, seriesB };
       legend.textContent = `blue=${lapA ? lapLabel(lapA) : '-'}  orange=${lapB ? lapLabel(lapB) : '-'}`;
     }
@@ -488,14 +489,14 @@ def telemetry_viewer_html(initial_session_id: str | None = None) -> str:
 
     function defaultChannels() {
       return [
-        { key: 'speed_kph', label: 'Speed', unit: 'km/h' },
-        { key: 'throttle_percent', label: 'Throttle', unit: '%' },
-        { key: 'brake_percent', label: 'Brake', unit: '%' },
-        { key: 'steering_percent', label: 'Steering', unit: '%' },
-        { key: 'gear', label: 'Gear', unit: '' },
-        { key: 'lateral_g', label: 'Lateral G', unit: 'g' },
-        { key: 'longitudinal_g', label: 'Longitudinal G', unit: 'g' },
-        { key: 'vertical_g', label: 'Vertical G', unit: 'g' },
+        { key: 'speed_kph', label: 'Speed', unit: 'km/h', kind: 'line' },
+        { key: 'throttle_percent', label: 'Throttle', unit: '%', kind: 'line' },
+        { key: 'brake_percent', label: 'Brake', unit: '%', kind: 'line' },
+        { key: 'steering_percent', label: 'Steering', unit: '%', kind: 'line' },
+        { key: 'gear', label: 'Gear', unit: '', kind: 'step' },
+        { key: 'lateral_g', label: 'Lateral G', unit: 'g', kind: 'line' },
+        { key: 'longitudinal_g', label: 'Longitudinal G', unit: 'g', kind: 'line' },
+        { key: 'vertical_g', label: 'Vertical G', unit: 'g', kind: 'line' },
       ];
     }
 
