@@ -41,6 +41,35 @@ def parse_args() -> argparse.Namespace:
         help="Background telemetry recording target rate. Use 0 to record only when the browser/API asks for a snapshot.",
     )
     parser.add_argument(
+        "--telemetry-collector",
+        choices=("auto", "process", "in-process", "off"),
+        default="auto",
+        help="Telemetry collection strategy. In shared-memory mode, 'auto' uses the dedicated telemetry process.",
+    )
+    parser.add_argument(
+        "--scoring-record-hz",
+        type=float,
+        default=5.0,
+        help="Scoring/session metadata polling rate when telemetry is collected by a dedicated process.",
+    )
+    parser.add_argument(
+        "--telemetry-process-priority",
+        choices=("normal", "high"),
+        default="high",
+        help="Windows priority class for the dedicated telemetry process.",
+    )
+    parser.add_argument(
+        "--telemetry-affinity-mask",
+        type=lambda value: int(value, 0),
+        help="Optional CPU affinity mask for the dedicated telemetry process, for example 0x4.",
+    )
+    parser.add_argument(
+        "--telemetry-flush-frames",
+        type=int,
+        default=10,
+        help="Flush compact raw telemetry output after this many written frames.",
+    )
+    parser.add_argument(
         "--telemetry-output-dir",
         type=Path,
         default=Path(__file__).parent / "telemetry-recordings",
@@ -98,6 +127,11 @@ def main() -> None:
         telemetry_map_name=args.telemetry_map_name,
         telemetry_output_dir=args.telemetry_output_dir,
         telemetry_record_hz=args.telemetry_record_hz,
+        telemetry_collector=args.telemetry_collector,
+        scoring_record_hz=args.scoring_record_hz,
+        telemetry_process_priority=args.telemetry_process_priority,
+        telemetry_affinity_mask=args.telemetry_affinity_mask,
+        telemetry_flush_frames=args.telemetry_flush_frames,
     )
     run_server(
         source=source,

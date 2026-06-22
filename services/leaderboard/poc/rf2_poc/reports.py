@@ -242,6 +242,8 @@ def build_report(record: Snapshot) -> Snapshot | None:
             "proper_lap_count": 0,
             "excluded_lap_count": 0,
             "telemetry_sample_count": int(record.get("telemetry_sample_count") or 0),
+            "telemetry_raw_file": record.get("telemetry_raw_file"),
+            "telemetry_import_stats": record.get("telemetry_import_stats"),
             "reference_lap": None,
         }
 
@@ -268,6 +270,8 @@ def build_report(record: Snapshot) -> Snapshot | None:
         "proper_lap_count": len(proper_laps),
         "excluded_lap_count": len(all_laps) - len(proper_laps),
         "telemetry_sample_count": int(record.get("telemetry_sample_count") or 0),
+        "telemetry_raw_file": record.get("telemetry_raw_file"),
+        "telemetry_import_stats": record.get("telemetry_import_stats"),
         "reference_lap": {
             "driver_id": reference.get("driver_id"),
             "driver_name": reference.get("driver_name"),

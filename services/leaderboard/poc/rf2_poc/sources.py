@@ -13,6 +13,7 @@ from typing import Any, Protocol, TextIO
 
 from .reports import append_sample_to_record, build_report, make_session_id, placeholder_report, sample_from_driver
 from .rf2_shared_memory import SharedMemoryScoringReader, SharedMemoryUnavailable
+from .telemetry_capture import TelemetryWorkerProcess, scoring_trace_sample
 
 
 Snapshot = dict[str, Any]
@@ -111,11 +112,13 @@ class SharedMemoryScoringSource:
         map_name: str | None = None,
         pid: int | None = None,
         telemetry_map_name: str | None = None,
+        include_telemetry: bool = True,
     ):
         self._reader = SharedMemoryScoringReader(
             map_name=map_name,
             pid=pid,
             telemetry_map_name=telemetry_map_name,
+            include_telemetry=include_telemetry,
         )
 
     def read(self) -> Snapshot:
@@ -191,28 +194,41 @@ class RecordingScoringSource:
         source: ScoringSource,
         output_dir: Path | None = None,
         telemetry_record_hz: float = 0.0,
+        record_hz: float | None = None,
+        record_snapshot_telemetry: bool = True,
+        telemetry_importer: Any | None = None,
+        telemetry_worker: TelemetryWorkerProcess | None = None,
     ):
         self._source = source
-        self._recorder = SessionRecorder(output_dir=output_dir, target_hz=telemetry_record_hz)
+        self._recorder = SessionRecorder(
+            output_dir=output_dir,
+            target_hz=telemetry_record_hz,
+            record_snapshot_telemetry=record_snapshot_telemetry,
+            telemetry_importer=telemetry_importer,
+        )
         self._lock = threading.RLock()
         self._latest_snapshot: Snapshot | None = None
         self._last_error: Exception | None = None
         self._consecutive_sample_errors = 0
-        self._sample_interval = 1.0 / telemetry_record_hz if telemetry_record_hz > 0 else 0.0
+        self._telemetry_worker = telemetry_worker
+        self._sample_interval = 1.0 / record_hz if record_hz and record_hz > 0 else 0.0
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
+        if self._telemetry_worker is not None:
+            self._telemetry_worker.start()
         if self._sample_interval > 0:
-            self._thread = threading.Thread(target=self._sample_loop, name="rf2-poc-telemetry-recorder", daemon=True)
+            self._thread = threading.Thread(target=self._sample_loop, name="rf2-poc-session-recorder", daemon=True)
             self._thread.start()
-            logger.info("Telemetry recorder started at %.2f Hz", telemetry_record_hz)
+            logger.info("Session recorder polling started at %.2f Hz", 1.0 / self._sample_interval)
 
     def read(self) -> Snapshot:
         with self._lock:
-            if self._latest_snapshot is None:
+            if self._latest_snapshot is None or self._sample_interval <= 0:
                 snapshot = self._read_and_record_locked()
             else:
                 snapshot = copy.deepcopy(self._latest_snapshot)
             history = self._recorder.history()
+        self._attach_telemetry_worker_status(snapshot)
         enrich_snapshot(snapshot, history)
         return snapshot
 
@@ -232,6 +248,8 @@ class RecordingScoringSource:
         if self._thread is not None:
             self._thread.join(timeout=2.0)
         self._recorder.close()
+        if self._telemetry_worker is not None:
+            self._telemetry_worker.close()
         self._source.close()
 
     def _sample_loop(self) -> None:
@@ -262,9 +280,23 @@ class RecordingScoringSource:
         self._last_error = None
         return copy.deepcopy(snapshot)
 
+    def _attach_telemetry_worker_status(self, snapshot: Snapshot) -> None:
+        if self._telemetry_worker is None:
+            return
+        telemetry = snapshot.setdefault("telemetry", {})
+        telemetry["external_recorder"] = self._telemetry_worker.status()
+        if telemetry.get("status") == "external-recorder":
+            telemetry["scope"] = "external telemetry recorder"
+
 
 class SessionRecorder:
-    def __init__(self, output_dir: Path | None = None, target_hz: float = 0.0) -> None:
+    def __init__(
+        self,
+        output_dir: Path | None = None,
+        target_hz: float = 0.0,
+        record_snapshot_telemetry: bool = True,
+        telemetry_importer: Any | None = None,
+    ) -> None:
         self._current: Snapshot | None = None
         self._completed: list[Snapshot] = []
         self._reports: dict[str, Snapshot] = {}
@@ -276,6 +308,8 @@ class SessionRecorder:
         self._session_sequence = 0
         self._output_dir = output_dir
         self._target_hz = target_hz
+        self._record_snapshot_telemetry = record_snapshot_telemetry
+        self._telemetry_importer = telemetry_importer
 
     def record(self, snapshot: Snapshot) -> None:
         key = session_key(snapshot)
@@ -302,7 +336,10 @@ class SessionRecorder:
             )
 
         update_session_record(self._current, snapshot)
-        self._record_telemetry_samples(snapshot)
+        if self._telemetry_importer is not None:
+            self._record_scoring_trace(snapshot)
+        if self._record_snapshot_telemetry:
+            self._record_telemetry_samples(snapshot)
         if is_session_complete(snapshot) and not self._current.get("finalized"):
             self._finalize_current("game phase/session finish")
 
@@ -363,6 +400,13 @@ class SessionRecorder:
                     if self._current.get("telemetry_write_error"):
                         logger.info("Telemetry sample writing recovered for session %s", self._current.get("id"))
                     self._current.pop("telemetry_write_error", None)
+
+    def _record_scoring_trace(self, snapshot: Snapshot) -> None:
+        if self._current is None:
+            return
+        trace = self._current.setdefault("_scoring_samples", [])
+        for driver in snapshot.get("drivers", []):
+            trace.append(scoring_trace_sample(snapshot, driver))
 
     def _write_sample(self, sample: Snapshot) -> None:
         sample_file = (self._current or {}).get("telemetry_samples_file")
@@ -460,6 +504,8 @@ class SessionRecorder:
     def _build_report_job(self, session_id: str, record: Snapshot) -> None:
         started_at = time.monotonic()
         try:
+            if self._telemetry_importer is not None:
+                record = self._telemetry_importer.enrich_record(record)
             report = build_report(record)
             if report is None:
                 report = placeholder_report(session_id, "no telemetry laps")
@@ -467,6 +513,7 @@ class SessionRecorder:
                 self._reports[session_id] = report
                 self._report_errors.pop(session_id, None)
             self._write_report(session_id, report)
+            self._sync_completed_record(session_id, record)
             self._set_report_status(session_id, str(report.get("status") or "ready"))
             logger.info(
                 "Telemetry report build finished: id=%s status=%s laps=%s seconds=%.3f",
@@ -480,6 +527,22 @@ class SessionRecorder:
                 self._report_errors[session_id] = str(exc)
             self._set_report_status(session_id, "error")
             logger.exception("Telemetry report build failed: id=%s", session_id)
+
+    def _sync_completed_record(self, session_id: str, imported_record: Snapshot) -> None:
+        keys = {
+            "telemetry_sample_count",
+            "telemetry_samples_file",
+            "telemetry_raw_file",
+            "telemetry_import_stats",
+            "telemetry_import_error",
+        }
+        updates = {key: imported_record.get(key) for key in keys if key in imported_record}
+        if self._current and self._current.get("id") == session_id:
+            self._current.update(updates)
+        for record in self._completed:
+            if record.get("id") == session_id:
+                record.update(updates)
+                break
 
     def _set_report_status(self, session_id: str, status: str) -> None:
         if self._current and self._current.get("id") == session_id:
@@ -515,8 +578,9 @@ class SessionRecorder:
             if not session_dir.is_dir():
                 continue
             sample_file = session_dir / "telemetry_samples.jsonl"
+            raw_file = session_dir / "telemetry_raw.jsonl"
             report_file = session_dir / "report.json"
-            if not sample_file.exists() and not report_file.exists():
+            if not sample_file.exists() and not raw_file.exists() and not report_file.exists():
                 continue
             report = None
             if report_file.exists():
@@ -524,7 +588,7 @@ class SessionRecorder:
                     report = json.loads(report_file.read_text(encoding="utf-8"))
                 except Exception:
                     logger.exception("Failed to read recording summary: %s", report_file)
-            recordings.append(recording_summary(session_dir, sample_file, report_file, report))
+            recordings.append(recording_summary(session_dir, sample_file, raw_file, report_file, report))
         return sorted(recordings, key=lambda item: item.get("last_modified") or 0, reverse=True)
 
     def _recording_report_file(self, session_id: str) -> Path | None:
@@ -564,7 +628,7 @@ def build_field_coverage(snapshot: Snapshot, history: Snapshot) -> list[Snapshot
         coverage_item("drivers.finish", "Finish status/order", "scoring", metric_available(drivers, "finish_status")),
         coverage_item("track.distance", "Track position distance/percent", "scoring", metric_available(drivers, "lap_distance") or metric_available(drivers, "track_position_percent")),
         coverage_item("track.coordinates", "World coordinates", "scoring/telemetry", nested_metric_available(drivers, "position")),
-        coverage_item("telemetry.map", "Telemetry memory map", "telemetry", telemetry.get("status") == "connected", telemetry.get("scope") or telemetry.get("status")),
+        coverage_item("telemetry.map", "Telemetry memory map", "telemetry", telemetry.get("status") in {"connected", "external-recorder"}, telemetry.get("scope") or telemetry.get("status")),
         coverage_item("telemetry.all_cars", "All-car telemetry scope", "telemetry", telemetry.get("scope") == "all scoring vehicles", telemetry.get("scope")),
         coverage_item("telemetry.throttle", "Throttle position", "telemetry", telemetry_metric_available(drivers, "throttle_percent")),
         coverage_item("telemetry.brake", "Brake position", "telemetry", telemetry_metric_available(drivers, "brake_percent")),
@@ -767,10 +831,10 @@ def is_safe_recording_id(session_id: str) -> bool:
     return bool(re.fullmatch(r"[A-Za-z0-9_.-]+", session_id))
 
 
-def recording_summary(session_dir: Path, sample_file: Path, report_file: Path, report: Snapshot | None) -> Snapshot:
+def recording_summary(session_dir: Path, sample_file: Path, raw_file: Path, report_file: Path, report: Snapshot | None) -> Snapshot:
     latest_mtime = max(
         path.stat().st_mtime
-        for path in (sample_file, report_file)
+        for path in (sample_file, raw_file, report_file)
         if path.exists()
     )
     return {
@@ -783,6 +847,7 @@ def recording_summary(session_dir: Path, sample_file: Path, report_file: Path, r
         "excluded_lap_count": (report or {}).get("excluded_lap_count"),
         "telemetry_sample_count": (report or {}).get("telemetry_sample_count"),
         "sample_file": str(sample_file) if sample_file.exists() else None,
+        "raw_file": str(raw_file) if raw_file.exists() else None,
         "report_file": str(report_file) if report_file.exists() else None,
         "last_modified": latest_mtime,
         "last_modified_iso": iso_timestamp(latest_mtime),
@@ -794,6 +859,7 @@ def public_session_record(record: Snapshot | None) -> Snapshot | None:
     if record is None:
         return None
     public = copy.deepcopy(record)
+    public.pop("_scoring_samples", None)
     public["drivers"] = [
         public_driver_record(driver)
         for driver in sorted(public.get("drivers", {}).values(), key=lambda driver: driver.get("last_place") or 999)
@@ -833,22 +899,50 @@ def build_source(
     telemetry_map_name: str | None = None,
     telemetry_output_dir: Path | None = None,
     telemetry_record_hz: float = 0.0,
+    telemetry_collector: str = "auto",
+    scoring_record_hz: float = 5.0,
+    telemetry_process_priority: str = "high",
+    telemetry_affinity_mask: int | None = None,
+    telemetry_flush_frames: int = 50,
 ) -> ScoringSource:
     if source_kind == "mock":
         return RecordingScoringSource(
             MockScoringSource(fixture_path),
             output_dir=telemetry_output_dir,
             telemetry_record_hz=telemetry_record_hz,
+            record_hz=telemetry_record_hz if telemetry_collector != "off" else 0.0,
+            record_snapshot_telemetry=telemetry_collector != "off",
         )
     if source_kind == "shared-memory":
+        use_process_collector = (
+            telemetry_collector in {"auto", "process"}
+            and telemetry_record_hz > 0
+            and telemetry_output_dir is not None
+        )
+        telemetry_worker = None
+        if use_process_collector:
+            telemetry_worker = TelemetryWorkerProcess(
+                output_dir=telemetry_output_dir,
+                target_hz=telemetry_record_hz,
+                map_name=telemetry_map_name,
+                pid=pid,
+                priority=telemetry_process_priority,
+                affinity_mask=telemetry_affinity_mask,
+                flush_frames=telemetry_flush_frames,
+            )
         return RecordingScoringSource(
             SharedMemoryScoringSource(
                 map_name=map_name,
                 pid=pid,
                 telemetry_map_name=telemetry_map_name,
+                include_telemetry=not use_process_collector,
             ),
             output_dir=telemetry_output_dir,
             telemetry_record_hz=telemetry_record_hz,
+            record_hz=(scoring_record_hz if use_process_collector else telemetry_record_hz) if telemetry_collector != "off" else 0.0,
+            record_snapshot_telemetry=not use_process_collector and telemetry_collector != "off",
+            telemetry_importer=telemetry_worker,
+            telemetry_worker=telemetry_worker,
         )
     if source_kind == "auto":
         return RecordingScoringSource(
@@ -860,5 +954,7 @@ def build_source(
             ),
             output_dir=telemetry_output_dir,
             telemetry_record_hz=telemetry_record_hz,
+            record_hz=telemetry_record_hz if telemetry_collector != "off" else 0.0,
+            record_snapshot_telemetry=telemetry_collector != "off",
         )
     raise ValueError(f"Unsupported source kind: {source_kind}")

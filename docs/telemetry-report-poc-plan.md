@@ -30,6 +30,8 @@ The signs should be validated against a known braking/acceleration/cornering run
 
 The shared-memory plugin telemetry path is designed around about 50 Hz frames. The PoC now has a background sampler controlled by `--telemetry-record-hz` and defaults to `50.0`, so recording can run faster than the browser refresh.
 
+In shared-memory mode, `--telemetry-collector auto` now starts a dedicated telemetry-only Python process. That worker reads only the telemetry map and writes compact raw frames, while the main PoC process polls scoring/session metadata at `--scoring-record-hz` (default `5.0`). Use `--telemetry-collector in-process` to compare against the older combined collector path.
+
 Caveat: lap distance / lap percent currently come from the scoring row, while throttle/brake/steer/gear/G/speed come from telemetry. If scoring updates slower than telemetry, the high-rate samples can contain repeated lap-percent values with changing telemetry values. That is still useful for this proof, but final report quality should be validated live.
 
 The real Bahrain practice/qualifying captures in `services/leaderboard/poc/tests/data/` show that the current Python server-side PoC did not consistently record effective 50 Hz per-driver telemetry. The qualifying proper laps are around 28-30 Hz, while the practice proper laps are much lower and uneven. Treat this as a collector implementation finding, not yet as proof that the dedicated-server shared-memory source is insufficient. The next collector iteration should measure and optimize telemetry read-loop timing before deciding to distribute collectors to each rig.
@@ -45,6 +47,7 @@ services/leaderboard/poc/telemetry-recordings/
 This folder is gitignored. Each session gets:
 
 * `telemetry_samples.jsonl`: raw observed samples, one JSON object per driver sample;
+* `telemetry_raw.jsonl`: compact raw telemetry-map frames imported from the dedicated telemetry worker when process collection is enabled;
 * `report.json`: finalized telemetry report data when the session finalizes.
 
 The PoC writes rotating runtime logs under:
@@ -72,6 +75,8 @@ Each telemetry sample stores at least:
 ## Implemented PoC report behavior
 
 * The recorder samples independently from browser polling.
+* In shared-memory mode, the recorder can run telemetry capture in a dedicated child process while the main process records lower-rate scoring/session metadata.
+* Dedicated telemetry capture writes compact raw frames first, then the report-build thread expands them into full-resolution `telemetry_samples.jsonl` without resampling or dropping report samples for graph convenience.
 * Completed sessions in `/history` link to `/telemetry?session=<session-id>` when there is reportable telemetry.
 * `/telemetry` lists stored recordings from `services/leaderboard/poc/telemetry-recordings/`, can load old reports after a collector restart, and can open local `report.json` or `telemetry_samples.jsonl` files.
 * The report classifies laps as proper, partial, outlap, inlap, or formation/non-timed.
@@ -116,27 +121,30 @@ Simple agent procedure on the actual system:
 
 1. Start the dedicated-server
 
-   ```powershell
-  Start-Process -FilePath "H:\Games\rFactor2\rFactor2 Dedicated.exe" -WorkingDirectory "H:\Games\rFactor2" -ArgumentList "+oneclick"
-   ```
+      ```powershell
+      Start-Process -FilePath "H:\Games\rFactor2\rFactor2 Dedicated.exe" -WorkingDirectory "H:\Games\rFactor2" -ArgumentList "+oneclick"
+      ```
 
 2. Wait approximately 1 minute for the process to start, then record the dedicated-server PID:
 
-   ```powershell
-   Get-CimInstance Win32_Process | Where-Object { $_.Name -like '*Dedicated*.exe' } | Select-Object ProcessId, Name, ExecutablePath, CommandLine
-   ```
+      ```powershell
+      Get-CimInstance Win32_Process | Where-Object { $_.Name -like '*Dedicated*.exe' } | Select-Object ProcessId, Name, ExecutablePath, CommandLine
+      ```
 
 3. Start the current PoC collector:
 
-   ```powershell
-   python services/leaderboard/poc/run_poc.py --source shared-memory --pid <PID> --telemetry-record-hz 50 --poll-seconds 1
-   ```
+    ```powershell
+    python services/leaderboard/poc/run_poc.py --source shared-memory --pid <PID> --telemetry-record-hz 50 --poll-seconds 1
+    ```
 
 4. Run at least three controlled sessions:
-   * one practice session with all cars running at least five timed laps;
-   * one qualifying-style session with all cars running at least five timed laps;
-   * one race or session-ending flow so finalization and report generation are exercised.
-   (These sessions will automatically start after starting the decidated server (Step 1), Practice takes 20 minutes, Qualification 10 minutes, and the race 5 laps.)
+
+    * one practice session with all cars running at least five timed laps;
+    * one qualifying-style session with all cars running at least five timed laps;
+    * one race or session-ending flow so finalization and report generation are exercised.
+
+    These sessions will automatically start after starting the decidated server (Step 1), Practice takes 20 minutes, Qualification 10 minutes, and the race 5 laps.
+
 5. During the run, open `/poc` and confirm telemetry is connected and all scored vehicles are joined.
 6. After each session finalizes, open `/telemetry?session=<session-id>` and confirm proper laps are classified and graphs render.
 7. Run the analyzer over the created recording folders.
@@ -151,14 +159,19 @@ Decision check:
 
 Agent implementation task:
 
-* Add a telemetry-only diagnostic mode or command that reads only the telemetry map for a short fixed window, without scoring joins, report generation, HTTP rendering, or per-sample JSONL writes in the hot path.
-* Keep samples in memory or write batched chunks after capture.
-* Log the telemetry map update counter, read-loop timing, per-driver sample counts, and late/dropped-loop counts.
+* Implemented: `services/leaderboard/poc/run_telemetry_recorder.py` reads only the telemetry map for a short fixed window or as a child process of `run_poc.py`, without scoring joins, report generation, HTTP rendering, or per-sample report JSONL writes in the hot path.
+* Implemented: compact raw telemetry frames are written in batches to `telemetry_raw.jsonl`; report-shaped `telemetry_samples.jsonl` is generated later after session finalization.
+* Implemented: the worker status JSON logs telemetry map update counter, read-loop timing, frame/sample counts, duplicate update-counter reads, update-counter gaps, torn reads, and late-loop counts.
 * Run scoring reads separately at a lower rate only if needed for driver names.
 
 Simple agent procedure on the actual system:
 
 1. With the same dedicated-server session running, execute the telemetry-only diagnostic for 2-5 minutes.
+
+   ```powershell
+   python services/leaderboard/poc/run_telemetry_recorder.py --pid <PID> --target-hz 50 --duration-seconds 300 --output-file services/leaderboard/poc/telemetry-recordings/diagnostic-raw/telemetry_raw.jsonl --status-file services/leaderboard/poc/telemetry-recordings/diagnostic-raw/telemetry_worker_status.json
+   ```
+
 2. Repeat with 1 car, then 3 cars, then 6 cars if possible.
 3. Run the analyzer on the diagnostic output.
 4. Compare telemetry-only rates to the full PoC collector rates from Step 2.

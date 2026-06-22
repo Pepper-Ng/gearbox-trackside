@@ -35,6 +35,7 @@ from rf2_poc.rf2_shared_memory import (  # noqa: E402
 from rf2_poc.reports import append_sample_to_record, build_report  # noqa: E402
 from rf2_poc.server import dashboard_html, is_client_disconnect, read_recordings_safely, read_report_safely, report_html  # noqa: E402
 from rf2_poc.sources import MockScoringSource, SessionRecorder, build_source  # noqa: E402
+from rf2_poc.telemetry_capture import CompactTelemetryWriter, TelemetryRawSessionImporter  # noqa: E402
 from rf2_poc.viewer import telemetry_viewer_html  # noqa: E402
 
 
@@ -114,6 +115,38 @@ class MockScoringSourceTests(unittest.TestCase):
         self.assertEqual(report["laps"][0]["lap_classification"], "proper")
         self.assertEqual(len(report["laps"][0]["series"]["speed_kph"]), report["laps"][0]["sample_count"])
         self.assertEqual(report["axis_strategy"], "raw recorded samples at collector frequency")
+
+    def test_session_recorder_imports_external_raw_telemetry_for_report(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            raw_file = root / "worker" / "telemetry_raw.jsonl"
+            with CompactTelemetryWriter(raw_file) as writer:
+                writer.write(raw_telemetry_frame(1.0, 100, 1, 1, 11.0, 10.0, 0.61))
+                writer.write(raw_telemetry_frame(2.0, 101, 1, 1, 88.0, 10.0, 0.72))
+                writer.write(raw_telemetry_frame(3.0, 102, 1, 2, 91.0, 90.0, 0.45))
+
+            recorder = SessionRecorder(
+                output_dir=root / "recordings",
+                target_hz=50.0,
+                record_snapshot_telemetry=False,
+                telemetry_importer=TelemetryRawSessionImporter(raw_file),
+            )
+            for snapshot in build_report_snapshots():
+                recorder.record(snapshot)
+            recorder.close()
+            completed = recorder.history()["completed_sessions"][0]
+            report = recorder.report(completed["id"])
+            samples_file_exists = Path(completed["telemetry_samples_file"]).exists()
+            raw_file_exists = Path(completed["telemetry_raw_file"]).exists()
+
+        self.assertEqual(completed["report_status"], "ready")
+        self.assertGreater(completed["telemetry_sample_count"], 0)
+        self.assertTrue(samples_file_exists)
+        self.assertTrue(raw_file_exists)
+        self.assertIsNotNone(report)
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["proper_lap_count"], 1)
+        self.assertEqual(len(report["laps"][0]["series"]["throttle_percent"]), report["laps"][0]["sample_count"])
 
     def test_report_generation_keeps_full_resolution_samples(self) -> None:
         samples = [
@@ -564,6 +597,51 @@ def build_report_driver(
             "steering_percent": 2.0,
             "g_force": {"lateral": 0.2, "longitudinal": 0.1, "vertical": 1.0, "magnitude": 1.03},
         },
+    }
+
+
+def raw_telemetry_frame(
+    timestamp: float,
+    update_counter: int,
+    driver_id: int,
+    lap_number: int,
+    elapsed_time: float,
+    lap_start_time: float,
+    throttle: float,
+) -> dict:
+    return {
+        "type": "frame",
+        "t": timestamp,
+        "u": update_counter,
+        "b": update_counter,
+        "e": update_counter,
+        "h": 1,
+        "n": 1,
+        "m": "test-telemetry-map",
+        "o": MAPPED_BUFFER_WRAPPER_SIZE,
+        "r": 0.0005,
+        "x": False,
+        "v": [
+            [
+                driver_id,
+                lap_number,
+                elapsed_time,
+                lap_start_time,
+                0.02,
+                4,
+                throttle,
+                0.05,
+                0.02,
+                0.0,
+                0.0,
+                50.0,
+                3.2,
+                9.8,
+                -1.1,
+                "Formula Test",
+                "Report Test Track",
+            ]
+        ],
     }
 
 

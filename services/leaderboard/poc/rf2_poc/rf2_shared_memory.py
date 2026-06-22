@@ -284,8 +284,73 @@ def candidate_telemetry_map_names(map_name: str | None = None, pid: int | None =
     return candidate_map_names(TELEMETRY_MAP_NAME, map_name=map_name, pid=pid)
 
 
+class PersistentMappedBuffer:
+    def __init__(self, name: str, payload_type: type[ctypes.Structure]):
+        self.name = name
+        self.payload_type = payload_type
+        self.payload_size = ctypes.sizeof(payload_type)
+        self.mapped_size = MAPPED_BUFFER_WRAPPER_SIZE + self.payload_size
+        self.handle = None
+        self.view = None
+        self.read_size = self.mapped_size
+        self._open()
+
+    def _open(self) -> None:
+        handle = _KERNEL32.OpenFileMappingW(FILE_MAP_READ, False, self.name)
+        if not handle:
+            raise SharedMemoryUnavailable(last_win32_error(f"OpenFileMappingW({self.name!r}) failed"))
+
+        try:
+            view = _KERNEL32.MapViewOfFile(handle, FILE_MAP_READ, 0, 0, self.mapped_size)
+            read_size = self.mapped_size
+            if not view:
+                view = _KERNEL32.MapViewOfFile(handle, FILE_MAP_READ, 0, 0, self.payload_size)
+                read_size = self.payload_size
+            if not view:
+                raise SharedMemoryUnavailable(last_win32_error(f"MapViewOfFile({self.name!r}) failed"))
+        except Exception:
+            _KERNEL32.CloseHandle(handle)
+            raise
+
+        self.handle = handle
+        self.view = view
+        self.read_size = read_size
+
+    def read_bytes(self) -> bytes:
+        if not self.view:
+            raise SharedMemoryUnavailable(f"Memory map view is closed: {self.name}")
+        buffer = (ctypes.c_ubyte * self.read_size)()
+        ctypes.memmove(buffer, self.view, self.read_size)
+        return bytes(buffer)
+
+    def close(self) -> None:
+        if self.view:
+            _KERNEL32.UnmapViewOfFile(self.view)
+            self.view = None
+        if self.handle:
+            _KERNEL32.CloseHandle(self.handle)
+            self.handle = None
+
+    def __enter__(self) -> "PersistentMappedBuffer":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:  # type: ignore[no-untyped-def]
+        self.close()
+
+
+def read_map_bytes(name: str, payload_type: type[ctypes.Structure]) -> bytes:
+    with PersistentMappedBuffer(name, payload_type) as mapped_buffer:
+        return mapped_buffer.read_bytes()
+
+
 class SharedMemoryScoringReader:
-    def __init__(self, map_name: str | None = None, pid: int | None = None, telemetry_map_name: str | None = None):
+    def __init__(
+        self,
+        map_name: str | None = None,
+        pid: int | None = None,
+        telemetry_map_name: str | None = None,
+        include_telemetry: bool = True,
+    ):
         if os.name != "nt":
             raise SharedMemoryUnavailable("rFactor 2 shared-memory reading is Windows-only.")
 
@@ -293,10 +358,15 @@ class SharedMemoryScoringReader:
 
         self.map_names = candidate_scoring_map_names(map_name=map_name, pid=pid)
         self.map_name = self._choose_map_name(self.map_names, rF2Scoring, "scoring")
+        self.include_telemetry = include_telemetry
         self.telemetry_map_names = candidate_telemetry_map_names(map_name=telemetry_map_name, pid=pid)
-        self.telemetry_map_name, self.telemetry_error = self._try_choose_map_name(
-            self.telemetry_map_names, rF2Telemetry, "telemetry"
-        )
+        if include_telemetry:
+            self.telemetry_map_name, self.telemetry_error = self._try_choose_map_name(
+                self.telemetry_map_names, rF2Telemetry, "telemetry"
+            )
+        else:
+            self.telemetry_map_name = None
+            self.telemetry_error = "telemetry reads are owned by the dedicated telemetry recorder process"
 
     def _choose_map_name(self, names: list[str], payload_type: type[ctypes.Structure], label: str) -> str:
         map_name, error = self._try_choose_map_name(names, payload_type, label)
@@ -310,7 +380,7 @@ class SharedMemoryScoringReader:
         errors: list[str] = []
         for name in names:
             try:
-                self._read_map_bytes(name, payload_type)
+                read_map_bytes(name, payload_type)
                 return name, None
             except Exception as exc:
                 errors.append(f"{name}: {exc}")
@@ -403,6 +473,21 @@ class SharedMemoryScoringReader:
         }
 
     def _read_telemetry(self) -> dict[str, Any]:
+        if not self.include_telemetry:
+            return {
+                "status": "external-recorder",
+                "memory_map": None,
+                "map_names": self.telemetry_map_names,
+                "error": self.telemetry_error,
+                "decode_offset": None,
+                "update_counter": None,
+                "version_begin": None,
+                "version_end": None,
+                "bytes_updated_hint": None,
+                "raw_vehicle_count": None,
+                "vehicle_count": 0,
+                "vehicles": [],
+            }
         if self.telemetry_map_name is None:
             return {
                 "status": "unavailable",
@@ -438,52 +523,77 @@ class SharedMemoryScoringReader:
                 "vehicles": [],
             }
 
-        raw_vehicle_count = int(telemetry.mNumVehicles)
-        scan_limit = raw_vehicle_count if 0 <= raw_vehicle_count <= MAX_MAPPED_VEHICLES else MAX_MAPPED_VEHICLES
-        vehicles = [
-            vehicle
-            for index in range(scan_limit)
-            if (vehicle := telemetry_vehicle_to_dict(telemetry.mVehicles[index])) is not None
-        ]
-        return {
-            "status": "connected",
-            "memory_map": self.telemetry_map_name,
-            "map_names": self.telemetry_map_names,
-            "error": None,
-            "decode_offset": decode_offset,
-            "update_counter": int(telemetry.mVersionUpdateEnd),
-            "version_begin": int(telemetry.mVersionUpdateBegin),
-            "version_end": int(telemetry.mVersionUpdateEnd),
-            "bytes_updated_hint": int(telemetry.mBytesUpdatedHint),
-            "raw_vehicle_count": raw_vehicle_count,
-            "vehicle_count": len(vehicles),
-            "vehicles": vehicles,
-        }
+        return telemetry_payload_to_dict(
+            telemetry,
+            map_name=self.telemetry_map_name,
+            map_names=self.telemetry_map_names,
+            decode_offset=decode_offset,
+            torn_read=False,
+        )
 
     def _read_map_bytes(self, name: str, payload_type: type[ctypes.Structure]) -> bytes:
-        size = ctypes.sizeof(payload_type)
-        mapped_size = MAPPED_BUFFER_WRAPPER_SIZE + size
-        handle = _KERNEL32.OpenFileMappingW(FILE_MAP_READ, False, name)
-        if not handle:
-            raise SharedMemoryUnavailable(last_win32_error(f"OpenFileMappingW({name!r}) failed"))
+        return read_map_bytes(name, payload_type)
 
-        view = None
-        try:
-            view = _KERNEL32.MapViewOfFile(handle, FILE_MAP_READ, 0, 0, mapped_size)
-            read_size = mapped_size
-            if not view:
-                view = _KERNEL32.MapViewOfFile(handle, FILE_MAP_READ, 0, 0, size)
-                read_size = size
-            if not view:
-                raise SharedMemoryUnavailable(last_win32_error(f"MapViewOfFile({name!r}) failed"))
 
-            buffer = (ctypes.c_ubyte * read_size)()
-            ctypes.memmove(buffer, view, read_size)
-            return bytes(buffer)
-        finally:
-            if view:
-                _KERNEL32.UnmapViewOfFile(view)
-            _KERNEL32.CloseHandle(handle)
+class SharedMemoryTelemetryReader:
+    def __init__(self, map_name: str | None = None, pid: int | None = None):
+        if os.name != "nt":
+            raise SharedMemoryUnavailable("rFactor 2 shared-memory reading is Windows-only.")
+
+        configure_win32_api()
+
+        self.map_names = candidate_telemetry_map_names(map_name=map_name, pid=pid)
+        self.map_name, self.telemetry_error, self._mapped_buffer = self._open_first_map(self.map_names)
+
+    def close(self) -> None:
+        self._mapped_buffer.close()
+
+    def read_telemetry(self, stable_attempts: int = 3) -> dict[str, Any]:
+        last_payload: tuple[rF2Telemetry, int] | None = None
+        for _ in range(max(1, stable_attempts)):
+            buffer = self._mapped_buffer.read_bytes()
+            telemetry, decode_offset = decode_best_telemetry_payload(buffer)
+            last_payload = (telemetry, decode_offset)
+            if int(telemetry.mVersionUpdateBegin) == int(telemetry.mVersionUpdateEnd):
+                return telemetry_payload_to_dict(
+                    telemetry,
+                    map_name=self.map_name,
+                    map_names=self.map_names,
+                    decode_offset=decode_offset,
+                    torn_read=False,
+                )
+        telemetry, decode_offset = last_payload
+        return telemetry_payload_to_dict(
+            telemetry,
+            map_name=self.map_name,
+            map_names=self.map_names,
+            decode_offset=decode_offset,
+            torn_read=True,
+        )
+
+    def read_raw_payload(self, stable_attempts: int = 3) -> tuple[rF2Telemetry, int, bool]:
+        last_payload: tuple[rF2Telemetry, int] | None = None
+        for _ in range(max(1, stable_attempts)):
+            buffer = self._mapped_buffer.read_bytes()
+            telemetry, decode_offset = decode_best_telemetry_payload(buffer)
+            last_payload = (telemetry, decode_offset)
+            if int(telemetry.mVersionUpdateBegin) == int(telemetry.mVersionUpdateEnd):
+                return telemetry, decode_offset, False
+        telemetry, decode_offset = last_payload
+        return telemetry, decode_offset, True
+
+    def _open_first_map(
+        self, names: list[str]
+    ) -> tuple[str, str | None, PersistentMappedBuffer]:
+        errors: list[str] = []
+        for name in names:
+            try:
+                mapped_buffer = PersistentMappedBuffer(name, rF2Telemetry)
+                mapped_buffer.read_bytes()
+                return name, None, mapped_buffer
+            except Exception as exc:
+                errors.append(f"{name}: {exc}")
+        raise SharedMemoryUnavailable(f"Could not open any telemetry memory map. Tried: {'; '.join(errors)}")
 
 
 def decode_best_scoring_payload(buffer: bytes) -> tuple[rF2Scoring, int]:
@@ -715,6 +825,37 @@ def telemetry_vehicle_to_dict(vehicle: rF2VehicleTelemetry) -> dict[str, Any] | 
         "last_impact_position": vec_to_dict(vehicle.mLastImpactPos),
         "battery_charge_fraction": clamp_01(float(vehicle.mBatteryChargeFraction)),
         "electric_boost_motor_state": int(vehicle.mElectricBoostMotorState),
+    }
+
+
+def telemetry_payload_to_dict(
+    telemetry: rF2Telemetry,
+    map_name: str,
+    map_names: list[str],
+    decode_offset: int,
+    torn_read: bool,
+) -> dict[str, Any]:
+    raw_vehicle_count = int(telemetry.mNumVehicles)
+    scan_limit = raw_vehicle_count if 0 <= raw_vehicle_count <= MAX_MAPPED_VEHICLES else MAX_MAPPED_VEHICLES
+    vehicles = [
+        vehicle
+        for index in range(scan_limit)
+        if (vehicle := telemetry_vehicle_to_dict(telemetry.mVehicles[index])) is not None
+    ]
+    return {
+        "status": "connected",
+        "memory_map": map_name,
+        "map_names": map_names,
+        "error": None,
+        "decode_offset": decode_offset,
+        "update_counter": int(telemetry.mVersionUpdateEnd),
+        "version_begin": int(telemetry.mVersionUpdateBegin),
+        "version_end": int(telemetry.mVersionUpdateEnd),
+        "bytes_updated_hint": int(telemetry.mBytesUpdatedHint),
+        "raw_vehicle_count": raw_vehicle_count,
+        "vehicle_count": len(vehicles),
+        "vehicles": vehicles,
+        "torn_read": torn_read,
     }
 
 
