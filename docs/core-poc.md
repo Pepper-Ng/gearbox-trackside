@@ -1,10 +1,8 @@
 # Phase 0A Core Live-Data PoC
 
-This PoC answers one narrow question: what useful rFactor 2 scoring and telemetry data can reach a browser with minimal software?
+This PoC answers one narrow question: can rFactor 2 session/player scoring data reach a browser with minimal software?
 
-It is intentionally small. It does not implement the final leaderboard architecture, staff controls, durable persistence, printing, telemetry reports, camera behavior, deployment packaging, or venue hardening. It does include a broad diagnostic dashboard so later phases can see which shared-memory fields are available from the chosen host process.
-
-For source-level details on how `rF2SharedMemoryMapPlugin` loads, creates maps, names dedicated-server maps, logs, and publishes scoring data, see `docs/shared-memory-plugin-investigation.md`.
+It is intentionally small. It does not implement the final leaderboard architecture, staff controls, persistence, printing, telemetry reports, camera behavior, deployment packaging, or venue hardening.
 
 The expected live validation shape is:
 
@@ -23,8 +21,6 @@ The expected live validation shape is:
 ```
 
 The browser may run on the same machine or, if the PoC is bound to a LAN interface and firewall rules allow it, another machine. The Python PoC process itself must run on the Windows machine that can see the rFactor 2 shared-memory map.
-
-The page now reads scoring as the required map and telemetry as an optional second map. If telemetry is available, the dashboard joins telemetry rows to scoring rows by vehicle ID and reports whether telemetry appears to cover all scored vehicles, a single vehicle, or only a partial vehicle set.
 
 ---
 
@@ -98,12 +94,6 @@ The relevant live scoring map names are:
 * normal rFactor 2 client: `$rFactor2SMMP_Scoring$`;
 * dedicated server, non-global map: `$rFactor2SMMP_Scoring$<PID>`;
 * dedicated server, global map enabled: `Global\$rFactor2SMMP_Scoring$<PID>`.
-
-The matching telemetry map names are:
-
-* normal rFactor 2 client: `$rFactor2SMMP_Telemetry$`;
-* dedicated server, non-global map: `$rFactor2SMMP_Telemetry$<PID>`;
-* dedicated server, global map enabled: `Global\$rFactor2SMMP_Telemetry$<PID>`.
 
 `<PID>` is the Windows process ID of `Dedicated.exe`.
 
@@ -255,22 +245,6 @@ If port `8877` is already in use:
 python services/leaderboard/poc/run_poc.py --source mock --port 8890
 ```
 
-The browser refresh interval is controlled separately from telemetry recording:
-
-```powershell
-python services/leaderboard/poc/run_poc.py --source mock --poll-seconds 1 --telemetry-record-hz 50
-```
-
-`--poll-seconds` controls how often the browser redraws. `--telemetry-record-hz` controls the PoC background sampler that records telemetry samples for report graphs. Use `--telemetry-record-hz 0` to disable background sampling and record only when the browser or API asks for a snapshot.
-
-The PoC writes its own rotating runtime log files by default under:
-
-```text
-services/leaderboard/poc/logs/
-```
-
-The console also receives important log lines immediately while the process is running. Routine successful `/api/snapshot` poll responses are intentionally not printed.
-
 ---
 
 ## Run Against rFactor 2 Shared Memory
@@ -329,12 +303,6 @@ If needed, pass the exact map name:
 
 ```powershell
 python services/leaderboard/poc/run_poc.py --source shared-memory --map-name 'Global\$rFactor2SMMP_Scoring$12345'
-```
-
-If scoring and telemetry need different exact names, pass both:
-
-```powershell
-python services/leaderboard/poc/run_poc.py --source shared-memory --map-name 'Global\$rFactor2SMMP_Scoring$12345' --telemetry-map-name 'Global\$rFactor2SMMP_Telemetry$12345'
 ```
 
 ### Auto fallback mode
@@ -418,90 +386,26 @@ This may require a Windows Firewall rule for the selected port. Do not expose th
 
 ## Current PoC Output
 
-The page currently displays a diagnostic dashboard rather than a polished leaderboard. It shows:
+The page currently displays:
 
 * data source and status;
 * update counter;
-* scoring and telemetry map names;
-* scoring and telemetry decode offsets;
-* telemetry status and scope: unavailable, single vehicle, partial vehicle set, or all scoring vehicles;
 * track;
 * session type/code;
-* game phase and realtime state;
 * vehicle count;
 * current/end session time;
 * ambient and track temperatures when available;
-* rain, cloud, path wetness, and wind when available;
-* a field coverage matrix for the project-critical data points;
-* fastest lap and fastest sector summaries from currently visible scoring data;
+* rain value when available;
 * driver name;
 * vehicle name;
 * laps;
 * place;
 * best lap;
-* best-sector and best-lap sector split data where the scoring map exposes it;
 * last lap;
-* last-lap sector split data where available;
 * current lap time;
-* current sector;
-* lap distance and percentage of track completed;
-* world coordinates;
-* local velocity, acceleration, and speed where available;
+* sector;
 * time behind leader;
-* finish status and race order fields;
-* joined telemetry per driver when available: throttle, brake, steering, gear, G-force, speed, engine RPM, tire compounds, fuel, impact values, and related status fields;
-* telemetry recording status and sample count;
-* flag summary: green, local yellow, full-course yellow/safety car, race halt/stopped, and sector yellow values when scoring exposes them;
-* current in-memory recorded session history;
-* completed in-memory session history at `/history` and `/api/history`;
-* finalized-session telemetry viewer links at `/telemetry?session=<session-id>` and JSON at `/api/reports/<session-id>`;
-* a telemetry viewer at `/telemetry` that can list stored recordings, load old `report.json` files after a collector restart, or open local `report.json` / `telemetry_samples.jsonl` files;
-* full-resolution report graphs from the recorded telemetry samples, preserving the collector's captured sample stream instead of resampling to a smaller graph axis;
-* lap classification for telemetry reports: proper laps, partial laps, outlaps, inlaps, and formation/non-timed laps. Only proper laps are used for fastest/reference report laps, while the viewer still allows selecting other laps for diagnosis.
-
-The in-memory history is deliberately temporary. It is built by observing snapshots while the PoC process is running. It is useful for proving whether lap/sector values can be captured at the time they appear, but it is not durable storage and is not the final historical leaderboard implementation.
-
-Important shared-memory interpretation notes:
-
-* The scoring map is still the required live source.
-* The telemetry map is optional. If it is missing, the dashboard still shows scoring and reports telemetry as unavailable.
-* The plugin requests all-vehicle telemetry when telemetry is subscribed. The dashboard reports the observed telemetry scope by comparing telemetry rows with scored vehicle rows.
-* The browser can redraw once per second while the recorder samples faster in the background. This means visible dashboard update cadence is not the telemetry-map cadence.
-* G-force values come from local vehicle acceleration. The PoC records lateral (`x`), vertical (`y`), longitudinal (`z`), and magnitude values.
-* Report generation starts on a background thread when a session finalizes. If the report page is opened while generation is still running, it displays a building state and polls the report API until data is ready.
-* Some rFactor 2 sector fields are cumulative to sector 2. The PoC derives split values where there is enough information and leaves unavailable values blank.
-* Full per-lap history is not directly dumped as a complete archive by the scoring snapshot. The PoC records lap/sector values as they are observed so we can prove whether a future service can compile history live.
-* Report sample files are written under `services/leaderboard/poc/telemetry-recordings/`, which is gitignored. The `/api/recordings` endpoint lists stored recording folders visible to the current PoC process.
-
-### Telemetry Cadence Finding From Real Captures
-
-Two real captured sessions are kept as regression fixtures under `services/leaderboard/poc/tests/data/`:
-
-* `bahrain-gp-2014-practice-ac00312535`;
-* `bahrain-gp-2014-qualifying-e07b77aca6`.
-
-These captures support the user's observation that the current server-side PoC telemetry is not consistently near 50 Hz per driver:
-
-* Practice capture: 48,181 stored telemetry samples, 24 proper laps, 10 excluded laps. Proper-lap effective sample rate ranged from about 1.4 Hz to 14.2 Hz, with an 8.2 Hz median.
-* Qualifying capture: 54,269 stored telemetry samples, 7 proper laps, 6 excluded laps. Proper-lap effective sample rate ranged from about 26.5 Hz to 30.0 Hz, with a 28.0 Hz median.
-* In both captures, `lap_percent` repeats for most adjacent samples. This is expected because lap distance / track percent currently comes from scoring, while throttle, brake, steering, gear, speed, and G-force come from telemetry.
-* Speed changes in almost every adjacent sample, steering changes often, but throttle and brake change less frequently. This suggests that some visual coarseness is real captured data cadence or channel quantization, not only graphing.
-* `gear = 0` appears frequently in the raw data, including proper laps. Some of this is expected for cars stopped or in neutral, but moving single-sample neutral values can look like unrealistic spikes. The viewer smooths short moving-neutral blips for display only; raw samples remain unchanged.
-
-This evidence does **not** yet prove that dedicated-server shared memory cannot provide adequate telemetry. It proves that the current Python PoC collector, running against the server-side maps and combining scoring plus telemetry reads, did not capture stable 50 Hz per-driver telemetry in these sessions.
-
-Recommended next implementation step: keep the central server-side collector as the preferred architecture for the next PoC iteration, but optimize and measure it before introducing six rig-local collectors. For a maximum of six drivers, the server-side all-car telemetry volume should be manageable and it avoids installing and synchronizing services on every simulator. The next collector should:
-
-* decouple high-rate telemetry reading from lower-rate scoring/session reading;
-* sample the telemetry map on its own target loop at 50 Hz or faster;
-* read scoring/lap/session state at a lower rate and join cached scoring data to telemetry samples;
-* batch or queue writes so file I/O and JSON serialization do not block the telemetry read loop;
-* log actual loop timing, dropped/late samples, and per-driver effective sample rates;
-* prefer a time-based report axis for telemetry channels, while using track percent only as a positional aid until a higher-resolution distance source is proven.
-
-If an optimized central collector still cannot sustain roughly 45-50 Hz per active driver on the venue server, then run a bounded fallback spike with one rig-local collector. A rig-local collector may provide better own-car telemetry fidelity, but it adds deployment and operational cost: shared-memory plugin installation on every setup, a service on every setup, six more points of failure, and post-session synchronization back to the central service. The final architecture should only move telemetry capture to each rig if the optimized server-side collector cannot meet the report-quality target.
-
-For the report/printing proof-of-concept tracker, see `docs/telemetry-report-poc-plan.md`.
+* source vehicle ID.
 
 The goal is not to make this page pretty. The goal is to reveal what data is present and whether it updates.
 
@@ -526,18 +430,13 @@ In another terminal:
 
 ```powershell
 curl.exe --noproxy "*" -s -o NUL -w "%{http_code}" http://127.0.0.1:8877/poc
-curl.exe --noproxy "*" -s -o NUL -w "%{http_code}" http://127.0.0.1:8877/history
 Invoke-RestMethod http://127.0.0.1:8877/api/snapshot
-Invoke-RestMethod http://127.0.0.1:8877/api/history
 ```
 
 Expected:
 
 * `/poc` returns HTTP `200`.
-* `/history` returns HTTP `200`.
-* `/api/snapshot` returns `source=mock`, a track name, one or more drivers, `field_coverage`, `highlights`, and mock telemetry values.
-* `/api/history` returns the current in-memory session record and any completed sessions observed since the PoC process started.
-* Once a live or synthetic session finalizes, `/history` shows a telemetry report link for that completed session.
+* `/api/snapshot` returns `source=mock`, a track name, and one or more drivers.
 
 ---
 
@@ -571,7 +470,8 @@ If this still fails, try the exact map names shown in the dedicated-server secti
 If all dedicated-server map names fail but client mode works, the most likely explanations are:
 
 * the plugin is enabled for the client profile but not for the profile/configuration used by `Dedicated.exe`;
-* `Dedicated.exe` loaded the plugin and receives session callbacks, but mapped-buffer startup did not complete;
+* `Dedicated.exe` did not load the plugin DLL;
+* the dedicated-server process has not started a session that causes scoring output to be created;
 * the plugin created a map in a Windows namespace/session the PoC process cannot see;
 * the monitor or test tool is only checking the normal client map name and not the dedicated-server PID-suffixed names.
 
@@ -584,23 +484,7 @@ To distinguish those cases:
 5. Check the plugin log output under the rFactor 2 `UserData\Log` area.
 6. Run `python services/leaderboard/poc/list_memory_maps.py --pid <PID>` and check whether any rF2 maps are visible/openable.
 
-If the internals telemetry/scoring output files update while only the server is running, the DLL is loaded and receiving callbacks. That still does not prove that mapped files were created; use `list_memory_maps.py --pid <PID>` to verify maps directly.
-
-If `RF2SMMP_DebugOutput.txt` remains empty with `DebugOutputLevel = 1`, that is expected unless an error is logged. Startup/configuration lines use `CriticalInfo`. `DebugOutputLevel = 15` is enough for startup/config/error/warning output; `255` adds deeper timing/synchronization/verbose tracing.
-
-```json
-"DebugOutputLevel":15,
-"DebugOutputSource":32767,
-"DebugISIInternals":1
-```
-
-Then restart `Dedicated.exe` with no client connected and look for `Files mapped successfully.` or a mapping failure. If debug output appears only after a client joins, it is likely coming from the client plugin instance rather than the dedicated-server instance.
-
-If global map creation fails, either grant the server account the Windows `Create Global Objects` user right, or set `DedicatedServerMapGlobally = 0`, restart `Dedicated.exe`, and run the PoC from the same Windows user/session as the server.
-
-If the debug log still reports `DedicatedServerMapGlobally: 1` after editing it to `0`, the server is reading a different `CustomPluginVariables.json` than the one being edited, or the server was not restarted after the change.
-
-If `list_memory_maps.py --pid <PID>` shows only non-PID maps while a client is connected, those are client maps. Dedicated-server maps should be PID-suffixed or global PID-suffixed.
+If plugin log files are created but `RF2SMMP_DebugOutput.txt` remains empty, increase the plugin's debug output settings in `CustomPluginVariables.json` if available for that plugin version. A created-but-empty log file is useful evidence that the DLL loaded, but it is not by itself proof that scoring maps were created.
 
 ### Browser shows impossible values in live mode
 

@@ -459,8 +459,6 @@ Validation:
 
 ### Phase 5 - Telemetry web report MVP
 
-The current telemetry-report proof-of-concept findings, cadence measurements, and final PoC decision plan live in `docs/telemetry-report-poc-plan.md`. `docs/core-poc.md` records the current dedicated-server capture evidence and the recommendation to optimize/measure central collection before deciding on rig-local collectors.
-
 Human prerequisites:
 
 * Confirm telemetry report priority before this phase starts.
