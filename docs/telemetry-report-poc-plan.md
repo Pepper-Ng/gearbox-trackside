@@ -102,7 +102,7 @@ The current evidence is not enough to decide that. It shows that the current Pyt
 Agent implementation task:
 
 * Add a small command such as `services/leaderboard/poc/analyze_recordings.py` that reads one or more `telemetry-recordings/<session-id>/` folders or `tests/data/` fixtures.
-* Report, per session and per proper lap: sample count, lap time, effective samples/second, min/median/p95/max sample interval, repeated `lap_percent` count, telemetry update-counter gaps/repeats, gear-zero share, and channel change fractions for throttle, brake, steering, gear, speed, and lap percent.
+* Report, per session and per proper lap: sample count, lap time, effective samples/second, min/median/p95/max sample interval, repeated `lap_percent` count, telemetry update-counter gaps/repeats, gear-zero share, channel presence/change fractions, and weakest measured telemetry-channel observed-change cadence for throttle, brake, steering, speed, and G-force channels.
 * Output both console text and machine-readable JSON so the numbers can be copied into docs and compared across runs.
 * Add tests using the existing Bahrain fixtures in `services/leaderboard/poc/tests/data/`.
 
@@ -114,6 +114,8 @@ python -m unittest discover services/leaderboard/poc/tests
 ```
 
 Expected result: the analyzer reproduces the known finding that the qualifying capture is roughly 28-30 Hz on proper laps while the practice capture is lower and uneven.
+
+The analyzer now treats the weakest measured telemetry channel as part of the quality verdict. This is intentionally stricter than frame/sample cadence alone: if steering or G-force changes often but throttle or brake only changes at a much lower observed cadence, the weakest measured channel is surfaced and counted. Static channels are reported separately because a constant value cannot prove whether the source stopped updating or the driver input genuinely stayed constant.
 
 ### Step 2 - Baseline the current central server collector
 

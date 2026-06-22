@@ -67,8 +67,41 @@ class AnalyzeRecordingsTests(unittest.TestCase):
         self.assertEqual(analysis["driver_summaries"][0]["min_sample_interval_seconds"], 0.02)
         self.assertEqual(paths_result["sessions"][0]["status"], "raw telemetry only")
 
+    def test_quality_uses_weakest_measured_telemetry_channel(self) -> None:
+        frames = [{"type": "header", "schema": "gearbox-trackside.telemetry-raw.v1"}]
+        for index in range(10):
+            throttle = 0.2 if index < 4 else (0.4 if index < 8 else 0.6)
+            frames.append(
+                {
+                    "type": "frame",
+                    "t": round(20.0 + index * 0.02, 4),
+                    "u": index + 1,
+                    "r": 0.0004,
+                    "v": [raw_vehicle_row(9, 1, 200.0 + index * 0.02, throttle=throttle, steering=index / 10.0)],
+                }
+            )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            raw_file = Path(temp_dir) / "telemetry_raw.jsonl"
+            raw_file.write_text("\n".join(json.dumps(frame, separators=(",", ":")) for frame in frames) + "\n", encoding="utf-8")
 
-def raw_vehicle_row(driver_id: int, lap_number: int, elapsed_time: float) -> list:
+            analysis = analyze_raw_session(raw_file, target_hz=50.0, minimum_hz=45.0)
+
+        driver = analysis["driver_summaries"][0]
+        self.assertEqual(analysis["effective_sample_rate_hz"], 50.0)
+        self.assertEqual(analysis["quality_summary"]["status"], "fail")
+        self.assertEqual(analysis["quality_summary"]["basis"], "raw_frames_weakest_channel")
+        self.assertEqual(driver["weakest_channel_key"], "throttle_percent")
+        self.assertLess(driver["weakest_channel_observed_rate_hz"], 45.0)
+
+
+def raw_vehicle_row(
+    driver_id: int,
+    lap_number: int,
+    elapsed_time: float,
+    throttle: float = 0.8,
+    brake: float = 0.1,
+    steering: float = -0.2,
+) -> list:
     return [
         driver_id,
         lap_number,
@@ -76,9 +109,9 @@ def raw_vehicle_row(driver_id: int, lap_number: int, elapsed_time: float) -> lis
         99.0,
         0.02,
         4,
-        0.8,
-        0.1,
-        -0.2,
+        throttle,
+        brake,
+        steering,
         0.0,
         0.0,
         50.0,
