@@ -67,7 +67,7 @@ class AnalyzeRecordingsTests(unittest.TestCase):
         self.assertEqual(analysis["driver_summaries"][0]["min_sample_interval_seconds"], 0.02)
         self.assertEqual(paths_result["sessions"][0]["status"], "raw telemetry only")
 
-    def test_quality_uses_weakest_measured_telemetry_channel(self) -> None:
+    def test_quality_separates_preservation_from_channel_change_cadence(self) -> None:
         frames = [{"type": "header", "schema": "gearbox-trackside.telemetry-raw.v1"}]
         for index in range(10):
             throttle = 0.2 if index < 4 else (0.4 if index < 8 else 0.6)
@@ -88,8 +88,11 @@ class AnalyzeRecordingsTests(unittest.TestCase):
 
         driver = analysis["driver_summaries"][0]
         self.assertEqual(analysis["effective_sample_rate_hz"], 50.0)
-        self.assertEqual(analysis["quality_summary"]["status"], "fail")
-        self.assertEqual(analysis["quality_summary"]["basis"], "raw_frames_weakest_channel")
+        self.assertEqual(analysis["quality_summary"]["status"], "pass")
+        self.assertEqual(analysis["quality_summary"]["basis"], "raw_frames_preservation")
+        self.assertEqual(analysis["preservation_summary"], analysis["quality_summary"])
+        self.assertEqual(analysis["channel_quality_summary"]["status"], "fail")
+        self.assertEqual(analysis["channel_quality_summary"]["basis"], "drivers_observed_channel_changes")
         self.assertEqual(driver["weakest_channel_key"], "throttle_percent")
         self.assertLess(driver["weakest_channel_observed_rate_hz"], 45.0)
 

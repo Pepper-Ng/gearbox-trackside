@@ -10,7 +10,7 @@ from typing import Any
 from .reports import append_sample_to_record, build_report
 from .telemetry_capture import RAW_TELEMETRY_FILENAME, load_compact_frames, sample_from_compact_vehicle
 
-SESSION_ANALYSIS_VERSION = 2
+SESSION_ANALYSIS_VERSION = 3
 DEFAULT_TARGET_HZ = 50.0
 DEFAULT_MINIMUM_HZ = 45.0
 TELEMETRY_SAMPLES_FILENAME = "telemetry_samples.jsonl"
@@ -411,10 +411,16 @@ def analyze_session(
     for lap in report.get("all_laps", []):
         lap_summaries.append(analyze_report_lap(lap, target_hz=target_hz, minimum_hz=minimum_hz))
 
-    quality_summary = build_quality_summary(
+    preservation_summary = build_quality_summary(
         lap_summaries=lap_summaries,
         driver_summaries=drivers,
         raw_frame_summary=None,
+        target_hz=target_hz,
+        minimum_hz=minimum_hz,
+    )
+    channel_quality_summary = build_channel_quality_summary(
+        lap_summaries=lap_summaries,
+        driver_summaries=drivers,
         target_hz=target_hz,
         minimum_hz=minimum_hz,
     )
@@ -435,7 +441,9 @@ def analyze_session(
         "telemetry_sample_count": report.get("telemetry_sample_count"),
         "telemetry_raw_file": report.get("telemetry_raw_file"),
         "telemetry_import_stats": report.get("telemetry_import_stats"),
-        "quality_summary": quality_summary,
+        "quality_summary": preservation_summary,
+        "preservation_summary": preservation_summary,
+        "channel_quality_summary": channel_quality_summary,
         "driver_summaries": drivers,
         "laps": lap_summaries,
     }
@@ -457,15 +465,19 @@ def analyze_report_lap(
     lap_time_sample_rate = round(sample_count / lap_time, 4) if lap_time and lap_time > 0 else None
     expected_minimum_samples = int(lap_time * minimum_hz) + 1 if lap_time and minimum_hz > 0 else None
     expected_target_samples = int(lap_time * target_hz) + 1 if lap_time and target_hz > 0 else None
-    sample_decision_rate = lap_time_sample_rate or timing.get("effective_sample_rate_hz")
-    decision_candidates = [rate for rate in (sample_decision_rate, weakest_channel_rate) if rate is not None]
-    decision_rate = min(decision_candidates) if decision_candidates else None
-    if decision_rate is None:
+    preservation_rate = lap_time_sample_rate or timing.get("effective_sample_rate_hz")
+    if preservation_rate is None:
         quality_status = "unknown"
-    elif decision_rate >= minimum_hz:
+    elif preservation_rate >= minimum_hz:
         quality_status = "pass"
     else:
         quality_status = "fail"
+    if weakest_channel_rate is None:
+        channel_quality_status = "unknown"
+    elif weakest_channel_rate >= minimum_hz:
+        channel_quality_status = "pass"
+    else:
+        channel_quality_status = "fail"
     output = {
         "lap_id": lap.get("lap_id"),
         "driver_id": lap.get("driver_id"),
@@ -476,7 +488,7 @@ def analyze_report_lap(
         "lap_time_sample_rate_hz": lap_time_sample_rate,
         "weakest_channel_key": channel_activity.get("weakest_channel_key"),
         "weakest_channel_observed_rate_hz": weakest_channel_rate,
-        "effective_weakest_rate_hz": round(decision_rate, 4) if decision_rate is not None else None,
+        "effective_weakest_rate_hz": round(min(rate for rate in (preservation_rate, weakest_channel_rate) if rate is not None), 4) if preservation_rate is not None or weakest_channel_rate is not None else None,
         "channel_activity": channel_activity,
         "sample_deficit_to_target_hz_by_lap_time": max(0, expected_target_samples - sample_count) if expected_target_samples is not None else None,
         "sample_deficit_to_minimum_hz_by_lap_time": max(0, expected_minimum_samples - sample_count) if expected_minimum_samples is not None else None,
@@ -484,6 +496,8 @@ def analyze_report_lap(
         "proper": lap.get("eligible_for_report"),
         "coverage": lap.get("coverage"),
         "quality_status": quality_status,
+        "preservation_status": quality_status,
+        "channel_quality_status": channel_quality_status,
     }
     output.update(timing)
     return output
@@ -499,68 +513,40 @@ def build_quality_summary(
     proper_laps = [lap for lap in lap_summaries if lap.get("proper")]
     proper_rates = [safe_numeric(lap.get("lap_time_sample_rate_hz") or lap.get("effective_sample_rate_hz")) for lap in proper_laps]
     proper_rates = [rate for rate in proper_rates if rate is not None]
-    proper_weakest_rates = [safe_numeric(lap.get("effective_weakest_rate_hz")) for lap in proper_laps]
-    proper_weakest_rates = [rate for rate in proper_weakest_rates if rate is not None]
-    proper_weakest_channels = [lap for lap in proper_laps if lap.get("weakest_channel_key")]
     driver_rates = [safe_numeric(driver.get("effective_sample_rate_hz")) for driver in driver_summaries]
     driver_rates = [rate for rate in driver_rates if rate is not None]
-    driver_weakest_rates = [safe_numeric(driver.get("weakest_channel_observed_rate_hz")) for driver in driver_summaries]
-    driver_weakest_rates = [rate for rate in driver_weakest_rates if rate is not None]
     raw_rate = safe_numeric((raw_frame_summary or {}).get("effective_sample_rate_hz"))
     reasons = []
 
     if proper_rates:
-        decision_rates = proper_weakest_rates or proper_rates
-        below_minimum = sum(1 for rate in decision_rates if rate < minimum_hz)
-        status = "pass" if below_minimum == 0 else ("warn" if median(decision_rates) and median(decision_rates) >= minimum_hz else "fail")
+        below_minimum = sum(1 for rate in proper_rates if rate < minimum_hz)
+        status = "pass" if below_minimum == 0 else ("warn" if median(proper_rates) and median(proper_rates) >= minimum_hz else "fail")
         if below_minimum:
-            reasons.append(f"{below_minimum} proper laps below {minimum_hz:g} Hz by weakest measured telemetry channel")
+            reasons.append(f"{below_minimum} proper laps below {minimum_hz:g} Hz by captured row/sample cadence")
         else:
-            reasons.append(f"all proper laps at or above {minimum_hz:g} Hz by weakest measured telemetry channel")
-        if not proper_weakest_rates:
-            reasons.append("no proper-lap channel changed often enough to estimate weakest-channel cadence; using sample cadence")
+            reasons.append(f"all proper laps at or above {minimum_hz:g} Hz by captured row/sample cadence")
         return {
             "status": status,
-            "basis": "proper_laps_weakest_channel" if proper_weakest_rates else "proper_laps",
+            "basis": "proper_laps_preservation",
             "target_hz": target_hz,
             "minimum_hz": minimum_hz,
             "proper_lap_count": len(proper_rates),
             "proper_lap_rate_min_hz": round(min(proper_rates), 4),
             "proper_lap_rate_median_hz": round(median(proper_rates), 4) if proper_rates else None,
             "proper_lap_rate_max_hz": round(max(proper_rates), 4),
-            "proper_lap_weakest_rate_min_hz": round(min(proper_weakest_rates), 4) if proper_weakest_rates else None,
-            "proper_lap_weakest_rate_median_hz": round(median(proper_weakest_rates), 4) if proper_weakest_rates else None,
-            "proper_lap_weakest_rate_max_hz": round(max(proper_weakest_rates), 4) if proper_weakest_rates else None,
-            "proper_lap_weakest_channels": [
-                {
-                    "lap_id": lap.get("lap_id"),
-                    "driver_name": lap.get("driver_name"),
-                    "lap_number": lap.get("lap_number"),
-                    "weakest_channel_key": lap.get("weakest_channel_key"),
-                    "weakest_channel_observed_rate_hz": lap.get("weakest_channel_observed_rate_hz"),
-                    "effective_weakest_rate_hz": lap.get("effective_weakest_rate_hz"),
-                }
-                for lap in proper_weakest_channels
-            ],
             "proper_laps_below_minimum_count": below_minimum,
             "driver_rate_min_hz": round(min(driver_rates), 4) if driver_rates else None,
             "driver_rate_median_hz": round(median(driver_rates), 4) if driver_rates else None,
-            "driver_weakest_channel_rate_min_hz": round(min(driver_weakest_rates), 4) if driver_weakest_rates else None,
-            "driver_weakest_channel_rate_median_hz": round(median(driver_weakest_rates), 4) if driver_weakest_rates else None,
             "raw_frame_rate_hz": raw_rate,
             "reasons": reasons,
         }
 
     if raw_rate is not None:
-        decision_rate = min([rate for rate in [raw_rate, min(driver_weakest_rates) if driver_weakest_rates else None] if rate is not None])
-        status = "pass" if decision_rate >= minimum_hz else "fail"
-        if driver_weakest_rates:
-            reasons.append(f"raw telemetry frame cadence is {raw_rate:g} Hz; weakest measured channel cadence is {min(driver_weakest_rates):g} Hz")
-        else:
-            reasons.append(f"raw telemetry frame cadence is {raw_rate:g} Hz; no channel changed often enough to estimate weakest-channel cadence")
+        status = "pass" if raw_rate >= minimum_hz else "fail"
+        reasons.append(f"raw telemetry frame cadence is {raw_rate:g} Hz")
         return {
             "status": status,
-            "basis": "raw_frames_weakest_channel" if driver_weakest_rates else "raw_frames",
+            "basis": "raw_frames_preservation",
             "target_hz": target_hz,
             "minimum_hz": minimum_hz,
             "proper_lap_count": 0,
@@ -570,23 +556,17 @@ def build_quality_summary(
             "proper_laps_below_minimum_count": None,
             "driver_rate_min_hz": round(min(driver_rates), 4) if driver_rates else None,
             "driver_rate_median_hz": round(median(driver_rates), 4) if driver_rates else None,
-            "driver_weakest_channel_rate_min_hz": round(min(driver_weakest_rates), 4) if driver_weakest_rates else None,
-            "driver_weakest_channel_rate_median_hz": round(median(driver_weakest_rates), 4) if driver_weakest_rates else None,
             "raw_frame_rate_hz": raw_rate,
             "reasons": reasons,
         }
 
     if driver_rates:
-        decision_rates = driver_weakest_rates or driver_rates
-        below_minimum = sum(1 for rate in decision_rates if rate < minimum_hz)
+        below_minimum = sum(1 for rate in driver_rates if rate < minimum_hz)
         status = "pass" if below_minimum == 0 else "fail"
-        if driver_weakest_rates:
-            reasons.append(f"{below_minimum} drivers below {minimum_hz:g} Hz by weakest measured telemetry channel" if below_minimum else f"all drivers at or above {minimum_hz:g} Hz by weakest measured telemetry channel")
-        else:
-            reasons.append(f"{below_minimum} drivers below {minimum_hz:g} Hz" if below_minimum else f"all drivers at or above {minimum_hz:g} Hz")
+        reasons.append(f"{below_minimum} drivers below {minimum_hz:g} Hz by captured row/sample cadence" if below_minimum else f"all drivers at or above {minimum_hz:g} Hz by captured row/sample cadence")
         return {
             "status": status,
-            "basis": "drivers_weakest_channel" if driver_weakest_rates else "drivers",
+            "basis": "drivers_preservation",
             "target_hz": target_hz,
             "minimum_hz": minimum_hz,
             "proper_lap_count": 0,
@@ -596,8 +576,6 @@ def build_quality_summary(
             "proper_laps_below_minimum_count": None,
             "driver_rate_min_hz": round(min(driver_rates), 4),
             "driver_rate_median_hz": round(median(driver_rates), 4),
-            "driver_weakest_channel_rate_min_hz": round(min(driver_weakest_rates), 4) if driver_weakest_rates else None,
-            "driver_weakest_channel_rate_median_hz": round(median(driver_weakest_rates), 4) if driver_weakest_rates else None,
             "raw_frame_rate_hz": raw_rate,
             "reasons": reasons,
         }
@@ -614,10 +592,98 @@ def build_quality_summary(
         "proper_laps_below_minimum_count": None,
         "driver_rate_min_hz": None,
         "driver_rate_median_hz": None,
-        "driver_weakest_channel_rate_min_hz": None,
-        "driver_weakest_channel_rate_median_hz": None,
         "raw_frame_rate_hz": raw_rate,
         "reasons": ["no timestamped telemetry samples were available"],
+    }
+
+
+def build_channel_quality_summary(
+    lap_summaries: list[dict[str, Any]],
+    driver_summaries: list[dict[str, Any]],
+    target_hz: float,
+    minimum_hz: float,
+) -> dict[str, Any]:
+    proper_laps = [lap for lap in lap_summaries if lap.get("proper")]
+    proper_weakest_rates = [safe_numeric(lap.get("weakest_channel_observed_rate_hz")) for lap in proper_laps]
+    proper_weakest_rates = [rate for rate in proper_weakest_rates if rate is not None]
+    proper_weakest_channels = [lap for lap in proper_laps if lap.get("weakest_channel_key")]
+    driver_weakest_rates = [safe_numeric(driver.get("weakest_channel_observed_rate_hz")) for driver in driver_summaries]
+    driver_weakest_rates = [rate for rate in driver_weakest_rates if rate is not None]
+    reasons = []
+
+    if proper_weakest_rates:
+        below_minimum = sum(1 for rate in proper_weakest_rates if rate < minimum_hz)
+        status = "pass" if below_minimum == 0 else "fail"
+        reasons.append(
+            f"{below_minimum} proper laps below {minimum_hz:g} Hz by weakest observed channel-change cadence"
+            if below_minimum
+            else f"all proper laps at or above {minimum_hz:g} Hz by weakest observed channel-change cadence"
+        )
+        reasons.append("channel-change cadence is secondary evidence; constant inputs can make a healthy channel look static")
+        return {
+            "status": status,
+            "basis": "proper_laps_observed_channel_changes",
+            "target_hz": target_hz,
+            "minimum_hz": minimum_hz,
+            "proper_lap_count": len(proper_weakest_rates),
+            "proper_lap_weakest_rate_min_hz": round(min(proper_weakest_rates), 4),
+            "proper_lap_weakest_rate_median_hz": round(median(proper_weakest_rates), 4),
+            "proper_lap_weakest_rate_max_hz": round(max(proper_weakest_rates), 4),
+            "proper_laps_below_minimum_count": below_minimum,
+            "driver_weakest_channel_rate_min_hz": round(min(driver_weakest_rates), 4) if driver_weakest_rates else None,
+            "driver_weakest_channel_rate_median_hz": round(median(driver_weakest_rates), 4) if driver_weakest_rates else None,
+            "proper_lap_weakest_channels": [
+                {
+                    "lap_id": lap.get("lap_id"),
+                    "driver_name": lap.get("driver_name"),
+                    "lap_number": lap.get("lap_number"),
+                    "weakest_channel_key": lap.get("weakest_channel_key"),
+                    "weakest_channel_observed_rate_hz": lap.get("weakest_channel_observed_rate_hz"),
+                }
+                for lap in proper_weakest_channels
+            ],
+            "reasons": reasons,
+        }
+
+    if driver_weakest_rates:
+        below_minimum = sum(1 for rate in driver_weakest_rates if rate < minimum_hz)
+        status = "pass" if below_minimum == 0 else "fail"
+        reasons.append(
+            f"{below_minimum} drivers below {minimum_hz:g} Hz by weakest observed channel-change cadence"
+            if below_minimum
+            else f"all drivers at or above {minimum_hz:g} Hz by weakest observed channel-change cadence"
+        )
+        reasons.append("channel-change cadence is secondary evidence; constant inputs can make a healthy channel look static")
+        return {
+            "status": status,
+            "basis": "drivers_observed_channel_changes",
+            "target_hz": target_hz,
+            "minimum_hz": minimum_hz,
+            "proper_lap_count": 0,
+            "proper_lap_weakest_rate_min_hz": None,
+            "proper_lap_weakest_rate_median_hz": None,
+            "proper_lap_weakest_rate_max_hz": None,
+            "proper_laps_below_minimum_count": None,
+            "driver_weakest_channel_rate_min_hz": round(min(driver_weakest_rates), 4),
+            "driver_weakest_channel_rate_median_hz": round(median(driver_weakest_rates), 4),
+            "proper_lap_weakest_channels": [],
+            "reasons": reasons,
+        }
+
+    return {
+        "status": "unknown",
+        "basis": "no_measured_channel_changes",
+        "target_hz": target_hz,
+        "minimum_hz": minimum_hz,
+        "proper_lap_count": 0,
+        "proper_lap_weakest_rate_min_hz": None,
+        "proper_lap_weakest_rate_median_hz": None,
+        "proper_lap_weakest_rate_max_hz": None,
+        "proper_laps_below_minimum_count": None,
+        "driver_weakest_channel_rate_min_hz": None,
+        "driver_weakest_channel_rate_median_hz": None,
+        "proper_lap_weakest_channels": [],
+        "reasons": ["no telemetry channel changed often enough to estimate observed channel-change cadence"],
     }
 
 
@@ -684,10 +750,16 @@ def analyze_raw_session(
     }
     raw_frame_summary.update(frame_summary)
     worker_status = load_worker_status(raw_path.parent)
-    quality_summary = build_quality_summary(
+    preservation_summary = build_quality_summary(
         lap_summaries=[],
         driver_summaries=drivers,
         raw_frame_summary=raw_frame_summary,
+        target_hz=target_hz,
+        minimum_hz=minimum_hz,
+    )
+    channel_quality_summary = build_channel_quality_summary(
+        lap_summaries=[],
+        driver_summaries=drivers,
         target_hz=target_hz,
         minimum_hz=minimum_hz,
     )
@@ -708,7 +780,9 @@ def analyze_raw_session(
         "telemetry_sample_count": len(samples),
         "raw_frame_summary": raw_frame_summary,
         "worker_status": worker_status,
-        "quality_summary": quality_summary,
+        "quality_summary": preservation_summary,
+        "preservation_summary": preservation_summary,
+        "channel_quality_summary": channel_quality_summary,
         "driver_summaries": drivers,
         "laps": [],
     }
@@ -785,22 +859,26 @@ def discover_recording_directories(paths: list[Path]) -> list[Path]:
 
 def format_text_report(analysis: dict[str, Any]) -> str:
     lines: list[str] = []
-    quality = analysis.get("quality_summary") or {}
+    quality = analysis.get("preservation_summary") or analysis.get("quality_summary") or {}
+    channel_quality = analysis.get("channel_quality_summary") or {}
     lines.append(f"Session: {analysis.get('session_id')}")
     lines.append(f"Track: {analysis.get('track')}")
     lines.append(f"Session type: {analysis.get('session_type')}")
     lines.append(f"Status: {analysis.get('status')}")
-    lines.append(f"Quality: {quality.get('status')} basis={quality.get('basis')} target={analysis.get('target_hz')} Hz minimum={analysis.get('minimum_hz')} Hz")
+    lines.append(f"Preservation: {quality.get('status')} basis={quality.get('basis')} target={analysis.get('target_hz')} Hz minimum={analysis.get('minimum_hz')} Hz")
     if quality.get("proper_lap_rate_median_hz") is not None:
         lines.append(f"Proper lap Hz: min={quality.get('proper_lap_rate_min_hz')} median={quality.get('proper_lap_rate_median_hz')} max={quality.get('proper_lap_rate_max_hz')} below_min={quality.get('proper_laps_below_minimum_count')}")
-    if quality.get("proper_lap_weakest_rate_median_hz") is not None:
-        lines.append(f"Proper lap weakest-channel Hz: min={quality.get('proper_lap_weakest_rate_min_hz')} median={quality.get('proper_lap_weakest_rate_median_hz')} max={quality.get('proper_lap_weakest_rate_max_hz')}")
-    if quality.get("driver_weakest_channel_rate_median_hz") is not None:
-        lines.append(f"Driver weakest-channel Hz: min={quality.get('driver_weakest_channel_rate_min_hz')} median={quality.get('driver_weakest_channel_rate_median_hz')}")
     if quality.get("raw_frame_rate_hz") is not None:
         lines.append(f"Raw frame Hz: {quality.get('raw_frame_rate_hz')}")
     for reason in quality.get("reasons") or []:
-        lines.append(f"Quality reason: {reason}")
+        lines.append(f"Preservation reason: {reason}")
+    lines.append(f"Channel quality: {channel_quality.get('status')} basis={channel_quality.get('basis')}")
+    if channel_quality.get("proper_lap_weakest_rate_median_hz") is not None:
+        lines.append(f"Proper lap weakest measured channel Hz: min={channel_quality.get('proper_lap_weakest_rate_min_hz')} median={channel_quality.get('proper_lap_weakest_rate_median_hz')} max={channel_quality.get('proper_lap_weakest_rate_max_hz')}")
+    if channel_quality.get("driver_weakest_channel_rate_median_hz") is not None:
+        lines.append(f"Driver weakest measured channel Hz: min={channel_quality.get('driver_weakest_channel_rate_min_hz')} median={channel_quality.get('driver_weakest_channel_rate_median_hz')}")
+    for reason in channel_quality.get("reasons") or []:
+        lines.append(f"Channel quality note: {reason}")
     lines.append(f"Sample count: {analysis.get('sample_count')}")
     lines.append(f"Duration: {analysis.get('sample_duration_seconds')} s")
     lines.append(f"Effective sample rate: {analysis.get('effective_sample_rate_hz')} Hz")
@@ -844,7 +922,8 @@ def format_text_report(analysis: dict[str, Any]) -> str:
                 f"samples={lap.get('sample_count')} lap_time={lap.get('lap_time')}s "
                 f"rate={lap.get('lap_time_sample_rate_hz')}Hz p95={lap.get('p95_sample_interval_seconds')}s "
                 f"weakest={lap.get('weakest_channel_key')}:{lap.get('weakest_channel_observed_rate_hz')}Hz "
-                f"effective_weakest={lap.get('effective_weakest_rate_hz')}Hz max_gap={lap.get('max_sample_interval_seconds')}s status={lap.get('quality_status')}"
+                f"effective_weakest={lap.get('effective_weakest_rate_hz')}Hz max_gap={lap.get('max_sample_interval_seconds')}s "
+                f"preservation={lap.get('preservation_status')} channel={lap.get('channel_quality_status')}"
             )
         lines.append("")
     return "\n".join(lines)

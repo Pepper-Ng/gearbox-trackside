@@ -103,6 +103,9 @@ Agent implementation task:
 
 * Add a small command such as `services/leaderboard/poc/analyze_recordings.py` that reads one or more `telemetry-recordings/<session-id>/` folders or `tests/data/` fixtures.
 * Report, per session and per proper lap: sample count, lap time, effective samples/second, min/median/p95/max sample interval, repeated `lap_percent` count, telemetry update-counter gaps/repeats, gear-zero share, channel presence/change fractions, and weakest measured telemetry-channel observed-change cadence for throttle, brake, steering, speed, and G-force channels.
+* Separate the analyzer verdict into two stages:
+  * preservation: did the collector preserve the source telemetry frames/vehicle rows near the target cadence, with few/no update-counter gaps and acceptable p95/max intervals?
+  * channel quality: after preservation is good, does the data inside those preserved rows look fine-grained or jumpy per channel?
 * Output both console text and machine-readable JSON so the numbers can be copied into docs and compared across runs.
 * Add tests using the existing Bahrain fixtures in `services/leaderboard/poc/tests/data/`.
 
@@ -115,7 +118,7 @@ python -m unittest discover services/leaderboard/poc/tests
 
 Expected result: the analyzer reproduces the known finding that the qualifying capture is roughly 28-30 Hz on proper laps while the practice capture is lower and uneven.
 
-The analyzer now treats the weakest measured telemetry channel as part of the quality verdict. This is intentionally stricter than frame/sample cadence alone: if steering or G-force changes often but throttle or brake only changes at a much lower observed cadence, the weakest measured channel is surfaced and counted. Static channels are reported separately because a constant value cannot prove whether the source stopped updating or the driver input genuinely stayed constant.
+The first pass/fail decision is preservation, not per-channel smoothness. If the collector captures all source frames/vehicle rows near 50 Hz, it has preserved the picture the server-side plugin exposed. Only after that should channel quality be judged: if steering or G-force changes often but throttle or brake changes at a much lower observed cadence, the analyzer surfaces that as weakest measured channel data quality. Static channels are reported separately because a constant value cannot prove whether the source stopped updating or the driver input genuinely stayed constant.
 
 ### Step 2 - Baseline the current central server collector
 
@@ -154,7 +157,7 @@ Simple agent procedure on the actual system:
 
 Decision check:
 
-* If proper laps are consistently at or above about 45 Hz per active driver, with no unexplained long gaps and acceptable channel quality, the central collector path is good enough for final implementation.
+* If proper laps are consistently at or above about 45 Hz per active driver, with no unexplained long gaps, the collector is preserving the server-side source well enough. Then inspect channel quality to decide whether the preserved source data is fine-grained enough for reports.
 * If proper laps are far below 45 Hz, continue to Step 3 before changing architecture.
 
 ### Step 3 - Isolate source cadence from collector overhead
