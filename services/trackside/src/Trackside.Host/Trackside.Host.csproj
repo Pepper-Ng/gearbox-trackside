@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <AssemblyName>Trackside.Host</AssemblyName>
+    <RootNamespace>Trackside.Host</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Update="Fixtures\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Update="wwwroot\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Trackside.Application\Trackside.Application.csproj" />
+    <ProjectReference Include="..\Trackside.Domain\Trackside.Domain.csproj" />
+    <ProjectReference Include="..\Trackside.Infrastructure\Trackside.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

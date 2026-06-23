@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="src/Trackside.Application/Trackside.Application.csproj" />
+  <Project Path="src/Trackside.Domain/Trackside.Domain.csproj" />
+  <Project Path="src/Trackside.Host/Trackside.Host.csproj" />
+  <Project Path="src/Trackside.Infrastructure/Trackside.Infrastructure.csproj" />
+  <Project Path="src/Trackside.RigAgent/Trackside.RigAgent.csproj" />
+  <Project Path="tests/Trackside.Tests/Trackside.Tests.csproj" />
+</Solution>

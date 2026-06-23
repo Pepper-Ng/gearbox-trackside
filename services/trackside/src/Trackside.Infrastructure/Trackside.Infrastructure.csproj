@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <AssemblyName>Trackside.Infrastructure</AssemblyName>
+    <RootNamespace>Trackside.Infrastructure</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Trackside.Application\Trackside.Application.csproj" />
+    <ProjectReference Include="..\Trackside.Domain\Trackside.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

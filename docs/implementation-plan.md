@@ -19,7 +19,7 @@ Trackside provides:
 * Later per-driver telemetry web reports.
 * Later PDF/printable telemetry reports.
 
-Current planning status: Phase 0A PoC complete. The live data path and telemetry-source direction are validated enough to proceed into baseline implementation phases.
+Current planning status: Phase 0A PoC is complete, the telemetry/source direction is decided, and ADR-0001 has accepted .NET / ASP.NET Core for the production host. The repo is ready for Phase 0B scaffolding; the production `services/trackside` backend and React kiosk app have not been created yet.
 
 Confirmed venue facts:
 
@@ -63,15 +63,18 @@ When a phase needs rFactor 2, the plan must word that as a prerequisite or valid
 ### Decisions already made
 
 * Frontend/kiosk/admin UI: **React + Vite + TypeScript**.
-* Live update style: **push-based updates**, using WebSockets or SignalR-style behavior rather than slow polling.
-* Storage default: **SQLite**, unless a stack spike finds a strong reason otherwise.
+* Backend host: **.NET / ASP.NET Core**, per `docs/architecture-decisions.md`.
+* Live update style: **SignalR push updates** rather than slow polling.
+* Storage default: **SQLite**.
 * Camera plugin language: **C++**, when that phase is reached, because the rFactor 2 Internals Plugin SDK requires it.
 
-### Backend stack spike
+### Backend stack decision
 
 The backend stack decision is complete. `docs/architecture-decisions.md` records the accepted choice: **.NET / ASP.NET Core** for the production host, with Python retained only for diagnostics and optional offline/report workloads.
 
 Phase 0B should now execute against that decision rather than reopen the stack comparison. The completed Phase 0A PoC informed the choice, but the temporary Python implementation is no longer the target production shape.
+
+Current repository finding: the runnable implementation is still the Python Phase 0A PoC plus the vendored shared-memory plugin/monitor source. The PoC compiles and its tests pass, including fixture report generation, telemetry analysis, and Windows shared-memory offset parsing. Treat that code as reference evidence and diagnostics while building the production .NET host.
 
 ---
 
@@ -206,12 +209,12 @@ The first architecture target is a venue-local web system fed by rFactor 2 timin
 [rF2 shared-memory/scoring bridge]
             |
             v
-[Trackside backend service - stack chosen in Phase 0B]
+[Trackside Host - .NET / ASP.NET Core]
             |-- SQLite storage
             |-- Shared-memory/scoring parser or adapter
             |-- Fixture/replay data adapter
             |-- Live timing/session API
-            |-- WebSocket/SignalR-style live updates
+            |-- SignalR live updates
             |-- Staff/admin API
             `-- Later telemetry report API
 
@@ -225,7 +228,7 @@ The first architecture target is a venue-local web system fed by rFactor 2 timin
 
 Implementation rule: design the backend so its data source is replaceable. The first data source should be fixture/replay snapshots. The second data source should read real rFactor 2 shared-memory/scoring data once the user provides a local or venue environment.
 
-Important data-source assumption: treat the dedicated server as authoritative for timing/results if technically possible. The data-source spike must prove whether the shared-memory/scoring bridge exposes the needed session, lap, sector, position, weather, and participant data from the dedicated server process.
+Important data-source assumption: treat the dedicated server as authoritative for timing/results if technically possible. Phase 0A proved enough dedicated-server shared-memory scoring and telemetry coverage to start implementation; keep venue/live validation in the rollout path because exact field coverage and permissions can still vary by machine and rFactor 2 setup.
 
 Fallbacks if server-side data is insufficient:
 
@@ -314,28 +317,31 @@ Outcome:
 
 ### Phase 0B - Repository and architecture baseline
 
+Status: complete for architecture/scaffold baseline. Live rFactor 2 parser validation remains pending until a real rFactor 2 run or captured memory-map data is available. Memory-map reading, SQLite persistence, staff controls, and the real scoring board remain future work.
+
 Human prerequisites:
 
-* Review the backend stack spike result before feature implementation continues.
+* Review or reopen ADR-0001 only if the accepted .NET / ASP.NET Core direction is being challenged.
 * Provide local rFactor 2 access only if live parser validation is expected during Phase 0B. Otherwise Phase 0B proceeds with mocks.
 
 Agent implementation tasks:
 
 * Keep the monorepo structure: `/plugin`, `/services`, `/web`, `/docs`.
-* Run the backend stack spike and write `docs/architecture-decisions.md`.
-* Create the backend project layout using the selected stack.
-* Create the React/Vite/TypeScript kiosk/admin app layout in `web/kiosk`.
-* Add a documented mock scoring/session snapshot format.
-* Add fixture loading in the backend so the UI can run without rFactor 2.
-* Add basic build/test commands to the relevant READMEs.
-* Inspect `rF2SharedMemoryMapPlugin` docs/headers/examples and list required scoring fields for Phase 1.
+* Use ADR-0001 as the implementation baseline: .NET 10 / ASP.NET Core 10, C# 14, SignalR, SQLite, and Node.js only for React/Vite tooling.
+* Create the backend project layout using the selected stack. - Done for Phase 0B scaffold.
+* Create the React/Vite/TypeScript kiosk/admin app layout in `web/kiosk`. - Done for basic kiosk shell.
+* Add a documented mock scoring/session snapshot format. - Done as a normalized fixture contract.
+* Add fixture loading in the backend so the UI can run without rFactor 2. - Done.
+* Add basic build/test commands to the relevant READMEs. - Done for `services/trackside` and `web/kiosk`.
+* Port the PoC shared-memory map-name, wrapper-offset, zero-offset, and field-mapping evidence into production parser tests. - Parser-offset structure is in place; full field mapping remains future shared-memory work.
+* Inspect `rF2SharedMemoryMapPlugin` docs/headers/examples as needed to list any remaining required scoring fields for Phase 1. - Existing PoC evidence is enough for fixture-first Phase 1; live parser field validation remains pending.
 
 Validation:
 
-* Backend starts from mock fixtures.
-* Kiosk app displays a mock live session table.
-* README commands reproduce the local mock run.
-* Stack decision is documented with runtime versions, commands, and rationale.
+* Backend starts from mock fixtures. - Done.
+* Kiosk app displays a mock live session table. - Done as a basic shell.
+* README commands reproduce the local mock run. - Done.
+* Parser tests cover wrapper-offset and zero-offset shared-memory payloads. - Done.
 
 ### Phase 1 - Live session leaderboard MVP
 
@@ -349,7 +355,7 @@ Agent implementation tasks:
 * Build the normalized live session model: session type, track, weather/temperature, drivers/rigs, laps, sectors, best laps, current laps, race position, and gaps where available.
 * Build a fixture-backed scoring/session source.
 * Build a shared-memory-backed scoring/session source behind the same interface once field layout is known, guarded so the app still runs without rFactor 2.
-* Build WebSocket/SignalR-style live update flow from backend to browser.
+* Build the SignalR live update flow from backend to browser.
 * Build the public kiosk page with session summary and live table.
 * Sort practice/quali by fastest lap and race by current position.
 * Add fastest-lap/sector highlighting.
@@ -499,15 +505,13 @@ Venue validation:
 
 If an implementation agent starts from this document, begin with the post-PoC baseline:
 
-1. Run the backend stack spike and write `docs/architecture-decisions.md`.
-2. Create the backend project layout using the selected stack.
-3. Create the React/Vite/TypeScript kiosk/admin app layout in `web/kiosk`.
-4. Define fixture-backed live session snapshots for practice, qualifying, and race flows.
-5. Serve fixture-backed live session data from the backend.
-6. Render the public kiosk table and session summary from fixture data.
-7. Add automated tests for session sorting, fastest-lap/sector highlighting, and alias mapping.
-8. Implement the shared-memory data source behind the same interface once the production backend shape exists.
-9. Carry forward the telemetry source requirements from `docs/telemetry-report-poc-plan.md` when report work begins.
+1. Build fixture-backed live-session ordering for practice, qualifying, and race flows.
+2. Add fastest-lap and fastest-sector highlight calculation to the normalized model.
+3. Add staff/display alias mapping for fixed rig names such as `Setup1` and `Setup2`.
+4. Upgrade the kiosk shell from a dummy fixture table to the first usable live board.
+5. Add automated tests for session sorting, fastest-lap/sector highlighting, alias mapping, and SignalR/client recovery contracts.
+6. Implement the shared-memory data source behind the same interface once fixture-backed behavior is stable and live validation input is available.
+7. Carry forward the telemetry source requirements from `docs/telemetry-report-poc-plan.md` when report work begins.
 
 Do not restart Phase 0A, Steam setup, venue setup, printer setup, or camera plugin work unless the user explicitly provides those prerequisites and asks for that phase.
 

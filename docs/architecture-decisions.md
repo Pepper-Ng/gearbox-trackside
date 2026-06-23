@@ -72,8 +72,8 @@ The repo should add a `global.json` when the .NET solution is scaffolded so cont
 Phase 0B backend scaffolding must implement these commands from the repository root:
 
 ```powershell
-dotnet run --project services\trackside\Trackside.Host -- --source fixture --fixture services\leaderboard\poc\fixtures\mock_scoring_snapshot.json
-dotnet run --project services\trackside\Trackside.Host -- --source shared-memory --pid <Dedicated.exe PID>
+dotnet run --project services\trackside\src\Trackside.Host -- --source fixture --fixture Fixtures\mock-live-session.json
+dotnet run --project services\trackside\src\Trackside.Host -- --source shared-memory --pid <Dedicated.exe PID>
 ```
 
 The host should bind to localhost by default, for example:
@@ -101,7 +101,7 @@ npm --prefix web\kiosk run dev
 Phase 0B scaffolding must implement:
 
 ```powershell
-dotnet test services\trackside\Trackside.sln
+dotnet test services\trackside\Trackside.slnx
 npm --prefix web\kiosk test
 ```
 
@@ -173,6 +173,35 @@ Decision:
 * Configuration, status, diagnostics, and staff controls should be local web pages hosted by `Trackside.Host`; the tray menu should mostly open those pages and expose obvious start/stop/status actions.
 
 This keeps the user-facing product as one installed Trackside application while avoiding the Windows limitation that true services cannot directly own an interactive tray icon in the user's desktop session.
+
+### Host and rig-agent binary split decision
+
+Trackside should build separate binaries for the venue host and rig/client machines.
+
+Decision:
+
+* `Trackside.Host` is the central venue process. It owns the browser UI, APIs, SignalR hub, persistence, scoring source, orchestration, and update policy.
+* `Trackside.RigAgent` is scaffolded as a future rig-side worker process. It is intentionally idle in Phase 0B.
+* The rig agent may later collect rig-local telemetry, prepare setup/player names before rFactor 2 joins a session, receive host commands for spectator-mode assignment, and report local health/status.
+* The host and rig agent must communicate through explicit HTTP/SignalR-style contracts or a future command channel, not shared files hidden behind the UI.
+* Browser clients remain browser clients. The term "rig agent" is used for machine-side services to avoid confusing them with the React kiosk/admin client.
+
+This split keeps the current central-server deployment simple while leaving room for higher-quality rig-local telemetry or remote rig orchestration if venue testing proves those are needed.
+
+### Packaging, service, and update decision
+
+Initial deployment should use versioned file-based bundles plus install/update scripts, not a full MSI-style installer.
+
+Decision:
+
+* Early venue builds should be published as versioned folders or archives that can be copied or extracted into a known install directory.
+* Production host operation should be a Windows Service or service-like background process. Tray mode remains useful for development and possibly for an optional interactive companion, but it should not be the required production runtime.
+* Rig agents, if used, should also run as Windows services or scheduled/service-like background processes on the rigs.
+* A full installer can be added later if service setup, shortcuts, firewall rules, or non-technical staff rollout become painful enough to justify it.
+* Remote updates should be designed as a later, explicit feature: the host checks a signed/versioned update manifest, shows update availability in the admin dashboard, downloads a versioned bundle, stops affected services, swaps files with rollback, and restarts services.
+* Do not auto-apply updates silently during sessions. Staff/admin approval and a safe restart window are required.
+
+This gives the venue a practical path for remote maintenance without making update logic part of the Phase 0B scaffold or the live timing path.
 
 ### Storage decision
 
