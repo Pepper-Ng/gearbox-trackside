@@ -19,7 +19,7 @@ Trackside provides:
 * Later per-driver telemetry web reports.
 * Later PDF/printable telemetry reports.
 
-Current planning status: exploratory planning. The goal is to refine enough detail to start development locally, then validate against the venue when access is available.
+Current planning status: Phase 0A PoC complete. The live data path and telemetry-source direction are validated enough to proceed into baseline implementation phases.
 
 Confirmed venue facts:
 
@@ -69,25 +69,9 @@ When a phase needs rFactor 2, the plan must word that as a prerequisite or valid
 
 ### Backend stack spike
 
-The backend stack is not finalized yet. Phase 0B must run a short stack spike and choose one backend stack before full feature implementation begins. Phase 0A may use the quickest reasonable temporary implementation to prove the live rFactor 2-to-browser data path; that PoC should inform the stack decision rather than block on a perfect architecture.
+The backend stack decision is complete. `docs/architecture-decisions.md` records the accepted choice: **.NET / ASP.NET Core** for the production host, with Python retained only for diagnostics and optional offline/report workloads.
 
-Candidate stacks:
-
-* **.NET / ASP.NET Core**: strong Windows service hosting, SignalR, typed binary parsing, memory-mapped file support, SQLite support.
-* **Python / FastAPI**: fast iteration, strong data/reporting ecosystem for later telemetry charts and PDFs.
-* **TypeScript / Node**: one language across backend and frontend, good web tooling, but less obviously ideal for binary/shared-memory parsing on Windows.
-
-Spike output must be a short decision record in `docs/architecture-decisions.md` that includes:
-
-* chosen backend stack and why;
-* selected runtime versions;
-* package manager choice;
-* local run commands;
-* test commands;
-* how the backend will expose push updates to the React kiosk;
-* how the backend will abstract mock data versus real rFactor 2 data.
-
-The spike should prefer a concrete decision over prolonged comparison. If no strong evidence appears, default to .NET / ASP.NET Core because the deployment target is Windows and shared-memory parsing is central to the project.
+Phase 0B should now execute against that decision rather than reopen the stack comparison. The completed Phase 0A PoC informed the choice, but the temporary Python implementation is no longer the target production shape.
 
 ---
 
@@ -95,7 +79,7 @@ The spike should prefer a concrete decision over prolonged comparison. If no str
 
 | Feature | Priority | Feasibility | Repo implementation? | Setup/venue dependency? |
 | --- | ---: | --- | --- | --- |
-| Core live-data browser PoC | First | High if shared-memory data is available locally | Yes: one minimal backend command and one simple browser page | User must provide local rFactor 2 session for live proof |
+| Core live-data browser PoC | Complete | Proven for current scope | Done; evidence in `docs/core-poc.md` | Revalidate on venue hardware during rollout |
 | Live session leaderboard/kiosk | First | High | Yes: backend, fixtures, live model, UI, tests | Real rFactor 2 only needed for live validation |
 | Staff aliases and display controls | First | High | Yes: admin UI/API/storage | Staff workflow details may need user confirmation |
 | Historical daily/weekly/monthly boards | Secondary | High | Yes: storage/query/UI | Needs enough sample sessions to validate |
@@ -104,7 +88,7 @@ The spike should prefer a concrete decision over prolonged comparison. If no str
 | Spectator camera feed/direction | Optional/later | Medium-high | Yes: C++ plugin if needed | Needs game-capable spectator setup and licensing decision |
 | Incident detection / auto replay | Deferred | Medium | Yes: detection/replay control after camera exists | Needs live tuning sessions |
 
-Overall: the first thing to prove is the core live-data loop: rFactor 2 session/player data reaches a browser with minimal moving parts. After that, the live leaderboard and staff controls are the best first product slice. They can be developed against mock scoring snapshots before rFactor 2 is available, while real rFactor 2 data validates the parser and live update pipeline. Printing should stay late because no venue printer exists. Camera direction is feasible but depends on a game-capable spectator client or new hardware; the current lean display PC should not be assumed capable of running rFactor 2.
+Overall: the core live-data loop is proven. The live leaderboard and staff controls are the best first product slice. They can be developed against mock scoring snapshots while real rFactor 2 data validates the parser and live update pipeline. Printing should stay late because no venue printer exists. Camera direction is feasible but depends on a game-capable spectator client or new hardware; the current lean display PC should not be assumed capable of running rFactor 2.
 
 ---
 
@@ -249,6 +233,8 @@ Fallbacks if server-side data is insufficient:
 * read from one selected sim rig for proof of concept;
 * aggregate from all rigs only if a central source is not viable.
 
+Telemetry implementation default: use dedicated-server telemetry first, with source-adapter modularity preserved for a future rig-local collector option. The decision details and rationale live in `docs/telemetry-report-poc-plan.md`.
+
 The backend service host is a venue decision, not an implementation guess. Prefer the dedicated server PC if it has enough headroom and the venue accepts installing services there. Alternatives are the display/kiosk PC if suitable, or a small separate mini PC.
 
 ---
@@ -297,7 +283,7 @@ When rFactor 2 or venue access is not available, the agent should work from thes
 
 | # | Risk / question | Resolution path | Blocking? |
 | --- | --- | --- | --- |
-| R1 | Can the shared-memory/scoring bridge expose enough data from the dedicated server? | Spike locally when rFactor 2 is supplied; record source process, fields present/missing, and chosen adapter path. | Blocks final data architecture, not mock UI work. |
+| R1 | Can the shared-memory/scoring bridge expose enough data from the dedicated server? | Resolved by Phase 0A PoC for current scope; keep validating on venue hardware during rollout. | No for implementation start; validate again during venue deployment. |
 | R2 | Where should backend services run at the venue? | Defer until venue specs are available; decide server PC vs display PC vs mini PC with a written deployment note. | Blocks venue deployment only. |
 | R3 | Can a spectator-only client join without owning F1 car/track DLC? | Venue/user join test with a non-DLC account when camera work becomes active. | Blocks camera hardware/licensing only. |
 | R4 | Is the existing display PC too lean for rFactor 2? | Venue/user spec check and optional spectator performance test. | Blocks camera feed only. |
@@ -317,32 +303,14 @@ The phase lists below distinguish human prerequisites, agent implementation work
 
 ### Phase 0A - Core live-data proof of concept
 
-Purpose: answer the central feasibility question as quickly as possible: can rFactor 2 session/player data be extracted from the shared-memory map or equivalent local source and shown in a browser with minimal software?
+Status: complete.
 
-This phase is intentionally smaller than the full leaderboard MVP. It should not include polished UI, historical storage, staff controls, aliases, printing, telemetry reports, or camera work.
+Outcome:
 
-Human prerequisites:
-
-* Provide a local Windows rFactor 2 Dedicated Server and client session if live validation is expected.
-* Start a simple session with AI drivers connected so there is changing session/player data.
-* Install or allow use of the shared-memory/scoring bridge, or provide captured shared-memory/scoring snapshots if live access is not available.
-* Confirm the local URL/port can be opened in a browser on the same machine.
-
-Agent implementation tasks:
-
-* Build the smallest runnable backend command or executable that can read one scoring/session source.
-* Prefer reading live shared-memory/scoring data if the user provides a running local rFactor 2 setup; otherwise implement the same shape against captured or synthetic snapshots.
-* Expose a single local HTTP page such as `/poc`.
-* Display only enough data to prove the core idea: session name/type if available, track if available, current drivers/player names, position/order if available, current/best lap if available, and a visible timestamp/update counter.
-* Update the browser automatically using the simplest push/poll method available in the chosen spike implementation.
-* Add a short `docs/core-poc.md` note explaining how to run the PoC, what source was used, which fields appeared, which fields were missing, and whether the result supports continuing to the full leaderboard.
-
-Validation:
-
-* One command starts the backend/PoC server.
-* One browser page shows live or replayed rFactor 2 session/player data.
-* When AI drivers join or session data changes, the browser visibly updates without refresh.
-* The PoC records a clear go/no-go decision for the full live leaderboard path.
+* Dedicated-server shared memory is viable for live scoring/session data.
+* Server-published telemetry is viable for telemetry report capture.
+* Evidence and reproduction commands live in `docs/core-poc.md`.
+* Telemetry-source policy lives in `docs/telemetry-report-poc-plan.md`.
 
 ### Phase 0B - Repository and architecture baseline
 
@@ -459,6 +427,8 @@ Validation:
 
 ### Phase 5 - Telemetry web report MVP
 
+The current telemetry-report proof-of-concept findings and final source decision live in `docs/telemetry-report-poc-plan.md`. `docs/core-poc.md` records the source-preservation evidence from the completed Phase 0A PoC.
+
 Human prerequisites:
 
 * Confirm telemetry report priority before this phase starts.
@@ -466,7 +436,10 @@ Human prerequisites:
 
 Agent implementation tasks:
 
-* Confirm whether telemetry is best captured from server, spectator client, or each rig using documented evidence.
+* Implement central server-side telemetry capture as default mode.
+* Use a dedicated high-rate telemetry loop that polls at `100 Hz` by default, with lower-rate scoring/session reads.
+* Keep report generation and driver-statistics pipelines source-agnostic through a normalized telemetry ingestion interface.
+* Add configuration-driven telemetry source selection so rig-local collectors can be enabled later without redesigning downstream report/analysis code.
 * Capture or parse per-driver/per-lap channels such as throttle, brake, steering, and gear.
 * Store telemetry with enough identity/session metadata to associate it with aliases and historical laps.
 * Build a browser-based per-driver report page.
@@ -522,22 +495,21 @@ Venue validation:
 
 ---
 
-## 9. Agent-Ready First Work Package
+## 9. Agent-Ready Next Work Package
 
-If an implementation agent starts from this document, begin here:
+If an implementation agent starts from this document, begin with the post-PoC baseline:
 
-1. Start with Phase 0A if the user can provide a local rFactor 2 server/client session: build the smallest command/browser PoC that shows live or captured session/player data.
-2. Write `docs/core-poc.md` with the run command, data source, visible fields, missing fields, and go/no-go decision for the full leaderboard path.
-3. If local rFactor 2 is not available yet, build the same browser shape against replayed fixture snapshots and mark live validation pending.
-4. Run the backend stack spike and write `docs/architecture-decisions.md`.
-5. Create backend and React/Vite kiosk/admin project scaffolding using the selected stack.
-6. Define the mock live session snapshot schema with practice, qualifying, and race examples.
-7. Serve fixture-backed live session data from the backend.
-8. Render the public kiosk table and session summary from fixture data.
-9. Add automated tests for session sorting and alias mapping.
-10. Document how the user can later provide local rFactor 2 snapshots for parser validation.
+1. Run the backend stack spike and write `docs/architecture-decisions.md`.
+2. Create the backend project layout using the selected stack.
+3. Create the React/Vite/TypeScript kiosk/admin app layout in `web/kiosk`.
+4. Define fixture-backed live session snapshots for practice, qualifying, and race flows.
+5. Serve fixture-backed live session data from the backend.
+6. Render the public kiosk table and session summary from fixture data.
+7. Add automated tests for session sorting, fastest-lap/sector highlighting, and alias mapping.
+8. Implement the shared-memory data source behind the same interface once the production backend shape exists.
+9. Carry forward the telemetry source requirements from `docs/telemetry-report-poc-plan.md` when report work begins.
 
-Do not start with Steam, venue setup, printer setup, or camera plugin work unless the user explicitly provides those prerequisites and asks for that phase.
+Do not restart Phase 0A, Steam setup, venue setup, printer setup, or camera plugin work unless the user explicitly provides those prerequisites and asks for that phase.
 
 ---
 
@@ -547,7 +519,7 @@ Do not start with Steam, venue setup, printer setup, or camera plugin work unles
 
 **Dependency policy**:
 
-* Reuse `rF2SharedMemoryMapPlugin` for telemetry/scoring export if it satisfies the data-source spike.
+* Reuse `rF2SharedMemoryMapPlugin` for telemetry/scoring export unless venue validation reveals a new blocker.
 * Use the official Studio 397 Internals Plugin SDK directly for camera work.
 * Keep game-process plugins narrow and defensive.
 * Do not put storage, PDF generation, network servers, or complex parsing inside the game plugin.

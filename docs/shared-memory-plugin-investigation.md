@@ -18,6 +18,11 @@ Therefore:
 * The PoC should target the dedicated-server PID when using `Dedicated.exe` as the source of truth.
 * No source patch to the DLL is currently justified. The public plugin behavior matches the source and works once configuration and namespace settings are correct.
 
+Post-investigation addendum (June 2026):
+
+* Phase 0A confirmed the dedicated-server scoring and telemetry maps are viable for the current project scope.
+* Telemetry collector policy and source-modularity decisions are documented in `docs/telemetry-report-poc-plan.md`.
+
 ---
 
 ## Plugin Lifecycle
