@@ -1,0 +1,10 @@
+{
+  "FileVersion": 2,
+  "Id": "576b9ef6-082f-5cd3-1e55-8c2122f98d1d",
+  "Items": [
+    {
+      "Id": "54d3f7bf-62b1-46bd-b568-d7c1111ecc25",
+      "Command": "--console"
+    }
+  ]
+}
