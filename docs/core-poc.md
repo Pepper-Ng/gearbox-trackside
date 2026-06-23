@@ -26,6 +26,32 @@ The browser may run on the same machine or, if the PoC is bound to a LAN interfa
 
 The page now reads scoring as the required map and telemetry as an optional second map. If telemetry is available, the dashboard joins telemetry rows to scoring rows by vehicle ID and reports whether telemetry appears to cover all scored vehicles, a single vehicle, or only a partial vehicle set.
 
+## PoC Closure Summary (June 2026)
+
+Phase 0A is complete.
+
+Conclusion:
+
+* The dedicated-server shared-memory path is viable for live leaderboard data.
+* Server-published telemetry is viable for telemetry report capture.
+* The final telemetry-source decision and report/analytics design implications are tracked in `docs/telemetry-report-poc-plan.md`.
+
+Telemetry-only diagnostic evidence (from `services/leaderboard/poc/diagnostic-raw/`):
+
+* Target polling rate: `100 Hz`.
+* Captured duration: about `600 s`.
+* Stored telemetry frames: `29,502` (`147,510` vehicle samples across 5 cars).
+* Effective stored frame rate: about `49.17 Hz`.
+* Telemetry update-counter rate: about `49.97 Hz`.
+* Update-counter gaps: `191` events, `478` inferred missing source updates (about `1.6%` of source updates over the run).
+* Raw-frame analysis saw no torn frames written to storage.
+
+Interpretation:
+
+* Preservation quality is good enough to proceed with server-published telemetry as the default capture source.
+* The result is "near-complete source preservation", not literal 100% capture of every source update.
+* Weakest-channel change-rate findings (often brake) are secondary and do not, by themselves, invalidate source-preservation quality.
+
 ---
 
 ## What Goes On The Host PC
@@ -488,20 +514,17 @@ These captures support the user's observation that the current server-side PoC t
 * Speed changes in almost every adjacent sample, steering changes often, but throttle and brake change less frequently. This suggests that some visual coarseness is real captured data cadence or channel quantization, not only graphing.
 * `gear = 0` appears frequently in the raw data, including proper laps. Some of this is expected for cars stopped or in neutral, but moving single-sample neutral values can look like unrealistic spikes. The viewer smooths short moving-neutral blips for display only; raw samples remain unchanged.
 
-This evidence does **not** yet prove that dedicated-server shared memory cannot provide adequate telemetry. It proves that the current Python PoC collector, running against the server-side maps and combining scoring plus telemetry reads, did not capture stable 50 Hz per-driver telemetry in these sessions.
+These fixtures are retained as regression data because they show what the older combined collector failed to preserve. They should not be used as the final source-quality verdict.
 
-Recommended next implementation step: keep the central server-side collector as the preferred architecture for the next PoC iteration, but optimize and measure it before introducing six rig-local collectors. For a maximum of six drivers, the server-side all-car telemetry volume should be manageable and it avoids installing and synchronizing services on every simulator. The next collector should:
+### Telemetry-Only Diagnostic Result (Dedicated Server Map)
 
-* decouple high-rate telemetry reading from lower-rate scoring/session reading;
-* sample the telemetry map on its own target loop at 50 Hz or faster;
-* read scoring/lap/session state at a lower rate and join cached scoring data to telemetry samples;
-* batch or queue writes so file I/O and JSON serialization do not block the telemetry read loop;
-* log actual loop timing, dropped/late samples, and per-driver effective sample rates;
-* prefer a time-based report axis for telemetry channels, while using track percent only as a positional aid until a higher-resolution distance source is proven.
+The newer telemetry-only diagnostic run against the dedicated-server telemetry map (stored under `services/leaderboard/poc/diagnostic-raw/`) shows better preservation of source cadence when telemetry capture is decoupled from lower-rate scoring/report work:
 
-If an optimized central collector still cannot sustain roughly 45-50 Hz per active driver on the venue server, then run a bounded fallback spike with one rig-local collector. A rig-local collector may provide better own-car telemetry fidelity, but it adds deployment and operational cost: shared-memory plugin installation on every setup, a service on every setup, six more points of failure, and post-session synchronization back to the central service. The final architecture should only move telemetry capture to each rig if the optimized server-side collector cannot meet the report-quality target.
+* source update-counter rate was about `49.97 Hz`;
+* recorded raw-frame rate was about `49.17 Hz`;
+* the gap between source and stored cadence was small enough to pass the PoC preservation threshold for a 50 Hz source.
 
-For the report/printing proof-of-concept tracker, see `docs/telemetry-report-poc-plan.md`.
+This is the final source-preservation evidence for the PoC. For the telemetry report implementation decision, including polling rate and source modularity, see `docs/telemetry-report-poc-plan.md`.
 
 The goal is not to make this page pretty. The goal is to reveal what data is present and whether it updates.
 
@@ -642,20 +665,14 @@ Check:
 
 ---
 
-## Go/No-Go Criteria
+## Go/No-Go Outcome
 
-Proceed toward the full live leaderboard if live mode can show changing driver/session data from either:
+Go decision: proceed to implementation.
 
-* `$rFactor2SMMP_Scoring$` on a normal rFactor 2 client; or
-* `$rFactor2SMMP_Scoring$<PID>` / `Global\$rFactor2SMMP_Scoring$<PID>` on a dedicated server.
+Resolved PoC outcome:
 
-If the dedicated server does not expose the needed fields, next test a spectator client or one sim rig as the data source.
+* Live scoring/session data from dedicated-server shared memory is available and usable for the live leaderboard path.
+* Server-published telemetry is usable as the default telemetry source for report generation.
+* Telemetry collection policy and source-modularity requirements are recorded in `docs/telemetry-report-poc-plan.md`.
 
-Record the live result in this document or a follow-up spike note:
-
-* host type: client, dedicated server, spectator client, or rig;
-* exact command used;
-* memory map name that worked;
-* fields visible;
-* fields missing;
-* whether the browser updated when AI/session data changed.
+This closes Phase 0A. The next work should move from PoC expansion to the baseline implementation plan.

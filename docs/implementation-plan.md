@@ -19,7 +19,7 @@ Trackside provides:
 * Later per-driver telemetry web reports.
 * Later PDF/printable telemetry reports.
 
-Current planning status: exploratory planning. The goal is to refine enough detail to start development locally, then validate against the venue when access is available.
+Current planning status: Phase 0A PoC complete. The live data path and telemetry-source direction are validated enough to proceed into baseline implementation phases.
 
 Confirmed venue facts:
 
@@ -249,6 +249,8 @@ Fallbacks if server-side data is insufficient:
 * read from one selected sim rig for proof of concept;
 * aggregate from all rigs only if a central source is not viable.
 
+Telemetry implementation default: use dedicated-server telemetry first, with source-adapter modularity preserved for a future rig-local collector option. The decision details and rationale live in `docs/telemetry-report-poc-plan.md`.
+
 The backend service host is a venue decision, not an implementation guess. Prefer the dedicated server PC if it has enough headroom and the venue accepts installing services there. Alternatives are the display/kiosk PC if suitable, or a small separate mini PC.
 
 ---
@@ -297,7 +299,7 @@ When rFactor 2 or venue access is not available, the agent should work from thes
 
 | # | Risk / question | Resolution path | Blocking? |
 | --- | --- | --- | --- |
-| R1 | Can the shared-memory/scoring bridge expose enough data from the dedicated server? | Spike locally when rFactor 2 is supplied; record source process, fields present/missing, and chosen adapter path. | Blocks final data architecture, not mock UI work. |
+| R1 | Can the shared-memory/scoring bridge expose enough data from the dedicated server? | Resolved by Phase 0A PoC for current scope; keep validating on venue hardware during rollout. | No for implementation start; validate again during venue deployment. |
 | R2 | Where should backend services run at the venue? | Defer until venue specs are available; decide server PC vs display PC vs mini PC with a written deployment note. | Blocks venue deployment only. |
 | R3 | Can a spectator-only client join without owning F1 car/track DLC? | Venue/user join test with a non-DLC account when camera work becomes active. | Blocks camera hardware/licensing only. |
 | R4 | Is the existing display PC too lean for rFactor 2? | Venue/user spec check and optional spectator performance test. | Blocks camera feed only. |
@@ -343,6 +345,10 @@ Validation:
 * One browser page shows live or replayed rFactor 2 session/player data.
 * When AI drivers join or session data changes, the browser visibly updates without refresh.
 * The PoC records a clear go/no-go decision for the full live leaderboard path.
+
+Status:
+
+* Completed. See `docs/core-poc.md` for the closure summary and `docs/telemetry-report-poc-plan.md` for the telemetry-source decision.
 
 ### Phase 0B - Repository and architecture baseline
 
@@ -459,7 +465,7 @@ Validation:
 
 ### Phase 5 - Telemetry web report MVP
 
-The current telemetry-report proof-of-concept findings, cadence measurements, and final PoC decision plan live in `docs/telemetry-report-poc-plan.md`. `docs/core-poc.md` records the current dedicated-server capture evidence and the recommendation to optimize/measure central collection before deciding on rig-local collectors.
+The current telemetry-report proof-of-concept findings and final source decision live in `docs/telemetry-report-poc-plan.md`. `docs/core-poc.md` records the source-preservation evidence from the completed Phase 0A PoC.
 
 Human prerequisites:
 
@@ -468,7 +474,10 @@ Human prerequisites:
 
 Agent implementation tasks:
 
-* Confirm whether telemetry is best captured from server, spectator client, or each rig using documented evidence.
+* Implement central server-side telemetry capture as default mode.
+* Use a dedicated high-rate telemetry loop that polls at `100 Hz` by default, with lower-rate scoring/session reads.
+* Keep report generation and driver-statistics pipelines source-agnostic through a normalized telemetry ingestion interface.
+* Add configuration-driven telemetry source selection so rig-local collectors can be enabled later without redesigning downstream report/analysis code.
 * Capture or parse per-driver/per-lap channels such as throttle, brake, steering, and gear.
 * Store telemetry with enough identity/session metadata to associate it with aliases and historical laps.
 * Build a browser-based per-driver report page.

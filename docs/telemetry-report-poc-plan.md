@@ -34,7 +34,7 @@ In shared-memory mode, `--telemetry-collector auto` now starts a dedicated telem
 
 Caveat: lap distance / lap percent currently come from the scoring row, while throttle/brake/steer/gear/G/speed come from telemetry. If scoring updates slower than telemetry, the high-rate samples can contain repeated lap-percent values with changing telemetry values. That is still useful for this proof, but final report quality should be validated live.
 
-The real Bahrain practice/qualifying captures in `services/leaderboard/poc/tests/data/` show that the current Python server-side PoC did not consistently record effective 50 Hz per-driver telemetry. The qualifying proper laps are around 28-30 Hz, while the practice proper laps are much lower and uneven. Treat this as a collector implementation finding, not yet as proof that the dedicated-server shared-memory source is insufficient. The next collector iteration should measure and optimize telemetry read-loop timing before deciding to distribute collectors to each rig.
+Earlier Bahrain practice/qualifying captures in `services/leaderboard/poc/tests/data/` showed that the older combined Python collector did not consistently record effective 50 Hz per-driver telemetry. The qualifying proper laps were around 28-30 Hz, while the practice proper laps were much lower and uneven. Later telemetry-only diagnostics isolated that as a collector-design issue rather than proof that the dedicated-server shared-memory source is insufficient.
 
 ## Runtime files
 
@@ -63,6 +63,7 @@ Each telemetry sample stores at least:
 * `lap_distance`;
 * `lap_percent`;
 * `speed_kph`;
+* `engine_rpm`;
 * `throttle_percent`;
 * `brake_percent`;
 * `gear`;
@@ -91,154 +92,58 @@ Each telemetry sample stores at least:
 
 The first versions used resampled graph axes, first one point per percent and later a capped adaptive track-percent axis. The current version keeps every recorded sample in the report so telemetry can be reviewed at captured resolution. If processing larger sessions becomes slow, preserve the full raw sample files and add background/indexed report preparation rather than reducing stored telemetry resolution.
 
-## Final Telemetry PoC Decision Plan
+## Final Telemetry PoC Decision (Completed)
 
-The next PoC work should answer one decision: can the venue use one central collector on or near the dedicated server for both scoring and all-car telemetry, or does high-fidelity telemetry require rig-local collectors?
+The telemetry PoC decision is now complete.
 
-The current evidence is not enough to decide that. It shows that the current Python server-side PoC did not consistently capture 50 Hz per-driver telemetry, but it does not prove whether the bottleneck is the Python loop, file/JSON work, the dedicated-server shared-memory source, server load, or rFactor 2 network/client update behavior.
+### Chosen default architecture
 
-### Step 1 - Add repeatable analysis tooling
+* Use dedicated-server published shared-memory telemetry as the default source.
+* Run our telemetry collector read loop at `100 Hz` even though source telemetry is roughly `50 Hz`.
+* Run telemetry capture as a dedicated high-priority loop or process for maximum reliability.
+* Keep scoring/session reads on a lower-rate path and keep write/report processing off the hot telemetry loop.
 
-Agent implementation task:
+Why `100 Hz` polling on a `~50 Hz` source:
 
-* Add a small command such as `services/leaderboard/poc/analyze_recordings.py` that reads one or more `telemetry-recordings/<session-id>/` folders or `tests/data/` fixtures.
-* Report, per session and per proper lap: sample count, lap time, effective samples/second, min/median/p95/max sample interval, repeated `lap_percent` count, telemetry update-counter gaps/repeats, gear-zero share, channel presence/change fractions, and weakest measured telemetry-channel observed-change cadence for throttle, brake, steering, speed, and G-force channels.
-* Separate the analyzer verdict into two stages:
-  * preservation: did the collector preserve the source telemetry frames/vehicle rows near the target cadence, with few/no update-counter gaps and acceptable p95/max intervals?
-  * channel quality: after preservation is good, does the data inside those preserved rows look fine-grained or jumpy per channel?
-* Output both console text and machine-readable JSON so the numbers can be copied into docs and compared across runs.
-* Add tests using the existing Bahrain fixtures in `services/leaderboard/poc/tests/data/`.
+* It significantly reduces the chance of missing source updates due to scheduling jitter, serialization stalls, or short write delays.
+* Current diagnostic evidence in `docs/core-poc.md` shows near-complete source preservation at this strategy, with only a small source-to-storage cadence gap.
 
-Verification:
+### Interpreting quality metrics
 
-```powershell
-python services/leaderboard/poc/analyze_recordings.py services/leaderboard/poc/tests/data
-python -m unittest discover services/leaderboard/poc/tests
-```
+Preservation quality is the primary pass/fail signal for this phase.
 
-Expected result: the analyzer reproduces the known finding that the qualifying capture is roughly 28-30 Hz on proper laps while the practice capture is lower and uneven.
+* Primary: source update-counter cadence vs stored frame cadence, gap counts, long interval outliers, torn reads.
+* Secondary: per-channel change-rate metrics (for example brake/throttle change frequency), which can be low even when capture fidelity is healthy because driver inputs can be steady for long periods.
 
-The first pass/fail decision is preservation, not per-channel smoothness. If the collector captures all source frames/vehicle rows near 50 Hz, it has preserved the picture the server-side plugin exposed. Only after that should channel quality be judged: if steering or G-force changes often but throttle or brake changes at a much lower observed cadence, the analyzer surfaces that as weakest measured channel data quality. Static channels are reported separately because a constant value cannot prove whether the source stopped updating or the driver input genuinely stayed constant.
+Channel-quality "fails" should not override a preservation "pass" unless they correlate with explicit source-preservation problems.
 
-### Step 2 - Baseline the current central server collector
+### Mandatory modular telemetry-source design
 
-Simple agent procedure on the actual system:
+Implementation must keep telemetry input modular so report generation and driver analytics are source-agnostic.
 
-1. Start the dedicated-server
+Required design rule:
 
-      ```powershell
-      Start-Process -FilePath "H:\Games\rFactor2\rFactor2 Dedicated.exe" -WorkingDirectory "H:\Games\rFactor2" -ArgumentList "+oneclick"
-      ```
+* downstream telemetry consumers (report builder, lap analyzer, statistics jobs) must depend on a normalized telemetry ingestion interface, not on a specific collector origin.
 
-2. Wait approximately 1 minute for the process to start, then record the dedicated-server PID:
+Supported source modes:
 
-      ```powershell
-      Get-CimInstance Win32_Process | Where-Object { $_.Name -like '*Dedicated*.exe' } | Select-Object ProcessId, Name, ExecutablePath, CommandLine
-      ```
+* default mode: central server collector reads dedicated-server maps;
+* optional mode: rig-local collector services read setup-local maps and upload session telemetry to server.
 
-3. Start the current PoC collector:
+The venue owner should be able to choose the mode via configuration, without code changes to report/analysis modules.
 
-    ```powershell
-    python services/leaderboard/poc/run_poc.py --source shared-memory --pid <PID> --telemetry-record-hz 50 --poll-seconds 1
-    ```
+### Rig-local mode kept as a first-class option
 
-4. Run at least three controlled sessions:
+The implementation must keep the door open for direct setup telemetry capture if venue priorities change later.
 
-    * one practice session with all cars running at least five timed laps;
-    * one qualifying-style session with all cars running at least five timed laps;
-    * one race or session-ending flow so finalization and report generation are exercised.
+Target operational model for optional rig-local mode:
 
-    These sessions will automatically start after starting the decidated server (Step 1), Practice takes 20 minutes, Qualification 10 minutes, and the race 5 laps.
+* server issues session-level control intent (for example start/stop recording telemetry);
+* a tiny local service on each setup records telemetry locally during the session;
+* local service uploads session telemetry to the central server after session finalization;
+* central server continues to own scoring/session truth and final report generation.
 
-5. During the run, open `/poc` and confirm telemetry is connected and all scored vehicles are joined.
-6. After each session finalizes, open `/telemetry?session=<session-id>` and confirm proper laps are classified and graphs render.
-7. Run the analyzer over the created recording folders.
-8. Save `trackside-poc.log`, the analyzer JSON/text output, and the generated recording folders as evidence.
-
-Decision check:
-
-* If proper laps are consistently at or above about 45 Hz per active driver, with no unexplained long gaps, the collector is preserving the server-side source well enough. Then inspect channel quality to decide whether the preserved source data is fine-grained enough for reports.
-* If proper laps are far below 45 Hz, continue to Step 3 before changing architecture.
-
-### Step 3 - Isolate source cadence from collector overhead
-
-Agent implementation task:
-
-* Implemented: `services/leaderboard/poc/run_telemetry_recorder.py` reads only the telemetry map for a short fixed window or as a child process of `run_poc.py`, without scoring joins, report generation, HTTP rendering, or per-sample report JSONL writes in the hot path.
-* Implemented: compact raw telemetry frames are written in batches to `telemetry_raw.jsonl`; report-shaped `telemetry_samples.jsonl` is generated later after session finalization.
-* Implemented: the worker status JSON logs telemetry map update counter, read-loop timing, frame/sample counts, duplicate update-counter reads, update-counter gaps, torn reads, and late-loop counts.
-* Run scoring reads separately at a lower rate only if needed for driver names.
-
-Simple agent procedure on the actual system:
-
-1. With the same dedicated-server session running, execute the telemetry-only diagnostic for 2-5 minutes.
-
-   ```powershell
-   python services/leaderboard/poc/run_telemetry_recorder.py --pid <PID> --target-hz 50 --duration-seconds 300 --output-file services/leaderboard/poc/telemetry-recordings/diagnostic-raw/telemetry_raw.jsonl --status-file services/leaderboard/poc/telemetry-recordings/diagnostic-raw/telemetry_worker_status.json
-   ```
-
-2. Repeat with 1 car, then 3 cars, then 6 cars if possible.
-3. Run the analyzer on the diagnostic output.
-4. Compare telemetry-only rates to the full PoC collector rates from Step 2.
-
-Decision check:
-
-* If telemetry-only capture reaches about 50 Hz but the full PoC does not, the bottleneck is collector design: Python loop structure, scoring joins, JSON serialization, file I/O, or report work. The final implementation should use a decoupled collector with queues/batching, likely in .NET/C# for the Windows service.
-* If telemetry-only capture is still around 28-30 Hz or lower, the bottleneck is probably upstream of the Python report pipeline: dedicated-server telemetry map update cadence, rFactor 2 server/client telemetry availability, plugin behavior in `Dedicated.exe`, or server load.
-
-### Step 4 - Optimize the central collector if the source is good enough
-
-Only do this if Step 3 shows the source can provide near-50 Hz but the full PoC collector cannot.
-
-Agent implementation task:
-
-* Split the collector into separate loops:
-  * telemetry map reader at 50 Hz or faster;
-  * scoring/session reader at 5-10 Hz;
-  * asynchronous/batched writer;
-  * report builder outside the hot path.
-* Add timing metrics to the logs and analyzer output.
-* Keep raw sample storage at captured resolution; do not reduce telemetry to make reports easier.
-
-Decision check:
-
-* If the optimized central collector sustains about 45-50 Hz per active driver with six cars, proceed to final implementation with a central collector architecture.
-* If not, continue to Step 5.
-
-### Step 5 - Run a one-rig local collector fallback spike
-
-Only do this after Steps 2-4 show central collection cannot meet the report-quality target.
-
-Operator/venue prerequisite:
-
-* Install or enable `rF2SharedMemoryMapPlugin` on one non-critical simulator rig.
-* Run a collector on that rig that records only that rig's own telemetry.
-* Keep the central server collector running for scoring/session/lap timing.
-
-Simple agent procedure on the actual system:
-
-1. Run the same controlled sessions as Step 2.
-2. Record central server scoring/telemetry and rig-local own-car telemetry at the same time.
-3. Use wall-clock timestamps, driver name/vehicle ID, lap number, and lap times to align the rig-local telemetry with central scoring.
-4. Analyze rig-local own-car sample rate and channel quality.
-5. Compare rig-local telemetry against central telemetry for the same driver/laps.
-
-Decision check:
-
-* If rig-local telemetry is near 50 Hz and materially smoother while central telemetry is not, document a distributed telemetry architecture for final implementation: central server for scoring/session/leaderboard, rig-local services for own-car high-rate telemetry, and a synchronization/merge step.
-* If rig-local telemetry is not materially better, do not add six rig-local services. Keep the final MVP focused on live leaderboard and lower-fidelity telemetry reports, or defer telemetry reports until a better data source is found.
-
-### Final PoC exit criteria
-
-The telemetry PoC is complete when the repo contains:
-
-* recorded evidence from the current central collector;
-* telemetry-only source-cadence evidence;
-* optimized central collector evidence if needed;
-* one-rig local fallback evidence if central collection still fails;
-* a written decision: central-only telemetry, central scoring plus rig-local telemetry, or defer high-fidelity telemetry reports.
-
-After that decision is written, stop expanding the PoC and start final implementation against the chosen architecture. The live leaderboard can proceed independently as soon as the scoring/session source is accepted, even if high-fidelity telemetry remains a later or distributed feature.
+This preserves today's simpler default deployment while enabling a later shift to setup-local capture with minimal architecture churn.
 
 ## Open implementation questions for later phases
 
