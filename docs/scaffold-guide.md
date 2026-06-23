@@ -24,12 +24,12 @@ Trackside.RigAgent (.NET worker executable, idle scaffold)
 
 The architecture is not strict MVVM. It uses a light Clean Architecture / Ports and Adapters layout plus a React client:
 
-- Domain model: plain C# records under `services/trackside/src/Trackside.Domain`.
-- Application contracts/state: source interfaces, options, serialization, and state cache under `services/trackside/src/Trackside.Application`.
-- Infrastructure adapters: fixture and future rFactor 2 shared-memory implementations under `services/trackside/src/Trackside.Infrastructure`.
-- Service/transport: HTTP endpoints, SignalR hub contracts, hosted workers, and composition under `services/trackside/src/Trackside.Service`.
-- Tray companion: notification-area menu/status under `services/trackside/src/Trackside.Tray`.
-- Rig agent: future rig-side service binary under `services/trackside/src/Trackside.RigAgent`.
+- Domain model: plain C# records under `services/trackside/Trackside.Domain`.
+- Application contracts/state: source interfaces, options, serialization, and state cache under `services/trackside/Trackside.Application`.
+- Infrastructure adapters: fixture and future rFactor 2 shared-memory implementations under `services/trackside/Trackside.Infrastructure`.
+- Service/transport: HTTP endpoints, SignalR hub contracts, hosted workers, and composition under `services/trackside/Trackside.Service`.
+- Tray companion: notification-area menu/status under `services/trackside/Trackside.Tray`.
+- Rig agent: future rig-side service binary under `services/trackside/Trackside.RigAgent`.
 - Browser UI: React components under `web/kiosk/src/ui`.
 
 Project dependencies point inward: `Service` composes `Infrastructure`, `Application`, and `Domain`; `Infrastructure` implements `Application` contracts and depends on `Domain`; `Application` depends only on `Domain`; `Domain` depends on nothing in Trackside. `Tray` stays a thin companion and talks to the running service through URLs or future control contracts.
@@ -41,17 +41,17 @@ Keep these responsibilities separate. Domain objects should not know about HTTP,
 - `global.json` pins the .NET SDK family used by the solution.
 - `services/trackside/Trackside.slnx` is the Visual Studio 2026 solution.
 - `services/trackside/Directory.Build.props` keeps common C# language/analyzer settings together.
-- `services/trackside/src/Trackside.Domain` contains normalized live-session model records.
-- `services/trackside/src/Trackside.Application` contains source contracts, app options, JSON settings, and shared state.
-- `services/trackside/src/Trackside.Infrastructure` contains fixture and future rFactor 2 adapters.
-- `services/trackside/src/Trackside.Service/Program.cs` is the service executable entry point.
-- `services/trackside/src/Trackside.Service/Hosting` composes the ASP.NET Core app and service/console lifetime.
-- `services/trackside/src/Trackside.Tray` contains the interactive tray companion.
-- `services/trackside/src/Trackside.RigAgent` is an idle scaffold for a future service deployed on rigs.
-- `services/trackside/src/Trackside.Service/appsettings.json` configures HTTP, source mode, publish cadence, and CORS.
-- `services/trackside/src/Trackside.Service/Fixtures/mock-live-session.json` is the normalized fixture used before rFactor 2 parsing exists.
-- `services/trackside/src/Trackside.Service/wwwroot` is the minimal static kiosk served by the packaged service.
-- `services/trackside/tests/Trackside.Tests` contains solution-level tests.
+- `services/trackside/Trackside.Domain` contains normalized live-session model records.
+- `services/trackside/Trackside.Application` contains source contracts, app options, JSON settings, and shared state.
+- `services/trackside/Trackside.Infrastructure` contains fixture and future rFactor 2 adapters.
+- `services/trackside/Trackside.Service/Program.cs` is the service executable entry point.
+- `services/trackside/Trackside.Service/Hosting` composes the ASP.NET Core app and service/console lifetime.
+- `services/trackside/Trackside.Tray` contains the interactive tray companion.
+- `services/trackside/Trackside.RigAgent` is an idle scaffold for a future service deployed on rigs.
+- `services/trackside/Trackside.Service/appsettings.json` configures HTTP, source mode, publish cadence, and CORS.
+- `services/trackside/Trackside.Service/Fixtures/mock-live-session.json` is the normalized fixture used before rFactor 2 parsing exists.
+- `services/trackside/Trackside.Service/wwwroot` is the minimal static kiosk served by the packaged service.
+- `services/trackside/Trackside.Tests` contains solution-level tests.
 - `web/kiosk/src/tracksideApi.ts` is the typed browser REST/SignalR client.
 - `web/kiosk/src/ui/App.tsx` is the current basic kiosk layout.
 
@@ -78,7 +78,7 @@ From the repository root:
 ```powershell
 dotnet build services\trackside\Trackside.slnx
 dotnet test services\trackside\Trackside.slnx
-dotnet run --project services\trackside\src\Trackside.Service -- --console --source fixture --fixture Fixtures\mock-live-session.json
+dotnet run --project services\trackside\Trackside.Service -- --console --source fixture --fixture Fixtures\mock-live-session.json
 ```
 
 Open the hosted kiosk at:
@@ -90,7 +90,7 @@ http://127.0.0.1:8877
 To run the tray companion, start it separately while the service is running:
 
 ```powershell
-dotnet run --project services\trackside\src\Trackside.Tray
+dotnet run --project services\trackside\Trackside.Tray
 ```
 
 The tray icon appears in the Windows notification area. Right-click it to open configured options such as `Open Kiosk`, `Open Health`, or `Exit Tray`. Double-clicking the icon opens the kiosk.
@@ -107,7 +107,7 @@ The Vite dev server proxies `/api` and `/hubs` to the backend, so keep `Tracksid
 The rig-agent scaffold builds as part of the same solution. It is intentionally idle in Phase 0B:
 
 ```powershell
-dotnet run --project services\trackside\src\Trackside.RigAgent
+dotnet run --project services\trackside\Trackside.RigAgent
 ```
 
 ## Deployment Direction

@@ -72,8 +72,8 @@ The repo should add a `global.json` when the .NET solution is scaffolded so cont
 Phase 0B backend scaffolding must implement these commands from the repository root:
 
 ```powershell
-dotnet run --project services\trackside\src\Trackside.Service -- --console --source fixture --fixture Fixtures\mock-live-session.json
-dotnet run --project services\trackside\src\Trackside.Service -- --console --source shared-memory --pid <Dedicated.exe PID>
+dotnet run --project services\trackside\Trackside.Service -- --console --source fixture --fixture Fixtures\mock-live-session.json
+dotnet run --project services\trackside\Trackside.Service -- --console --source shared-memory --pid <Dedicated.exe PID>
 ```
 
 The host should bind to localhost by default, for example:

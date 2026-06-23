@@ -6,18 +6,18 @@ This solution is intentionally small but shaped like the final application: one 
 
 ## Projects
 
-- `src/Trackside.Domain` - pure live-session domain records.
-- `src/Trackside.Application` - source contracts, application options, JSON settings, and shared live-session state.
-- `src/Trackside.Infrastructure` - fixture adapter and future rFactor 2/shared-memory/SQLite implementations.
-- `src/Trackside.Service` - executable ASP.NET Core service/web runtime targeting `.NET 10` and `net10.0-windows`.
-- `src/Trackside.Tray` - WinForms tray companion that opens service-hosted dashboards/status pages.
-- `src/Trackside.RigAgent` - idle worker scaffold for future rig-side telemetry/setup/spectator support.
-- `tests/Trackside.Tests` - xUnit tests for fixture contracts, API route stability, CLI aliases, and shared-memory parser scaffolding.
+- `Trackside.Domain` - pure live-session domain records.
+- `Trackside.Application` - source contracts, application options, JSON settings, and shared live-session state.
+- `Trackside.Infrastructure` - fixture adapter and future rFactor 2/shared-memory/SQLite implementations.
+- `Trackside.Service` - executable ASP.NET Core service/web runtime targeting `.NET 10` and `net10.0-windows`.
+- `Trackside.Tray` - WinForms tray companion that opens service-hosted dashboards/status pages.
+- `Trackside.RigAgent` - idle worker scaffold for future rig-side telemetry/setup/spectator support.
+- `Trackside.Tests` - xUnit tests for fixture contracts, API route stability, CLI aliases, and shared-memory parser scaffolding.
 
 ## Architecture Choices
 
 - ASP.NET Core Generic Host provides dependency injection, configuration, logging, hosted services, and graceful shutdown.
-- The solution uses a light Clean Architecture / Ports and Adapters split: Host composes, Application defines ports, Infrastructure implements adapters, Domain stays pure.
+- The solution uses a light Clean Architecture / Ports and Adapters split: Service composes, Application defines ports, Infrastructure implements adapters, Domain stays pure.
 - SignalR is the browser push layer. Clients should load `/api/live-session/current` first, then subscribe to `/hubs/live-session`.
 - `ILiveSessionSource` hides whether the current snapshot comes from a fixture, recorded data, or future shared-memory parsing.
 - The tray companion uses Windows Forms `NotifyIcon` because it is the standard Windows notification-area API, but it is a separate executable from the service.
@@ -31,7 +31,7 @@ Run from the repository root:
 ```powershell
 dotnet build services\trackside\Trackside.slnx
 dotnet test services\trackside\Trackside.slnx
-dotnet run --project services\trackside\src\Trackside.Service -- --console --source fixture --fixture Fixtures\mock-live-session.json
+dotnet run --project services\trackside\Trackside.Service -- --console --source fixture --fixture Fixtures\mock-live-session.json
 ```
 
 Open `http://127.0.0.1:8877` for the packaged/static kiosk shell.
@@ -41,19 +41,20 @@ Use `--console` for local development. Without it, `Trackside.Service` is config
 Run the tray companion separately when you want the notification-area menu:
 
 ```powershell
-dotnet run --project services\trackside\src\Trackside.Tray
+dotnet run --project services\trackside\Trackside.Tray
 ```
 
 ## Configuration
 
-The `Trackside` section in `src/Trackside.Service/appsettings.json` controls:
+The `Trackside` section in `Trackside.Service/appsettings.json` controls:
 
 - `Http.ListenUrl` - Kestrel binding URL.
 - `Http.PublicBaseUrl` - URL opened by tray actions.
 - `Source.Mode` - currently `Fixture`; future modes are `SharedMemory` and `Recorded`.
 - `Source.FixturePath` - normalized live-session fixture JSON.
 - `LiveSession.PublishIntervalSeconds` - background SignalR publish cadence.
-The `TracksideTray` section in `src/Trackside.Tray/appsettings.json` controls tray menu entries and the service base URL.
+
+The `TracksideTray` section in `Trackside.Tray/appsettings.json` controls tray menu entries and the service base URL.
 
 Tray menu actions support:
 

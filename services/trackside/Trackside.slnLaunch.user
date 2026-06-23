@@ -3,11 +3,11 @@
     "Name": "New Profile",
     "Projects": [
       {
-        "Path": "src\\Trackside.Service\\Trackside.Service.csproj",
+        "Path": "Trackside.Service\\Trackside.Service.csproj",
         "Action": "Start"
       },
       {
-        "Path": "src\\Trackside.Tray\\Trackside.Tray.csproj",
+        "Path": "Trackside.Tray\\Trackside.Tray.csproj",
         "Action": "Start"
       }
     ]
