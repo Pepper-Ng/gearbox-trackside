@@ -62,9 +62,9 @@ Current endpoints:
 - `/api/configuration/client` tells browser clients which paths to use.
 - `/api/health` reports host/source/tray status.
 
-Tray mode is enabled by default on Windows. The tray icon does not contain the application UI itself; it is a small control surface. Its menu items open hosted webpages or request graceful shutdown. Configure those items in `Trackside:Tray:MenuItems` in `appsettings.json`.
+Tray mode is enabled by default on Windows. The tray icon does not contain the application UI itself; it is a small control/status surface. Its menu items open hosted webpages or request graceful shutdown. Configure those items in `Trackside:Tray:MenuItems` in `appsettings.json`.
 
-For venue rollout, the preferred runtime shape is Windows services plus browser pages. Tray mode is convenient for development and interactive testing, but collection/scoring/storage should not depend on an interactive desktop session.
+For venue rollout, the preferred runtime shape is Windows services plus browser pages, with a tray companion for interactive venue users. The tray companion should make it obvious after reboot that Trackside is running and should reopen dashboards quickly. Collection/scoring/storage should not depend on an interactive desktop session.
 
 ## How To Run
 
@@ -109,7 +109,7 @@ dotnet run --project services\trackside\src\Trackside.RigAgent
 
 Early venue builds should be versioned file bundles copied or extracted into a known install folder. Add service install/update scripts before venue rollout. A full installer can come later if service setup, shortcuts, firewall rules, or rollback become too awkward for scripts.
 
-Remote updates should be a later dashboard-controlled feature: check a signed/versioned manifest, show that an update is available, download a bundle, stop services, swap files with rollback, and restart. Do not silently auto-update during active sessions.
+Remote updates should be a later dashboard-controlled feature: check a signed/versioned manifest, show that an update is available, download a bundle, verify signature/checksum, stop services, swap files with rollback, and restart. Do not silently auto-update during active sessions.
 
 ## How To Extend
 

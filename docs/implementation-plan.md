@@ -488,8 +488,12 @@ Agent implementation/support tasks:
 
 * Package releases as versioned file-based bundles so rollback is simple.
 * Configure services to auto-start and auto-restart on Windows, using the chosen service hosting approach.
+* Add or package a tray companion/status surface that auto-starts for the venue user account when appropriate and can reopen dashboards after reboot.
 * Add rotating log files for backend services and any plugin control surface.
 * Add manual disable/override switches for every automated feature.
+* Implement dashboard-visible update checks against a signed/versioned manifest hosted on an operator-controlled server.
+* Implement a staff-approved update flow: download bundle, verify version/signature/checksum, stop affected services, swap files with rollback, restart services, and report success/failure.
+* Prevent silent updates during active sessions; require an idle/safe restart window.
 * Write a short non-technical runbook for venue staff.
 * Document rFactor 2/Steam update control and re-test procedure.
 
@@ -497,7 +501,8 @@ Venue validation:
 
 * Roll out as a canary first: one service host, one display screen, one rig/client path if applicable.
 * Run a real venue session end-to-end with live board, aliases, staff controls, and agreed optional features.
-* Reboot the service host and confirm the system recovers.
+* Reboot the service host and confirm the service recovers, the tray/status surface appears for the venue user, and dashboards can be reopened without developer help.
+* Test update installation and rollback with a harmless canary build before allowing venue-facing updates.
 
 ---
 

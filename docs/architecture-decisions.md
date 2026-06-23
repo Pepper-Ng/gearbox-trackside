@@ -169,10 +169,11 @@ Decision:
 * The primary runtime is `Trackside.Host`, a .NET process designed to run unattended and auto-restart.
 * For early development it may run as a console app.
 * For venue rollout it should run as a Windows service or service-like background process.
-* A tray icon/control app may be added as a thin .NET companion, but it must not be required for collection, scoring, storage, or kiosk updates.
+* A tray icon/control app should be available for interactive venue users as a thin .NET companion/status surface, especially so staff can see after reboot that Trackside is running and can reopen dashboards quickly.
+* Collection, scoring, storage, and kiosk updates must still run without an interactive desktop session; the tray companion observes/controls the host but is not the owner of critical runtime work.
 * Configuration, status, diagnostics, and staff controls should be local web pages hosted by `Trackside.Host`; the tray menu should mostly open those pages and expose obvious start/stop/status actions.
 
-This keeps the user-facing product as one installed Trackside application while avoiding the Windows limitation that true services cannot directly own an interactive tray icon in the user's desktop session.
+This keeps the user-facing product as one installed Trackside application while respecting the Windows limitation that true services cannot directly own an interactive tray icon in the user's desktop session.
 
 ### Host and rig-agent binary split decision
 
@@ -195,7 +196,8 @@ Initial deployment should use versioned file-based bundles plus install/update s
 Decision:
 
 * Early venue builds should be published as versioned folders or archives that can be copied or extracted into a known install directory.
-* Production host operation should be a Windows Service or service-like background process. Tray mode remains useful for development and possibly for an optional interactive companion, but it should not be the required production runtime.
+* Production host operation should be a Windows Service or service-like background process.
+* A tray companion should auto-start for the venue user account when appropriate, show host/rig-agent status, and open dashboards/actions after reboot. It should be useful operationally, but the host service must remain healthy if no user is logged in.
 * Rig agents, if used, should also run as Windows services or scheduled/service-like background processes on the rigs.
 * A full installer can be added later if service setup, shortcuts, firewall rules, or non-technical staff rollout become painful enough to justify it.
 * Remote updates should be designed as a later, explicit feature: the host checks a signed/versioned update manifest, shows update availability in the admin dashboard, downloads a versioned bundle, stops affected services, swaps files with rollback, and restarts services.
