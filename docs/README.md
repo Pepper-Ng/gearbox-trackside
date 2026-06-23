@@ -9,5 +9,5 @@ Current status: the Phase 0A proof of concept is complete and the telemetry/sour
 
 - [Implementation plan](./implementation-plan.md) - Source of truth for implementation phases/architecture.
 - [Phase 0A core PoC](./core-poc.md) - Completed live-data proof and go/no-go outcome.
-- [Telemetry report PoC tracker](./telemetry-report-poc-plan.md) - Final telemetry PoC decision and implementation direction.
+- [Telemetry report PoC decision](./telemetry-report-poc-plan.md) - Final telemetry source and report implementation direction.
 - [Shared-memory plugin investigation](./shared-memory-plugin-investigation.md) - Source-level behavior and operational implications.

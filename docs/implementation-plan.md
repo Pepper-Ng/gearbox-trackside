@@ -69,7 +69,7 @@ When a phase needs rFactor 2, the plan must word that as a prerequisite or valid
 
 ### Backend stack spike
 
-The backend stack is not finalized yet. Phase 0B must run a short stack spike and choose one backend stack before full feature implementation begins. Phase 0A may use the quickest reasonable temporary implementation to prove the live rFactor 2-to-browser data path; that PoC should inform the stack decision rather than block on a perfect architecture.
+The backend stack is not finalized yet. Phase 0B must run a short stack spike and choose one backend stack before full feature implementation begins. The completed Phase 0A PoC should inform the stack decision rather than lock the final architecture to the temporary Python implementation.
 
 Candidate stacks:
 
@@ -95,7 +95,7 @@ The spike should prefer a concrete decision over prolonged comparison. If no str
 
 | Feature | Priority | Feasibility | Repo implementation? | Setup/venue dependency? |
 | --- | ---: | --- | --- | --- |
-| Core live-data browser PoC | First | High if shared-memory data is available locally | Yes: one minimal backend command and one simple browser page | User must provide local rFactor 2 session for live proof |
+| Core live-data browser PoC | Complete | Proven for current scope | Done; evidence in `docs/core-poc.md` | Revalidate on venue hardware during rollout |
 | Live session leaderboard/kiosk | First | High | Yes: backend, fixtures, live model, UI, tests | Real rFactor 2 only needed for live validation |
 | Staff aliases and display controls | First | High | Yes: admin UI/API/storage | Staff workflow details may need user confirmation |
 | Historical daily/weekly/monthly boards | Secondary | High | Yes: storage/query/UI | Needs enough sample sessions to validate |
@@ -104,7 +104,7 @@ The spike should prefer a concrete decision over prolonged comparison. If no str
 | Spectator camera feed/direction | Optional/later | Medium-high | Yes: C++ plugin if needed | Needs game-capable spectator setup and licensing decision |
 | Incident detection / auto replay | Deferred | Medium | Yes: detection/replay control after camera exists | Needs live tuning sessions |
 
-Overall: the first thing to prove is the core live-data loop: rFactor 2 session/player data reaches a browser with minimal moving parts. After that, the live leaderboard and staff controls are the best first product slice. They can be developed against mock scoring snapshots before rFactor 2 is available, while real rFactor 2 data validates the parser and live update pipeline. Printing should stay late because no venue printer exists. Camera direction is feasible but depends on a game-capable spectator client or new hardware; the current lean display PC should not be assumed capable of running rFactor 2.
+Overall: the core live-data loop is proven. The live leaderboard and staff controls are the best first product slice. They can be developed against mock scoring snapshots while real rFactor 2 data validates the parser and live update pipeline. Printing should stay late because no venue printer exists. Camera direction is feasible but depends on a game-capable spectator client or new hardware; the current lean display PC should not be assumed capable of running rFactor 2.
 
 ---
 
@@ -319,36 +319,14 @@ The phase lists below distinguish human prerequisites, agent implementation work
 
 ### Phase 0A - Core live-data proof of concept
 
-Purpose: answer the central feasibility question as quickly as possible: can rFactor 2 session/player data be extracted from the shared-memory map or equivalent local source and shown in a browser with minimal software?
+Status: complete.
 
-This phase is intentionally smaller than the full leaderboard MVP. It should not include polished UI, historical storage, staff controls, aliases, printing, telemetry reports, or camera work.
+Outcome:
 
-Human prerequisites:
-
-* Provide a local Windows rFactor 2 Dedicated Server and client session if live validation is expected.
-* Start a simple session with AI drivers connected so there is changing session/player data.
-* Install or allow use of the shared-memory/scoring bridge, or provide captured shared-memory/scoring snapshots if live access is not available.
-* Confirm the local URL/port can be opened in a browser on the same machine.
-
-Agent implementation tasks:
-
-* Build the smallest runnable backend command or executable that can read one scoring/session source.
-* Prefer reading live shared-memory/scoring data if the user provides a running local rFactor 2 setup; otherwise implement the same shape against captured or synthetic snapshots.
-* Expose a single local HTTP page such as `/poc`.
-* Display only enough data to prove the core idea: session name/type if available, track if available, current drivers/player names, position/order if available, current/best lap if available, and a visible timestamp/update counter.
-* Update the browser automatically using the simplest push/poll method available in the chosen spike implementation.
-* Add a short `docs/core-poc.md` note explaining how to run the PoC, what source was used, which fields appeared, which fields were missing, and whether the result supports continuing to the full leaderboard.
-
-Validation:
-
-* One command starts the backend/PoC server.
-* One browser page shows live or replayed rFactor 2 session/player data.
-* When AI drivers join or session data changes, the browser visibly updates without refresh.
-* The PoC records a clear go/no-go decision for the full live leaderboard path.
-
-Status:
-
-* Completed. See `docs/core-poc.md` for the closure summary and `docs/telemetry-report-poc-plan.md` for the telemetry-source decision.
+* Dedicated-server shared memory is viable for live scoring/session data.
+* Server-published telemetry is viable for telemetry report capture.
+* Evidence and reproduction commands live in `docs/core-poc.md`.
+* Telemetry-source policy lives in `docs/telemetry-report-poc-plan.md`.
 
 ### Phase 0B - Repository and architecture baseline
 
@@ -533,22 +511,21 @@ Venue validation:
 
 ---
 
-## 9. Agent-Ready First Work Package
+## 9. Agent-Ready Next Work Package
 
-If an implementation agent starts from this document, begin here:
+If an implementation agent starts from this document, begin with the post-PoC baseline:
 
-1. Start with Phase 0A if the user can provide a local rFactor 2 server/client session: build the smallest command/browser PoC that shows live or captured session/player data.
-2. Write `docs/core-poc.md` with the run command, data source, visible fields, missing fields, and go/no-go decision for the full leaderboard path.
-3. If local rFactor 2 is not available yet, build the same browser shape against replayed fixture snapshots and mark live validation pending.
-4. Run the backend stack spike and write `docs/architecture-decisions.md`.
-5. Create backend and React/Vite kiosk/admin project scaffolding using the selected stack.
-6. Define the mock live session snapshot schema with practice, qualifying, and race examples.
-7. Serve fixture-backed live session data from the backend.
-8. Render the public kiosk table and session summary from fixture data.
-9. Add automated tests for session sorting and alias mapping.
-10. Document how the user can later provide local rFactor 2 snapshots for parser validation.
+1. Run the backend stack spike and write `docs/architecture-decisions.md`.
+2. Create the backend project layout using the selected stack.
+3. Create the React/Vite/TypeScript kiosk/admin app layout in `web/kiosk`.
+4. Define fixture-backed live session snapshots for practice, qualifying, and race flows.
+5. Serve fixture-backed live session data from the backend.
+6. Render the public kiosk table and session summary from fixture data.
+7. Add automated tests for session sorting, fastest-lap/sector highlighting, and alias mapping.
+8. Implement the shared-memory data source behind the same interface once the production backend shape exists.
+9. Carry forward the telemetry source requirements from `docs/telemetry-report-poc-plan.md` when report work begins.
 
-Do not start with Steam, venue setup, printer setup, or camera plugin work unless the user explicitly provides those prerequisites and asks for that phase.
+Do not restart Phase 0A, Steam setup, venue setup, printer setup, or camera plugin work unless the user explicitly provides those prerequisites and asks for that phase.
 
 ---
 
@@ -558,7 +535,7 @@ Do not start with Steam, venue setup, printer setup, or camera plugin work unles
 
 **Dependency policy**:
 
-* Reuse `rF2SharedMemoryMapPlugin` for telemetry/scoring export if it satisfies the data-source spike.
+* Reuse `rF2SharedMemoryMapPlugin` for telemetry/scoring export unless venue validation reveals a new blocker.
 * Use the official Studio 397 Internals Plugin SDK directly for camera work.
 * Keep game-process plugins narrow and defensive.
 * Do not put storage, PDF generation, network servers, or complex parsing inside the game plugin.

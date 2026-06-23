@@ -1,6 +1,6 @@
-# Telemetry Report PoC Tracker
+# Telemetry Report PoC Decision
 
-This note tracks the report/printing proof of concept that builds on the expanded shared-memory dashboard.
+This note records the completed telemetry report proof of concept and the implementation constraints it leaves behind.
 
 ## What the live dashboard result means
 
@@ -73,24 +73,18 @@ Each telemetry sample stores at least:
 * `vertical_g`;
 * `g_magnitude`.
 
-## Implemented PoC report behavior
+## Report Implementation Findings
 
-* The recorder samples independently from browser polling.
-* In shared-memory mode, the recorder can run telemetry capture in a dedicated child process while the main process records lower-rate scoring/session metadata.
-* Dedicated telemetry capture writes compact raw frames first, then the report-build thread expands them into full-resolution `telemetry_samples.jsonl` without resampling or dropping report samples for graph convenience.
-* Completed sessions in `/history` link to `/telemetry?session=<session-id>` when there is reportable telemetry.
-* `/telemetry` lists stored recordings from `services/leaderboard/poc/telemetry-recordings/`, can load old reports after a collector restart, and can open local `report.json` or `telemetry_samples.jsonl` files.
-* The report classifies laps as proper, partial, outlap, inlap, or formation/non-timed.
-* Only proper laps are considered for fastest personal/overall report references.
-* The viewer can still select and compare any stored lap, including excluded partial/out/in/formation laps, for diagnosis.
-* The report stores and displays full-resolution recorded telemetry samples. It does not resample reports down to a reduced graph axis.
-* Each graph can compare two selected laps from the same or different drivers for speed, throttle, brake, steering, gear, lateral G, longitudinal G, and vertical G.
-* Fastest personal and fastest overall proper laps are marked in the lap selectors.
-* The X axis can use time, track percent, or raw sample index.
-* Hovering a graph shows the nearest selected samples and values for the compared laps.
-* Report JSON generation starts on a background thread when a session finalizes. If the page is opened early, `/api/reports/<session-id>` can return `building` and the page polls until the report is ready.
+Carry these PoC findings into the implementation:
 
-The first versions used resampled graph axes, first one point per percent and later a capped adaptive track-percent axis. The current version keeps every recorded sample in the report so telemetry can be reviewed at captured resolution. If processing larger sessions becomes slow, preserve the full raw sample files and add background/indexed report preparation rather than reducing stored telemetry resolution.
+* Record telemetry independently from browser polling.
+* In shared-memory mode, capture telemetry in a dedicated process or high-priority loop while scoring/session metadata runs at a lower rate.
+* Write compact raw frames first, then expand/report outside the hot read loop.
+* Keep full-resolution recorded telemetry samples. Do not resample stored data down to a graph-friendly axis.
+* Classify laps as proper, partial, outlap, inlap, or formation/non-timed; only proper laps should drive fastest/reference report decisions.
+* Keep diagnostic access to excluded laps for investigation.
+* Let report pages compare laps across drivers for speed, throttle, brake, steering, gear, and G-force channels.
+* If processing larger sessions becomes slow, add background/indexed report preparation rather than reducing stored telemetry resolution.
 
 ## Final Telemetry PoC Decision (Completed)
 
