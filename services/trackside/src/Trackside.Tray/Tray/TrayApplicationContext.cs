@@ -33,6 +33,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             Text = TrimTooltip(_options.Tooltip),
             Visible = true,
         };
+        _notifyIcon.MouseUp += OnNotifyIconMouseUp;
         _notifyIcon.DoubleClick += (_, _) => OpenRoute("/");
 
         if (!string.IsNullOrWhiteSpace(_options.BalloonMessage))
@@ -90,6 +91,16 @@ public sealed class TrayApplicationContext : ApplicationContext
         var menuItem = new ToolStripMenuItem(item.Text);
         menuItem.Click += (_, _) => ExecuteMenuAction(item);
         return menuItem;
+    }
+
+    private void OnNotifyIconMouseUp(object? sender, MouseEventArgs args)
+    {
+        if (args.Button != MouseButtons.Left)
+        {
+            return;
+        }
+
+        _notifyIcon.ContextMenuStrip?.Show(Cursor.Position);
     }
 
     private void ExecuteMenuAction(TracksideTrayMenuItemOptions item)
