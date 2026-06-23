@@ -85,8 +85,8 @@ http://127.0.0.1:8877
 The existing Phase 0A Python PoC remains runnable for comparison and diagnostics:
 
 ```powershell
-python services\leaderboard\poc\run_poc.py --source mock
-python services\leaderboard\poc\run_poc.py --source shared-memory --pid <Dedicated.exe PID>
+python tools\rf2-poc\run_poc.py --source mock
+python tools\rf2-poc\run_poc.py --source shared-memory --pid <Dedicated.exe PID>
 ```
 
 Frontend development should use Vite against the .NET API during development and the .NET host should serve the built frontend for packaged/local operation:
@@ -108,7 +108,7 @@ npm --prefix web\kiosk test
 Keep the current PoC tests available while the .NET reader is being built:
 
 ```powershell
-python -m unittest discover services\leaderboard\poc\tests
+python -m unittest discover tools\rf2-poc\tests
 ```
 
 ### Live update decision
@@ -234,6 +234,6 @@ If live validation shows that one .NET process still cannot keep telemetry and w
 
 ### Consequences
 
-Immediate Phase 0B work should scaffold a new .NET backend under `services\trackside` and keep the Python PoC under `services\leaderboard\poc` as a reference and validation tool.
+Immediate Phase 0B work should scaffold a new .NET backend under `services\trackside` and keep the Python PoC under `tools\\rf2-poc` as a reference and validation tool.
 
 The architecture deliberately chooses reliability over having one language everywhere. The frontend remains TypeScript/React, the live backend is .NET, and Python is reserved for diagnostics and optional offline/report workloads where it is strongest.

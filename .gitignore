@@ -6,6 +6,6 @@ bin/
 obj/
 node_modules/
 dist/
-services/leaderboard/poc/telemetry-recordings/
-services/leaderboard/poc/logs/
+tools/rf2-poc/telemetry-recordings/
+tools/rf2-poc/logs/
 web/kiosk/dist/

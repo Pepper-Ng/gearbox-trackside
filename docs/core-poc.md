@@ -89,14 +89,14 @@ Important interpretation notes:
 
 ## Telemetry Cadence Evidence
 
-Earlier Bahrain captures kept under `services/leaderboard/poc/tests/data/` showed that the older combined collector did not preserve stable 50 Hz per-driver telemetry:
+Earlier Bahrain captures kept under `tools/rf2-poc/tests/data/` showed that the older combined collector did not preserve stable 50 Hz per-driver telemetry:
 
 * Practice: 48,181 stored telemetry samples, 24 proper laps, 10 excluded laps; proper-lap rates ranged from about 1.4 Hz to 14.2 Hz, with an 8.2 Hz median.
 * Qualifying: 54,269 stored telemetry samples, 7 proper laps, 6 excluded laps; proper-lap rates ranged from about 26.5 Hz to 30.0 Hz, with a 28.0 Hz median.
 
 Those fixtures remain useful regression data for collector design, but they are not the final source-quality verdict.
 
-The later telemetry-only diagnostic in `services/leaderboard/poc/diagnostic-raw/` isolated the source cadence more cleanly:
+The later telemetry-only diagnostic in `tools/rf2-poc/diagnostic-raw/` isolated the source cadence more cleanly:
 
 * target polling rate: `100 Hz`;
 * captured duration: about `600 s`;
@@ -130,15 +130,15 @@ Reference procedure followed during the PoC:
 Reference commands:
 
 ```powershell
-python services/leaderboard/poc/run_poc.py --source mock
-python services/leaderboard/poc/run_poc.py --source shared-memory
+python tools/rf2-poc/run_poc.py --source mock
+python tools/rf2-poc/run_poc.py --source shared-memory
 Get-CimInstance Win32_Process | Where-Object { $_.Name -like '*Dedicated*.exe' } | Select-Object ProcessId, Name, ExecutablePath, CommandLine
-python services/leaderboard/poc/run_poc.py --source shared-memory --pid <PID>
-python services/leaderboard/poc/run_poc.py --source shared-memory --map-name 'Global\$rFactor2SMMP_Scoring$12345' --telemetry-map-name 'Global\$rFactor2SMMP_Telemetry$12345'
-python services/leaderboard/poc/list_memory_maps.py --pid <PID>
-python services/leaderboard/poc/analyze_recordings.py services/leaderboard/poc/diagnostic-raw
-python -m compileall -q services/leaderboard/poc
-python -m unittest discover services/leaderboard/poc/tests
+python tools/rf2-poc/run_poc.py --source shared-memory --pid <PID>
+python tools/rf2-poc/run_poc.py --source shared-memory --map-name 'Global\$rFactor2SMMP_Scoring$12345' --telemetry-map-name 'Global\$rFactor2SMMP_Telemetry$12345'
+python tools/rf2-poc/list_memory_maps.py --pid <PID>
+python tools/rf2-poc/analyze_recordings.py tools/rf2-poc/diagnostic-raw
+python -m compileall -q tools/rf2-poc
+python -m unittest discover tools/rf2-poc/tests
 ```
 
 If LAN viewing is needed, bind to `0.0.0.0` and open `http://<host-pc-ip>:8877/poc` from another machine.
