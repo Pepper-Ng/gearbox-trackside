@@ -1,8 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Trackside.Application.Configuration;
-using Trackside.Host.Tray;
 
-namespace Trackside.Host.Configuration;
+namespace Trackside.Service.Configuration;
 
 /// <summary>
 /// Root application options loaded from the <c>Trackside</c> configuration section.
@@ -34,10 +33,6 @@ public sealed class TracksideOptions
     /// </summary>
     public TracksideCorsOptions Cors { get; init; } = new();
 
-    /// <summary>
-    /// Windows notification-area behavior and menu configuration.
-    /// </summary>
-    public TracksideTrayOptions Tray { get; init; } = new();
 }
 
 /// <summary>

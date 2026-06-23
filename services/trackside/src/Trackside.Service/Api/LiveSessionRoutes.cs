@@ -1,4 +1,4 @@
-namespace Trackside.Host.Api;
+namespace Trackside.Service.Api;
 
 /// <summary>
 /// Centralizes public API and hub routes so backend, tray, and frontend stay aligned.

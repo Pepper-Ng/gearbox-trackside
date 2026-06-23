@@ -209,7 +209,7 @@ The first architecture target is a venue-local web system fed by rFactor 2 timin
 [rF2 shared-memory/scoring bridge]
             |
             v
-[Trackside Host - .NET / ASP.NET Core]
+[Trackside Service - .NET / ASP.NET Core]
             |-- SQLite storage
             |-- Shared-memory/scoring parser or adapter
             |-- Fixture/replay data adapter

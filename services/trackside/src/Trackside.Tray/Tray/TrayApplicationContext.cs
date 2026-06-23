@@ -1,20 +1,17 @@
 using System.Diagnostics;
 using System.Drawing;
 using System.Windows.Forms;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Trackside.Host.Configuration;
 
-namespace Trackside.Host.Tray;
+namespace Trackside.Tray.Tray;
 
 /// <summary>
 /// Windows Forms application context that owns the Trackside notification-area icon.
 /// </summary>
 public sealed class TrayApplicationContext : ApplicationContext
 {
-    private readonly IHostApplicationLifetime _lifetime;
-    private readonly TracksideOptions _options;
+    private readonly TracksideTrayOptions _options;
     private readonly ILogger<TrayApplicationContext> _logger;
     private readonly NotifyIcon _notifyIcon;
 
@@ -22,28 +19,25 @@ public sealed class TrayApplicationContext : ApplicationContext
     /// Creates the tray icon and context menu from configuration.
     /// </summary>
     /// <param name="options">Trackside options containing tray menu definitions.</param>
-    /// <param name="lifetime">Host lifetime used to stop the web server.</param>
     /// <param name="logger">Logger for tray actions.</param>
     public TrayApplicationContext(
-        IOptions<TracksideOptions> options,
-        IHostApplicationLifetime lifetime,
+        IOptions<TracksideTrayOptions> options,
         ILogger<TrayApplicationContext> logger)
     {
-        _lifetime = lifetime;
         _options = options.Value;
         _logger = logger;
         _notifyIcon = new NotifyIcon
         {
             ContextMenuStrip = BuildMenu(),
             Icon = SystemIcons.Application,
-            Text = TrimTooltip(_options.Tray.Tooltip),
+            Text = TrimTooltip(_options.Tooltip),
             Visible = true,
         };
         _notifyIcon.DoubleClick += (_, _) => OpenRoute("/");
 
-        if (!string.IsNullOrWhiteSpace(_options.Tray.BalloonMessage))
+        if (!string.IsNullOrWhiteSpace(_options.BalloonMessage))
         {
-            _notifyIcon.ShowBalloonTip(2500, _options.Tray.BalloonTitle, _options.Tray.BalloonMessage, ToolTipIcon.Info);
+            _notifyIcon.ShowBalloonTip(2500, _options.BalloonTitle, _options.BalloonMessage, ToolTipIcon.Info);
         }
     }
 
@@ -62,7 +56,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     private ContextMenuStrip BuildMenu()
     {
         var menu = new ContextMenuStrip();
-        foreach (var item in _options.Tray.MenuItems)
+        foreach (var item in _options.MenuItems)
         {
             menu.Items.Add(CreateMenuItem(item));
         }
@@ -106,14 +100,13 @@ public sealed class TrayApplicationContext : ApplicationContext
                 OpenUrl(ResolveUrl(item));
                 break;
             case TracksideTrayMenuAction.Exit:
-                _logger.LogInformation("Tray exit requested.");
-                _lifetime.StopApplication();
+                _logger.LogInformation("Tray companion exit requested.");
                 ExitThread();
                 break;
         }
     }
 
-    private void OpenRoute(string route) => OpenUrl(CombineBaseUrl(_options.Http.PublicBaseUrl, route));
+    private void OpenRoute(string route) => OpenUrl(CombineBaseUrl(_options.HostBaseUrl, route));
 
     private void OpenUrl(string url)
     {
@@ -128,7 +121,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             return item.Url;
         }
 
-        return CombineBaseUrl(_options.Http.PublicBaseUrl, item.Route ?? "/");
+        return CombineBaseUrl(_options.HostBaseUrl, item.Route ?? "/");
     }
 
     private static string CombineBaseUrl(string baseUrl, string route)

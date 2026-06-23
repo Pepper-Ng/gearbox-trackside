@@ -1,4 +1,4 @@
-using Trackside.Host.Api;
+using Trackside.Service.Api;
 
 namespace Trackside.Tests;
 

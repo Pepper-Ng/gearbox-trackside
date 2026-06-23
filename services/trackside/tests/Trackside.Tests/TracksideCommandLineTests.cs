@@ -1,4 +1,4 @@
-using Trackside.Host.Hosting;
+using Trackside.Service.Hosting;
 
 namespace Trackside.Tests;
 
@@ -13,11 +13,12 @@ public sealed class TracksideCommandLineTests
     [Fact]
     public void NormalizeMapsFixtureArguments()
     {
-        var normalized = TracksideCommandLine.Normalize(["--source", "fixture", "--fixture", "fixture.json", "--no-tray"]);
+        var normalized = TracksideCommandLine.Normalize(["--source", "fixture", "--fixture", "fixture.json", "--console"], out var forceConsoleMode);
 
         Assert.Contains("--Trackside:Source:Mode=fixture", normalized);
         Assert.Contains("--Trackside:Source:FixturePath=fixture.json", normalized);
-        Assert.Contains("--Trackside:Tray:Enabled=false", normalized);
+        Assert.True(forceConsoleMode);
+        Assert.DoesNotContain("--console", normalized);
     }
 
     /// <summary>

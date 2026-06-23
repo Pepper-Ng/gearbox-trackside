@@ -3,14 +3,14 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Trackside.Application.Configuration;
 using Trackside.Application.LiveSession;
-using Trackside.Host.Workers;
 using Trackside.Infrastructure.LiveSession;
 using Trackside.Infrastructure.LiveSession.Fixtures;
+using Trackside.Service.Workers;
 
-namespace Trackside.Host.Configuration;
+namespace Trackside.Service.Configuration;
 
 /// <summary>
-/// Registers Trackside services that are shared by the API, SignalR hub, and tray shell.
+/// Registers Trackside services used by the API, SignalR hub, and hosted workers.
 /// </summary>
 public static class TracksideServiceCollectionExtensions
 {

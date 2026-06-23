@@ -4,9 +4,9 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Options;
 using Trackside.Application.LiveSession;
-using Trackside.Host.Configuration;
+using Trackside.Service.Configuration;
 
-namespace Trackside.Host.Api;
+namespace Trackside.Service.Api;
 
 /// <summary>
 /// Maps HTTP endpoints used by local kiosk, admin, diagnostics, and tray actions.
@@ -58,7 +58,6 @@ public static class TracksideApiEndpoints
             TimestampUtc = timeProvider.GetUtcNow(),
             Version = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0",
             SourceMode = options.Value.Source.Mode,
-            TrayEnabled = options.Value.Tray.Enabled,
             PublicBaseUrl = options.Value.Http.PublicBaseUrl,
             CurrentSessionAvailable = current is not null,
             CurrentTrackName = current?.Session.TrackName,
@@ -93,11 +92,6 @@ public sealed record TracksideHealthResponse
     /// Configured live-session source mode.
     /// </summary>
     public LiveSessionSourceMode SourceMode { get; init; }
-
-    /// <summary>
-    /// Whether the Windows tray shell is enabled by configuration.
-    /// </summary>
-    public bool TrayEnabled { get; init; }
 
     /// <summary>
     /// Public local base URL opened by tray actions.

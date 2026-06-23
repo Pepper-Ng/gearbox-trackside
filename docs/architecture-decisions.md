@@ -9,7 +9,7 @@
 
 The production backend will be built on **.NET / ASP.NET Core**.
 
-Trackside will ship as one Windows-oriented application bundle whose primary always-on process is a **.NET Trackside Host**. That host owns shared-memory reading, scoring, persistence, local HTTP hosting, push updates, configuration, diagnostics, and orchestration of optional worker processes.
+Trackside will ship as one Windows-oriented application bundle whose primary always-on process is a **.NET Trackside Service**. That service composes shared-memory reading, scoring, persistence, local HTTP hosting, push updates, configuration, diagnostics, and orchestration of optional worker processes.
 
 The default product shape is:
 
@@ -18,7 +18,7 @@ The default product shape is:
         |
         | Windows named shared-memory maps
         v
-[Trackside Host - .NET / ASP.NET Core]
+[Trackside Service - .NET / ASP.NET Core]
         |-- scoring collector worker
         |-- telemetry collector worker, when telemetry is enabled
         |-- normalized live-session model
@@ -72,8 +72,8 @@ The repo should add a `global.json` when the .NET solution is scaffolded so cont
 Phase 0B backend scaffolding must implement these commands from the repository root:
 
 ```powershell
-dotnet run --project services\trackside\src\Trackside.Host -- --source fixture --fixture Fixtures\mock-live-session.json
-dotnet run --project services\trackside\src\Trackside.Host -- --source shared-memory --pid <Dedicated.exe PID>
+dotnet run --project services\trackside\src\Trackside.Service -- --console --source fixture --fixture Fixtures\mock-live-session.json
+dotnet run --project services\trackside\src\Trackside.Service -- --console --source shared-memory --pid <Dedicated.exe PID>
 ```
 
 The host should bind to localhost by default, for example:
@@ -166,12 +166,12 @@ The reliable venue shape is a **service plus control surface**, not a web server
 
 Decision:
 
-* The primary runtime is `Trackside.Host`, a .NET process designed to run unattended and auto-restart.
-* For early development it may run as a console app.
+* The primary runtime is `Trackside.Service`, a .NET process designed to run unattended and auto-restart.
+* For early development it may run with `--console`.
 * For venue rollout it should run as a Windows service or service-like background process.
 * A tray icon/control app should be available for interactive venue users as a thin .NET companion/status surface, especially so staff can see after reboot that Trackside is running and can reopen dashboards quickly.
 * Collection, scoring, storage, and kiosk updates must still run without an interactive desktop session; the tray companion observes/controls the host but is not the owner of critical runtime work.
-* Configuration, status, diagnostics, and staff controls should be local web pages hosted by `Trackside.Host`; the tray menu should mostly open those pages and expose obvious start/stop/status actions.
+* Configuration, status, diagnostics, and staff controls should be local web pages hosted by `Trackside.Service`; the tray menu should mostly open those pages and expose obvious start/stop/status actions.
 
 This keeps the user-facing product as one installed Trackside application while respecting the Windows limitation that true services cannot directly own an interactive tray icon in the user's desktop session.
 
@@ -181,10 +181,11 @@ Trackside should build separate binaries for the venue host and rig/client machi
 
 Decision:
 
-* `Trackside.Host` is the central venue process. It owns the browser UI, APIs, SignalR hub, persistence, scoring source, orchestration, and update policy.
+* `Trackside.Service` is the central venue process. It is the composition root for APIs, SignalR hub, persistence, scoring source, orchestration, and update policy; business logic stays in Domain/Application/Infrastructure layers.
+* `Trackside.Tray` is the interactive venue companion. It opens dashboards/status pages and later may call local control endpoints or Windows service-control operations; it does not run core collection/scoring logic.
 * `Trackside.RigAgent` is scaffolded as a future rig-side worker process. It is intentionally idle in Phase 0B.
 * The rig agent may later collect rig-local telemetry, prepare setup/player names before rFactor 2 joins a session, receive host commands for spectator-mode assignment, and report local health/status.
-* The host and rig agent must communicate through explicit HTTP/SignalR-style contracts or a future command channel, not shared files hidden behind the UI.
+* The service, tray, and rig agent must communicate through explicit HTTP/SignalR-style contracts, service-control operations, or a future command channel, not shared files hidden behind the UI.
 * Browser clients remain browser clients. The term "rig agent" is used for machine-side services to avoid confusing them with the React kiosk/admin client.
 
 This split keeps the current central-server deployment simple while leaving room for higher-quality rig-local telemetry or remote rig orchestration if venue testing proves those are needed.
@@ -229,7 +230,7 @@ The .NET host should use separate hosted workers and bounded channels:
 * SignalR publisher worker for browser-facing snapshots;
 * optional report job runner for slower Python or .NET report generation.
 
-If live validation shows that one .NET process still cannot keep telemetry and web publishing independent enough, the next split is **separate .NET worker processes supervised by Trackside.Host**, not a switch back to Python as the main backend.
+If live validation shows that one .NET process still cannot keep telemetry and web publishing independent enough, the next split is **separate .NET worker processes supervised by Trackside.Service**, not a switch back to Python as the main backend.
 
 ### Consequences
 

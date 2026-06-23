@@ -4,10 +4,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Trackside.Application.Configuration;
 using Trackside.Application.LiveSession;
-using Trackside.Host.Configuration;
-using Trackside.Host.Hubs;
+using Trackside.Service.Hubs;
 
-namespace Trackside.Host.Workers;
+namespace Trackside.Service.Workers;
 
 /// <summary>
 /// Periodically refreshes the current session and broadcasts it to SignalR clients.

@@ -1,6 +1,6 @@
 using Trackside.Domain.LiveSession;
 
-namespace Trackside.Host.Hubs;
+namespace Trackside.Service.Hubs;
 
 /// <summary>
 /// Strongly typed SignalR client contract for live-session updates.

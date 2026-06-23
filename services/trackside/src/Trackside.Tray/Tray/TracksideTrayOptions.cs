@@ -1,10 +1,20 @@
-namespace Trackside.Host.Tray;
+namespace Trackside.Tray.Tray;
 
 /// <summary>
 /// Configuration for the Windows notification-area shell.
 /// </summary>
 public sealed class TracksideTrayOptions
 {
+    /// <summary>
+    /// Configuration section name used by the tray companion.
+    /// </summary>
+    public const string SectionName = "TracksideTray";
+
+    /// <summary>
+    /// Base URL of the local Trackside service opened by relative tray menu routes.
+    /// </summary>
+    public string HostBaseUrl { get; init; } = "http://127.0.0.1:8877";
+
     /// <summary>
     /// Enables the tray icon when the executable is launched in an interactive Windows session.
     /// </summary>
@@ -13,7 +23,7 @@ public sealed class TracksideTrayOptions
     /// <summary>
     /// Tooltip shown when hovering the notification-area icon.
     /// </summary>
-    public string Tooltip { get; init; } = "Trackside Host";
+    public string Tooltip { get; init; } = "Trackside";
 
     /// <summary>
     /// Balloon title shown once when tray mode starts.

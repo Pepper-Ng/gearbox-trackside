@@ -19,14 +19,14 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="..\..\src\Trackside.Host\Fixtures\mock-live-session.json" Link="Fixtures\mock-live-session.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\src\Trackside.Service\Fixtures\mock-live-session.json" Link="Fixtures\mock-live-session.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Trackside.Application\Trackside.Application.csproj" />
     <ProjectReference Include="..\..\src\Trackside.Domain\Trackside.Domain.csproj" />
-    <ProjectReference Include="..\..\src\Trackside.Host\Trackside.Host.csproj" />
     <ProjectReference Include="..\..\src\Trackside.Infrastructure\Trackside.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\Trackside.Service\Trackside.Service.csproj" />
   </ItemGroup>
 
 </Project>

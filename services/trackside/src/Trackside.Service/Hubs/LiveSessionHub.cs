@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.SignalR;
 using Trackside.Application.LiveSession;
 using Trackside.Domain.LiveSession;
 
-namespace Trackside.Host.Hubs;
+namespace Trackside.Service.Hubs;
 
 /// <summary>
 /// SignalR hub used by kiosk and admin pages to receive live-session pushes.

@@ -2,12 +2,13 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting.WindowsServices;
 using Trackside.Application.Serialization;
-using Trackside.Host.Api;
-using Trackside.Host.Configuration;
-using Trackside.Host.Hubs;
+using Trackside.Service.Api;
+using Trackside.Service.Configuration;
+using Trackside.Service.Hubs;
 
-namespace Trackside.Host.Hosting;
+namespace Trackside.Service.Hosting;
 
 /// <summary>
 /// Builds the ASP.NET Core application and keeps endpoint composition in one place.
@@ -21,11 +22,17 @@ public static class TracksideWebApplication
     /// <returns>A configured <see cref="WebApplication" /> ready to run.</returns>
     public static WebApplication Create(string[] args)
     {
+        var normalizedArgs = TracksideCommandLine.Normalize(args, out var forceConsoleMode);
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions
         {
-            Args = TracksideCommandLine.Normalize(args),
+            Args = normalizedArgs,
             ContentRootPath = AppContext.BaseDirectory,
         });
+
+        if (!forceConsoleMode && OperatingSystem.IsWindows())
+        {
+            builder.Host.UseWindowsService(options => options.ServiceName = "Trackside");
+        }
 
         var listenUrl = builder.Configuration.GetSection(TracksideOptions.SectionName)
             .GetSection(nameof(TracksideOptions.Http))

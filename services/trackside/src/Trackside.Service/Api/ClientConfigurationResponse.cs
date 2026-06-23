@@ -1,4 +1,4 @@
-namespace Trackside.Host.Api;
+namespace Trackside.Service.Api;
 
 /// <summary>
 /// Browser-facing endpoint map for the kiosk and admin frontend.

@@ -1,4 +1,4 @@
-namespace Trackside.Host.Hosting;
+namespace Trackside.Service.Hosting;
 
 /// <summary>
 /// Converts friendly Trackside command-line switches into ASP.NET Core configuration keys.
@@ -10,8 +10,17 @@ public static class TracksideCommandLine
     /// </summary>
     /// <param name="args">Raw process arguments.</param>
     /// <returns>Arguments that can be passed to <see cref="WebApplicationOptions.Args" />.</returns>
-    public static string[] Normalize(string[] args)
+    public static string[] Normalize(string[] args) => Normalize(args, out _);
+
+    /// <summary>
+    /// Converts user-facing arguments and reports whether the process should force console lifetime.
+    /// </summary>
+    /// <param name="args">Raw process arguments.</param>
+    /// <param name="forceConsoleMode">True when <c>--console</c> was supplied.</param>
+    /// <returns>Arguments that can be passed to <see cref="WebApplicationOptions.Args" />.</returns>
+    public static string[] Normalize(string[] args, out bool forceConsoleMode)
     {
+        forceConsoleMode = false;
         var normalized = new List<string>();
         for (var index = 0; index < args.Length; index++)
         {
@@ -30,11 +39,8 @@ public static class TracksideCommandLine
                 case "--public-base-url":
                     normalized.Add(ToConfigurationValue("Trackside:Http:PublicBaseUrl", ReadValue(args, ref index, argument)));
                     break;
-                case "--no-tray":
-                    normalized.Add(ToConfigurationValue("Trackside:Tray:Enabled", "false"));
-                    break;
-                case "--tray":
-                    normalized.Add(ToConfigurationValue("Trackside:Tray:Enabled", "true"));
+                case "--console":
+                    forceConsoleMode = true;
                     break;
                 default:
                     normalized.Add(argument);
