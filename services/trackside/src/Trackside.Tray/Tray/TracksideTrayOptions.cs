@@ -26,12 +26,18 @@ public sealed class TracksideTrayOptions
     public string Tooltip { get; init; } = "Trackside";
 
     /// <summary>
-    /// Balloon title shown once when tray mode starts.
+    /// Shows a Windows notification balloon when the tray companion starts.
+    /// Keep this off for normal venue operation to avoid noisy reboot/login behavior.
+    /// </summary>
+    public bool ShowStartupBalloon { get; init; }
+
+    /// <summary>
+    /// Balloon title shown when <see cref="ShowStartupBalloon" /> is enabled.
     /// </summary>
     public string BalloonTitle { get; init; } = "Trackside is running";
 
     /// <summary>
-    /// Balloon body shown once when tray mode starts.
+    /// Balloon body shown when <see cref="ShowStartupBalloon" /> is enabled.
     /// </summary>
     public string BalloonMessage { get; init; } = "Open the tray menu for Trackside actions.";
 

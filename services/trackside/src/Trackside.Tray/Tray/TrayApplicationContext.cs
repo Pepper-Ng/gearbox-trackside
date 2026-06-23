@@ -13,6 +13,7 @@ public sealed class TrayApplicationContext : ApplicationContext
 {
     private readonly TracksideTrayOptions _options;
     private readonly ILogger<TrayApplicationContext> _logger;
+    private readonly Icon _trayIcon;
     private readonly NotifyIcon _notifyIcon;
 
     /// <summary>
@@ -26,17 +27,18 @@ public sealed class TrayApplicationContext : ApplicationContext
     {
         _options = options.Value;
         _logger = logger;
+        _trayIcon = LoadTrayIcon();
         _notifyIcon = new NotifyIcon
         {
             ContextMenuStrip = BuildMenu(),
-            Icon = SystemIcons.Application,
+            Icon = _trayIcon,
             Text = TrimTooltip(_options.Tooltip),
             Visible = true,
         };
         _notifyIcon.MouseUp += OnNotifyIconMouseUp;
         _notifyIcon.DoubleClick += (_, _) => OpenRoute("/");
 
-        if (!string.IsNullOrWhiteSpace(_options.BalloonMessage))
+        if (_options.ShowStartupBalloon && !string.IsNullOrWhiteSpace(_options.BalloonMessage))
         {
             _notifyIcon.ShowBalloonTip(2500, _options.BalloonTitle, _options.BalloonMessage, ToolTipIcon.Info);
         }
@@ -49,6 +51,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         {
             _notifyIcon.Visible = false;
             _notifyIcon.Dispose();
+            _trayIcon.Dispose();
         }
 
         base.Dispose(disposing);
@@ -145,5 +148,11 @@ public sealed class TrayApplicationContext : ApplicationContext
     {
         const int maximumNotifyIconTextLength = 63;
         return value.Length <= maximumNotifyIconTextLength ? value : value[..maximumNotifyIconTextLength];
+    }
+
+    private static Icon LoadTrayIcon()
+    {
+        var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "app.ico");
+        return File.Exists(iconPath) ? new Icon(iconPath) : (Icon)SystemIcons.Application.Clone();
     }
 }
