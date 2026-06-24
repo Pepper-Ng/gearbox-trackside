@@ -23,7 +23,11 @@ if (!(Test-Path $manifestPath)) {
     throw "Bundle manifest not found at '$manifestPath'."
 }
 
-$manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+$updaterExe = Join-Path $BundleRoot 'app\updater\Trackside.Updater.exe'
+if (!(Test-Path $updaterExe)) {
+    throw "Updater executable not found at '$updaterExe'."
+}
+
 $installRootFull = [System.IO.Path]::GetFullPath($InstallRoot)
 $configPath = Join-Path $installRootFull 'config'
 $dataPath = Join-Path $installRootFull 'data'
@@ -78,6 +82,14 @@ function Copy-DirectoryContent {
     New-Item -ItemType Directory -Force $Destination | Out-Null
     Copy-Item -Path (Join-Path $Source '*') -Destination $Destination -Recurse -Force
 }
+
+Write-Host "Verifying Trackside bundle manifest at '$manifestPath'."
+& $updaterExe verify --manifest $manifestPath --root $BundleRoot
+if ($LASTEXITCODE -ne 0) {
+    throw "Bundle manifest verification failed with exit code $LASTEXITCODE."
+}
+
+$manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
 
 if (!$DryRun -and !$SkipService -and !(Test-IsAdministrator)) {
     throw 'Installing the Windows Service requires an elevated PowerShell session. Re-run with -DryRun to preview without elevation.'

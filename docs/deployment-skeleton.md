@@ -61,7 +61,7 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File <bundle>\install\Install-Trackside
 Start-Service Trackside
 ```
 
-The install script copies app files, preserves existing configuration unless `-OverwriteConfig` is supplied, creates `data`, `logs`, and `updates\staging`, installs or updates the `Trackside` Windows Service, configures restart-on-failure, and writes a current-user Run entry for the tray companion.
+The install script verifies `manifest.json` with `Trackside.Updater` before copying, preserves existing configuration unless `-OverwriteConfig` is supplied, creates `data`, `logs`, and `updates\staging`, installs or updates the `Trackside` Windows Service, configures restart-on-failure, and writes a current-user Run entry for the tray companion.
 
 Preview uninstall actions:
 

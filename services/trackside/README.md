@@ -60,6 +60,8 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File <bundle>\install\Install-Trackside
 pwsh -NoProfile -ExecutionPolicy Bypass -File <bundle>\install\Uninstall-Trackside.ps1 -DryRun
 ```
 
+The install script verifies the bundle manifest through `Trackside.Updater` before copying files.
+
 ## Configuration
 
 The `Trackside` section in `Trackside.Service/appsettings.json` controls:
