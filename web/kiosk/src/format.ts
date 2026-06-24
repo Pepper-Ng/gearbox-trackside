@@ -16,3 +16,20 @@ export function formatNumber(value: number | null | undefined, digits = 1): stri
   }
   return value.toFixed(digits);
 }
+
+/** Formats a leaderboard gap from leader/next timing values. */
+export function formatGap(seconds: number | null | undefined, laps?: number | null): string {
+  if (laps !== null && laps !== undefined && laps > 0) {
+    return `+${laps}L`;
+  }
+
+  if (seconds === 0) {
+    return 'Leader';
+  }
+
+  if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) {
+    return '-';
+  }
+
+  return `+${seconds.toFixed(3)}`;
+}

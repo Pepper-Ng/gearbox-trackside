@@ -41,6 +41,21 @@ public sealed record LiveSessionInfo
     public double? TrackTemperatureCelsius { get; init; }
 
     /// <summary>
+    /// Rain intensity from the source, normalized between 0 and 1 when available.
+    /// </summary>
+    public double? RainIntensity { get; init; }
+
+    /// <summary>
+    /// Cloud intensity from the source, normalized between 0 and 1 when available.
+    /// </summary>
+    public double? CloudIntensity { get; init; }
+
+    /// <summary>
+    /// Average path wetness from the source, normalized between 0 and 1 when available.
+    /// </summary>
+    public double? TrackWetness { get; init; }
+
+    /// <summary>
     /// Concise flag state suitable for kiosk display.
     /// </summary>
     public string OverallFlag { get; init; } = "Unknown";

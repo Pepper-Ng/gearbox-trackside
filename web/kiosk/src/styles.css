@@ -91,3 +91,63 @@ th {
   opacity: .68;
   text-transform: uppercase;
 }
+
+.leaderboardTable {
+  table-layout: fixed;
+  min-width: 1060px;
+}
+
+.leaderboardTable th:nth-child(1),
+.leaderboardTable td:nth-child(1) {
+  width: 54px;
+}
+
+.leaderboardTable th:nth-child(2),
+.leaderboardTable td:nth-child(2) {
+  width: 170px;
+}
+
+.leaderboardTable th:nth-child(4),
+.leaderboardTable td:nth-child(4) {
+  width: 150px;
+}
+
+.rankCell {
+  font-weight: 700;
+  font-size: 18px;
+}
+
+.driverCell {
+  display: grid;
+  gap: 2px;
+}
+
+.driverCell strong,
+.driverCell span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.driverCell span,
+.sectorCell small {
+  font-size: 12px;
+  opacity: .66;
+}
+
+.sectorCell {
+  line-height: 1.25;
+}
+
+.sectorCell span,
+.sectorCell small {
+  display: block;
+}
+
+.bestTime {
+  color: light-dark(#006b2e, #5ff08a);
+  font-weight: 700;
+}
+
+.bestLapRow .rankCell {
+  color: light-dark(#005bd1, #7fb6ff);
+}

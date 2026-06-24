@@ -8,7 +8,10 @@ param(
     [switch]$DryRun,
     [switch]$OverwriteConfig,
     [switch]$SkipService,
-    [switch]$SkipTrayAutostart
+    [switch]$SkipTrayAutostart,
+    [switch]$SkipAdminBootstrap,
+    [string]$AdminUsername = "",
+    [securestring]$AdminPassword
 )
 
 $ErrorActionPreference = 'Stop'
@@ -83,6 +86,118 @@ function Copy-DirectoryContent {
     Copy-Item -Path (Join-Path $Source '*') -Destination $Destination -Recurse -Force
 }
 
+function ConvertTo-PlainText {
+    param([securestring]$Value)
+
+    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($Value)
+    try {
+        return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
+    }
+    finally {
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+    }
+}
+
+function New-AdminPasswordHash {
+    param([string]$Password)
+
+    $salt = [byte[]]::new(32)
+    [Security.Cryptography.RandomNumberGenerator]::Fill($salt)
+    $derive = [Security.Cryptography.Rfc2898DeriveBytes]::new(
+        $Password,
+        $salt,
+        210000,
+        [Security.Cryptography.HashAlgorithmName]::SHA256)
+    try {
+        $hash = $derive.GetBytes(32)
+        return [pscustomobject]@{
+            algorithm = 'PBKDF2-HMACSHA256'
+            iterations = 210000
+            salt = [Convert]::ToBase64String($salt)
+            hash = [Convert]::ToBase64String($hash)
+        }
+    }
+    finally {
+        $derive.Dispose()
+    }
+}
+
+function Initialize-AdminStore {
+    param(
+        [string]$StoreRoot,
+        [string]$Username,
+        [securestring]$Password,
+        [switch]$Skip
+    )
+
+    if ($Skip) {
+        Write-Step 'Skipping first admin bootstrap.'
+        return
+    }
+
+    $securityPath = Join-Path $StoreRoot 'security'
+    $storePath = Join-Path $securityPath 'admin-users.json'
+    if (Test-Path $storePath) {
+        Write-Step "Preserving existing admin user store at '$storePath'."
+        return
+    }
+
+    if ($DryRun) {
+        Write-Step "Would create first admin user store at '$storePath'."
+        return
+    }
+
+    if ([string]::IsNullOrWhiteSpace($Username)) {
+        $Username = Read-Host 'Trackside first admin username'
+    }
+
+    if ([string]::IsNullOrWhiteSpace($Username) -or $Username.Length -lt 3 -or $Username -match '\s') {
+        throw 'Admin username must be at least 3 characters and cannot contain whitespace.'
+    }
+
+    if ($null -eq $Password) {
+        $Password = Read-Host 'Trackside first admin password' -AsSecureString
+    }
+
+    $plainPassword = ConvertTo-PlainText $Password
+    try {
+        if ($plainPassword.Length -lt 12) {
+            throw 'Admin password must be at least 12 characters.'
+        }
+
+        $passwordHash = New-AdminPasswordHash $plainPassword
+    }
+    finally {
+        $plainPassword = $null
+    }
+
+    $now = [DateTimeOffset]::UtcNow.ToString('o')
+    $document = [ordered]@{
+        schemaVersion = 1
+        users = @(
+            [ordered]@{
+                username = $Username.Trim()
+                displayName = $Username.Trim()
+                passwordHashAlgorithm = $passwordHash.algorithm
+                passwordHashIterations = $passwordHash.iterations
+                passwordSalt = $passwordHash.salt
+                passwordHash = $passwordHash.hash
+                createdUtc = $now
+                updatedUtc = $now
+            }
+        )
+    }
+
+    New-Item -ItemType Directory -Force $securityPath | Out-Null
+    & icacls.exe $securityPath /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to secure admin store directory '$securityPath'."
+    }
+
+    $document | ConvertTo-Json -Depth 5 | Set-Content -Path $storePath -Encoding UTF8
+    Write-Step "Created first admin user '$($Username.Trim())' at '$storePath'."
+}
+
 Write-Host "Verifying Trackside bundle manifest at '$manifestPath'."
 & $updaterExe verify --manifest $manifestPath --root $BundleRoot
 if ($LASTEXITCODE -ne 0) {
@@ -108,6 +223,8 @@ foreach ($directory in @($dataPath, $logsPath, (Join-Path $updatesPath 'staging'
         New-Item -ItemType Directory -Force $directory | Out-Null
     }
 }
+
+Initialize-AdminStore -StoreRoot $dataPath -Username $AdminUsername -Password $AdminPassword -Skip:$SkipAdminBootstrap
 
 if ($DryRun) {
     Write-Step "Copy manifest to '$installedManifestPath'."

@@ -32,6 +32,16 @@ public sealed class TracksideTrayOptions
     public bool ShowStartupBalloon { get; init; }
 
     /// <summary>
+    /// Interval in seconds between status checks used to update the tray icon dot.
+    /// </summary>
+    public double StatusRefreshSeconds { get; init; } = 2.0;
+
+    /// <summary>
+    /// Timeout in seconds for each local service status request.
+    /// </summary>
+    public double StatusRequestTimeoutSeconds { get; init; } = 1.5;
+
+    /// <summary>
     /// Balloon title shown when <see cref="ShowStartupBalloon" /> is enabled.
     /// </summary>
     public string BalloonTitle { get; init; } = "Trackside is running";

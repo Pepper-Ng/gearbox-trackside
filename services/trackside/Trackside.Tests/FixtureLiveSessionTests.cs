@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Trackside.Application.LiveSession;
 using Trackside.Application.Serialization;
 using Trackside.Domain.LiveSession;
 
@@ -26,5 +27,29 @@ public sealed class FixtureLiveSessionTests
         Assert.Equal(SessionPhase.GreenFlag, snapshot.Session.Phase);
         Assert.Equal(3, snapshot.Drivers.Count);
         Assert.Equal("Setup1", snapshot.Drivers[0].RigName);
+    }
+
+    /// <summary>
+    /// Ensures the Phase 1 raw scoring fixture can be converted through the leaderboard builder.
+    /// </summary>
+    [Fact]
+    public void RawScoringFixtureBuildsNormalizedLeaderboard()
+    {
+        var fixturePath = Path.Combine(AppContext.BaseDirectory, "Fixtures", "scoring-leaderboard-practice.json");
+        var payload = File.ReadAllText(fixturePath);
+
+        var source = JsonSerializer.Deserialize<LeaderboardSourceSnapshot>(payload, TracksideJson.SerializerOptions);
+        var snapshot = new LeaderboardSnapshotBuilder().Build(
+            source!,
+            new DriverAliasMap(new Dictionary<string, string> { ["Setup1"] = "Maya" }),
+            DateTimeOffset.Parse("2026-06-24T12:00:00+00:00"),
+            updateSequence: 7);
+
+        Assert.NotNull(source);
+        Assert.Equal("Loch Drummond - Short", snapshot.Session.TrackName);
+        Assert.Equal(4, snapshot.Drivers.Count);
+        Assert.Equal("Setup3", snapshot.Drivers[0].RigName);
+        Assert.Equal(1, snapshot.Drivers[0].LeaderboardRank);
+        Assert.Equal("Maya", snapshot.Drivers.Single(driver => driver.RigName == "Setup1").DisplayName);
     }
 }

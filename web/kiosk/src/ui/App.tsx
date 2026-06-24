@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { HubConnection } from '@microsoft/signalr';
-import { formatLapTime, formatNumber } from '../format';
-import { LiveSessionSnapshot, TracksideApiClient } from '../tracksideApi';
+import { formatGap, formatLapTime, formatNumber } from '../format';
+import { DriverSnapshot, LiveSessionConnection, LiveSessionSnapshot, SectorSnapshot, startLiveSessionFeed, TracksideApiClient } from '../tracksideApi';
 
 /** Main kiosk application shell. */
 export function App() {
@@ -10,23 +9,27 @@ export function App() {
   const [status, setStatus] = useState('Loading configuration...');
 
   useEffect(() => {
-    let connection: HubConnection | null = null;
+    let connection: LiveSessionConnection | null = null;
     let cancelled = false;
 
-    async function connect() {
-      const configuration = await client.getClientConfiguration();
-      const current = await client.getCurrentSession(configuration.currentSessionPath);
-      if (!cancelled) {
-        setSnapshot(current);
-        setStatus('Connected through REST recovery endpoint');
+    startLiveSessionFeed(
+      client,
+      nextSnapshot => {
+        if (!cancelled) {
+          setSnapshot(nextSnapshot);
+        }
+      },
+      nextStatus => {
+        if (!cancelled) {
+          setStatus(nextStatus);
+        }
+      },
+    ).then(nextConnection => {
+      connection = nextConnection;
+      if (cancelled) {
+        void connection.stop();
       }
-      connection = await client.connectLiveSession(configuration.liveSessionHubPath, pushedSnapshot => {
-        setSnapshot(pushedSnapshot);
-        setStatus('Connected through SignalR live updates');
-      });
-    }
-
-    connect().catch(error => {
+    }).catch(error => {
       if (!cancelled) {
         setStatus(`Unable to connect: ${error instanceof Error ? error.message : String(error)}`);
       }
@@ -61,40 +64,80 @@ export function App() {
       </section>
 
       <section>
-        <h2>Fixture Drivers</h2>
+        <h2>Live Board</h2>
         <div className="tableFrame">
-          <table>
-            <thead>
-              <tr>
-                <th>Pos</th>
-                <th>Driver</th>
-                <th>Rig</th>
-                <th>Vehicle</th>
-                <th>Laps</th>
-                <th>Best</th>
-                <th>Last</th>
-                <th>Gap</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(snapshot?.drivers ?? []).map(driver => (
-                <tr key={driver.driverId}>
-                  <td>{driver.position ?? '-'}</td>
-                  <td>{driver.displayName}</td>
-                  <td>{driver.rigName}</td>
-                  <td>{driver.vehicleName}</td>
-                  <td>{driver.completedLaps}</td>
-                  <td>{formatLapTime(driver.bestLapSeconds)}</td>
-                  <td>{formatLapTime(driver.lastLapSeconds)}</td>
-                  <td>{driver.gapToLeaderSeconds ? `+${formatNumber(driver.gapToLeaderSeconds, 3)}` : '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <LeaderboardTable drivers={snapshot?.drivers ?? []} />
         </div>
       </section>
     </main>
   );
+}
+
+interface LeaderboardTableProps {
+  /** Driver rows already sorted by the backend leaderboard rules. */
+  drivers: DriverSnapshot[];
+}
+
+function LeaderboardTable({ drivers }: LeaderboardTableProps) {
+  return (
+    <table className="leaderboardTable">
+      <thead>
+        <tr>
+          <th>Rank</th>
+          <th>Driver</th>
+          <th>Rig</th>
+          <th>Vehicle</th>
+          <th>Laps</th>
+          <th>Best</th>
+          <th>Current</th>
+          <th>S1</th>
+          <th>S2</th>
+          <th>S3</th>
+          <th>Gap</th>
+        </tr>
+      </thead>
+      <tbody>
+        {drivers.map(driver => (
+          <tr key={driver.driverId} className={driver.isOverallBestLap ? 'bestLapRow' : undefined}>
+            <td className="rankCell">{driver.leaderboardRank || driver.position || '-'}</td>
+            <td>
+              <div className="driverCell">
+                <strong>{driver.displayName}</strong>
+                <span>{formatPercent(driver.trackPositionPercent)}</span>
+              </div>
+            </td>
+            <td>{driver.rigName}</td>
+            <td>{driver.vehicleName}</td>
+            <td>{driver.completedLaps}</td>
+            <td className={driver.isOverallBestLap ? 'bestTime' : undefined}>{formatLapTime(driver.bestLapSeconds)}</td>
+            <td>{formatLapTime(driver.currentLapSeconds)}</td>
+            {[1, 2, 3].map(number => (
+              <SectorCell key={number} sector={driver.sectors.find(candidate => candidate.number === number)} />
+            ))}
+            <td>{formatGap(driver.gapToLeaderSeconds, driver.lapsBehindLeader)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+interface SectorCellProps {
+  /** Sector timing row for this cell. */
+  sector: SectorSnapshot | undefined;
+}
+
+function SectorCell({ sector }: SectorCellProps) {
+  return (
+    <td className={sector?.isOverallBest ? 'bestTime sectorCell' : 'sectorCell'}>
+      <span>{formatLapTime(sector?.bestSeconds)}</span>
+      <small>{formatLapTime(sector?.currentSeconds ?? sector?.lastSeconds)}</small>
+    </td>
+  );
+}
+
+function formatPercent(value: number | null | undefined): string {
+  return value === null || value === undefined || !Number.isFinite(value) ? '-' : `${formatNumber(value, 1)}%`;
 }
 
 interface MetricProps {

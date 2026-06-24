@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="..\Trackside.Service\Fixtures\mock-live-session.json" Link="Fixtures\mock-live-session.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\Trackside.Service\Fixtures\*.json" Link="Fixtures\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
@@ -27,6 +27,7 @@
     <ProjectReference Include="..\Trackside.Domain\Trackside.Domain.csproj" />
     <ProjectReference Include="..\Trackside.Infrastructure\Trackside.Infrastructure.csproj" />
     <ProjectReference Include="..\Trackside.Service\Trackside.Service.csproj" />
+    <ProjectReference Include="..\Trackside.Tray\Trackside.Tray.csproj" />
     <ProjectReference Include="..\Trackside.Updater\Trackside.Updater.csproj" />
   </ItemGroup>
 
