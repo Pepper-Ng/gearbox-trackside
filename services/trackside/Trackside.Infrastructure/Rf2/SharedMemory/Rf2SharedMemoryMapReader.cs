@@ -1,4 +1,5 @@
 using System.IO.MemoryMappedFiles;
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 
 namespace Trackside.Infrastructure.Rf2.SharedMemory;
@@ -8,6 +9,8 @@ namespace Trackside.Infrastructure.Rf2.SharedMemory;
 /// </summary>
 public sealed class Rf2SharedMemoryMapReader
 {
+    private const uint FileMapRead = 0x0004;
+
     /// <summary>
     /// Base scoring map name used by the rF2 shared-memory plugin.
     /// </summary>
@@ -53,27 +56,92 @@ public sealed class Rf2SharedMemoryMapReader
     [SupportedOSPlatform("windows")]
     public Rf2MappedBufferRead ReadFirstAvailable(IReadOnlyList<string> candidateNames, int payloadSize)
     {
+        return TryReadFirstAvailable(candidateNames, payloadSize, out var read, out var status)
+            ? read
+            : throw new SharedMemoryUnavailableException(status);
+    }
+
+    /// <summary>
+    /// Attempts to read the first available candidate map without throwing for the normal missing-map case.
+    /// </summary>
+    /// <param name="candidateNames">Candidate map names to try in order.</param>
+    /// <param name="payloadSize">Expected payload size without the mapped-buffer wrapper.</param>
+    /// <param name="read">Raw mapped-buffer bytes when a map was read.</param>
+    /// <param name="status">Diagnostic status when no map was read.</param>
+    /// <returns>True when a candidate map was read.</returns>
+    [SupportedOSPlatform("windows")]
+    public bool TryReadFirstAvailable(
+        IReadOnlyList<string> candidateNames,
+        int payloadSize,
+        out Rf2MappedBufferRead read,
+        out string status)
+    {
         var errors = new List<string>();
         foreach (var candidateName in candidateNames)
         {
-            try
+            if (!CanOpenMap(candidateName))
             {
-                return new Rf2MappedBufferRead(candidateName, ReadMap(candidateName, payloadSize + MappedBufferPayloadLocator.VersionBlockSizeBytes));
+                errors.Add($"{candidateName}: missing or inaccessible");
+                continue;
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FileNotFoundException or ArgumentException)
+
+            if (TryReadMap(candidateName, payloadSize + MappedBufferPayloadLocator.VersionBlockSizeBytes, out var wrappedBuffer, out var wrappedError))
             {
-                try
-                {
-                    return new Rf2MappedBufferRead(candidateName, ReadMap(candidateName, payloadSize));
-                }
-                catch (Exception fallbackEx) when (fallbackEx is IOException or UnauthorizedAccessException or FileNotFoundException or ArgumentException)
-                {
-                    errors.Add($"{candidateName}: {fallbackEx.Message}");
-                }
+                read = new Rf2MappedBufferRead(candidateName, wrappedBuffer);
+                status = "connected";
+                return true;
             }
+
+            if (TryReadMap(candidateName, payloadSize, out var unwrappedBuffer, out var unwrappedError))
+            {
+                read = new Rf2MappedBufferRead(candidateName, unwrappedBuffer);
+                status = "connected";
+                return true;
+            }
+
+            errors.Add($"{candidateName}: {unwrappedError ?? wrappedError ?? "read failed"}");
         }
 
-        throw new SharedMemoryUnavailableException($"Could not open any rF2 shared-memory map. Tried: {string.Join("; ", errors)}");
+        read = new Rf2MappedBufferRead(string.Empty, []);
+        status = errors.Count == 0
+            ? "No rF2 shared-memory map names were available."
+            : $"Could not open any rF2 shared-memory map. Tried: {string.Join("; ", errors)}";
+        return false;
+    }
+
+    /// <summary>
+    /// Tests whether a named map can be opened for reading without using exception-based probing.
+    /// </summary>
+    /// <param name="mapName">Map name to probe.</param>
+    /// <returns>True when the map can be opened for reading.</returns>
+    [SupportedOSPlatform("windows")]
+    public static bool CanOpenMap(string mapName)
+    {
+        var handle = NativeMethods.OpenFileMapping(FileMapRead, false, mapName);
+        if (handle == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        NativeMethods.CloseHandle(handle);
+        return true;
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static bool TryReadMap(string mapName, int bytesToRead, out byte[] buffer, out string? error)
+    {
+        try
+        {
+            buffer = ReadMap(mapName, bytesToRead);
+            error = null;
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FileNotFoundException or ArgumentException)
+        {
+            buffer = [];
+            error = ex.Message;
+            return false;
+        }
     }
 
     [SupportedOSPlatform("windows")]
@@ -84,6 +152,16 @@ public sealed class Rf2SharedMemoryMapReader
         var buffer = new byte[bytesToRead];
         accessor.ReadArray(0, buffer, 0, buffer.Length);
         return buffer;
+    }
+
+    private static class NativeMethods
+    {
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern IntPtr OpenFileMapping(uint desiredAccess, [MarshalAs(UnmanagedType.Bool)] bool inheritHandle, string name);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool CloseHandle(IntPtr handle);
     }
 }
 

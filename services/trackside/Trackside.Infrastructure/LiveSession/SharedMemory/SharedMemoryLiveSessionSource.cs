@@ -123,16 +123,19 @@ public sealed class SharedMemoryLiveSessionSource : ILiveSessionSource, IDisposa
         var resolution = _mapResolver.Resolve(options, discoveredMaps);
         if (resolution.IsAmbiguous)
         {
-            var candidates = string.Join(", ", resolution.AmbiguousCandidates.Select(candidate => candidate.MapName));
-            throw new SharedMemoryUnavailableException($"{resolution.Status} Candidates: {candidates}");
+            return Task.FromResult<ScoringLoopValue?>(null);
         }
 
-        var read = _mapReader.ReadFirstAvailable(resolution.CandidateMapNames, _parser.PayloadSize);
+        if (!_mapReader.TryReadFirstAvailable(resolution.CandidateMapNames, _parser.PayloadSize, out var read, out _))
+        {
+            return Task.FromResult<ScoringLoopValue?>(null);
+        }
+
         var location = _payloadLocator.Locate(read.Buffer, _parser.PayloadSize, _parser.ScorePayload);
         var payload = read.Buffer.AsSpan(location.Offset, location.PayloadSize);
         if (!_parser.IsStablePayload(payload))
         {
-            throw new SharedMemoryUnavailableException("Scoring memory map update was in progress; retrying.");
+            return Task.FromResult<ScoringLoopValue?>(null);
         }
 
         var source = _parser.ParseSource(

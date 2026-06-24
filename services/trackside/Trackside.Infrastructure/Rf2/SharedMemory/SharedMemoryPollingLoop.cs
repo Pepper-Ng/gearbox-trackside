@@ -103,6 +103,12 @@ public sealed class SharedMemoryPollingLoop<T> : IDisposable
                     _lastSuccessUtc = DateTimeOffset.UtcNow;
                     _lastError = null;
                 }
+                else
+                {
+                    Volatile.Write(ref _latest, null);
+                    _lastSuccessUtc = null;
+                    _lastError = null;
+                }
             }
             catch (OperationCanceledException) when (_stop.IsCancellationRequested)
             {

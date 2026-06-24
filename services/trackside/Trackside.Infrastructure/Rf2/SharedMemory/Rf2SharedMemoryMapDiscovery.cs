@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.IO.MemoryMappedFiles;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Trackside.Application.Configuration;
@@ -102,25 +101,12 @@ public sealed class Rf2SharedMemoryMapDiscovery : IRf2SharedMemoryMapDiscovery
                     $"Global\\{Rf2SharedMemoryMapReader.ScoringMapName}{process.Id}",
                 })
                 {
-                    if (CanOpenMap(mapName))
+                    if (Rf2SharedMemoryMapReader.CanOpenMap(mapName))
                     {
                         yield return new Rf2ScoringMapCandidate(mapName, process.Id, processName, "process-name");
                     }
                 }
             }
-        }
-    }
-
-    private static bool CanOpenMap(string mapName)
-    {
-        try
-        {
-            using var map = MemoryMappedFile.OpenExisting(mapName, MemoryMappedFileRights.Read);
-            return true;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FileNotFoundException or ArgumentException)
-        {
-            return false;
         }
     }
 
