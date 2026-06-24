@@ -55,6 +55,7 @@ function makeSnapshot(updateSequence: number): LiveSessionSnapshot {
       trackName: 'Loch Drummond - Short',
       kind: 'Practice',
       phase: 'GreenFlag',
+      vehicleCount: 0,
       overallFlag: 'GREEN',
     },
     drivers: [],

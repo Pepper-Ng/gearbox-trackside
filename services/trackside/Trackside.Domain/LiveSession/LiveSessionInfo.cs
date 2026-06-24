@@ -31,6 +31,16 @@ public sealed record LiveSessionInfo
     public double? ScheduledDurationSeconds { get; init; }
 
     /// <summary>
+    /// Full lap distance in meters when known.
+    /// </summary>
+    public double? LapDistanceMeters { get; init; }
+
+    /// <summary>
+    /// Number of visible driver rows in the current normalized snapshot.
+    /// </summary>
+    public int VehicleCount { get; init; }
+
+    /// <summary>
     /// Ambient air temperature in Celsius.
     /// </summary>
     public double? AirTemperatureCelsius { get; init; }

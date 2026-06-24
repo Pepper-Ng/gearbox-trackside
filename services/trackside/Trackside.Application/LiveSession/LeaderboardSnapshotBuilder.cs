@@ -44,6 +44,8 @@ public sealed class LeaderboardSnapshotBuilder : ILeaderboardSnapshotBuilder
             Phase = source.Session.Phase,
             CurrentSessionSeconds = source.Session.CurrentSessionSeconds,
             ScheduledDurationSeconds = source.Session.ScheduledDurationSeconds,
+            LapDistanceMeters = source.Session.LapDistanceMeters,
+            VehicleCount = source.Session.VehicleCount ?? source.Drivers.Count,
             AirTemperatureCelsius = source.Session.AirTemperatureCelsius,
             TrackTemperatureCelsius = source.Session.TrackTemperatureCelsius,
             RainIntensity = source.Session.RainIntensity,
@@ -95,6 +97,7 @@ public sealed class LeaderboardSnapshotBuilder : ILeaderboardSnapshotBuilder
             LapsBehindLeader = source.LapsBehindLeader,
             CurrentSector = source.CurrentSector,
             TrackPositionPercent = trackPositionPercent,
+            LapDistanceMeters = source.LapDistanceMeters,
             Sectors = sectors,
         };
     }

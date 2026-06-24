@@ -59,6 +59,11 @@ public sealed record LeaderboardSessionSource
     public double? ScheduledDurationSeconds { get; init; }
 
     /// <summary>
+    /// Number of visible scoring rows when known.
+    /// </summary>
+    public int? VehicleCount { get; init; }
+
+    /// <summary>
     /// Full lap distance in meters when known.
     /// </summary>
     public double? LapDistanceMeters { get; init; }

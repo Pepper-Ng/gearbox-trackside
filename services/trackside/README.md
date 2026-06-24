@@ -25,8 +25,9 @@ This solution is intentionally small but shaped like the final application: one 
 - A separate `Trackside.RigAgent` binary exists so future client/rig-side behavior does not get mixed into the central host or browser UI.
 - A separate `Trackside.Updater` binary exists so future update application does not require the service to overwrite its own running files.
 - Phase 1 keeps the fixture-first boundary: raw leaderboard source channels are normalized by `LeaderboardSnapshotBuilder`, and both fixture and shared-memory sources feed that same contract.
-- `SharedMemory` mode has a guarded scoring map reader, parser, dedicated polling loop, auto-discovery for visible PID-suffixed scoring maps, explicit map/PID overrides, stale-read clearing, and scoring update-counter stability checks. It remains live-validation pending until rFactor 2 or captured scoring bytes are available.
+- `SharedMemory` mode has a guarded scoring map reader, parser, dedicated polling loop, auto-discovery for visible PID-suffixed scoring maps, explicit map/PID overrides, stale-read clearing, and scoring update-counter stability checks. It has been live-validated on the local PC for the current leaderboard fields.
 - `ReloadingLiveSessionSource` keeps the `ILiveSessionSource` boundary stable while recreating the concrete source when admin-edited source settings change.
+- The browser-facing live-session contract exposes the normalized leaderboard/scoring fields used in Phase 1, including session metadata, flag/weather fields, lap distance, driver timing, sectors, gaps, lap progress, and highlight flags. It intentionally does not expose raw map names, decode offsets, or other admin-only diagnostics.
 
 ## Commands
 

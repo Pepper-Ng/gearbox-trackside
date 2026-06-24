@@ -86,6 +86,11 @@ public sealed record DriverSnapshot
     public double? TrackPositionPercent { get; init; }
 
     /// <summary>
+    /// Current lap distance in meters from scoring data when available.
+    /// </summary>
+    public double? LapDistanceMeters { get; init; }
+
+    /// <summary>
     /// Sector timing details for this driver.
     /// </summary>
     public List<SectorSnapshot> Sectors { get; init; } = [];

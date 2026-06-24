@@ -138,6 +138,7 @@ public sealed class Rf2ScoringPayloadParser : IRf2ScoringPayloadParser
                 Phase = SessionPhaseFromGamePhase(info.GamePhase),
                 CurrentSessionSeconds = NonNegative(info.CurrentET),
                 ScheduledDurationSeconds = NonNegative(info.EndET),
+                VehicleCount = drivers.Count,
                 LapDistanceMeters = sessionLapDistance,
                 AirTemperatureCelsius = ReasonableTemperature(info.AmbientTemp),
                 TrackTemperatureCelsius = ReasonableTemperature(info.TrackTemp),

@@ -373,30 +373,31 @@ Validation:
 
 ### Phase 1 - Live session leaderboard MVP
 
-Status: fixture-first implementation started. The modular raw leaderboard source contract, raw scoring fixture, normalized builder, practice/qualifying/race ordering, fastest lap/sector highlights, config-backed aliases, upgraded kiosk board, reconnect/current-snapshot tests, guarded shared-memory scoring loop/parser scaffolding, PID/map auto-discovery, reload-aware source selection, and an authenticated admin/source configuration dashboard are in place. Live shared-memory validation against rFactor 2 remains pending.
+Status: Phase 1 live leaderboard foundation is implemented and live-validated for the current leaderboard scope. Fixture-first behavior, raw scoring fixtures, normalized builder, practice/qualifying/race ordering, fastest lap/sector highlights, config-backed aliases, kiosk live board, reconnect/current-snapshot tests, shared-memory scoring loop/parser scaffolding, PID/map auto-discovery, reload-aware source selection, tray status colors, and the authenticated admin/source configuration dashboard are in place. Live validation on the local PC confirmed shared-memory autodiscovery, tray red/blue/green status, live board updates, flag state, temperatures, session type, track name, and displayed leaderboard fields.
 
 Human prerequisites:
 
 * Provide representative mock data if real rFactor 2 data is not available yet.
-* When ready for live validation, provide access to a local rFactor 2 client/server session or captured shared-memory snapshots.
+* Local live validation has been provided for the current shared-memory leaderboard fields. Future validation is still needed when venue hardware, plugin versions, or rFactor 2 configuration differ.
 
 Agent implementation tasks:
 
-* Build the normalized live session model: session type, track, weather/temperature, drivers/rigs, laps, sectors, best laps, current laps, race position, and gaps where available. - Started for leaderboard fields.
+* Build the normalized live session model: session type, track, weather/temperature, drivers/rigs, laps, sectors, best laps, current laps, race position, and gaps where available. - Done for current leaderboard fields; normalized scoring fields extracted by Phase 1 are exposed to the browser contract.
 * Build a fixture-backed scoring/session source. - Done for raw scoring-style leaderboard fixtures.
-* Build a shared-memory-backed scoring/session source behind the same interface once field layout is known, guarded so the app still runs without rFactor 2. - Started with scoring map reader, parser, dedicated polling loop, process-name/Section-object auto-discovery, exact map/PID override config, multiple-map ambiguity handling, stale-read clearing, and scoring update-counter stability checks; live validation pending.
+* Build a shared-memory-backed scoring/session source behind the same interface once field layout is known, guarded so the app still runs without rFactor 2. - Done for current live leaderboard scope: scoring map reader, parser, dedicated polling loop, process-name/Section-object auto-discovery, exact map/PID override config, multiple-map ambiguity handling, stale-read clearing, and scoring update-counter stability checks are implemented and live-validated.
 * Build the SignalR live update flow from backend to browser. - Existing Phase 0B flow retained and covered by current-snapshot recovery tests.
-* Build the public kiosk page with session summary and live table. - Started with usable live-board table.
+* Build the public kiosk page with session summary and live table. - Done for the current live-board table; layout/graphics can be refined later.
 * Sort practice/quali by fastest lap and race by current position. - Done fixture-first.
 * Add fastest-lap/sector highlighting. - Done fixture-first.
 * Add staff-entered aliases mapping fixed rig names such as `Setup1` and `Setup2` to customer display names. - Started with config-backed aliases editable through the admin dashboard and applied through reload-aware source configuration.
-* Ensure kiosk pages can stay open and update automatically across session changes. - Started with REST recovery plus SignalR feed startup; static service fallback refreshes current snapshots.
+* Ensure kiosk pages can stay open and update automatically across session changes. - Done for current validation: REST recovery plus SignalR feed startup are in place, and the service-hosted fallback refreshes current snapshots.
 
 Validation:
 
 * Automated fixture tests cover practice, qualifying, and race ordering. - Done.
 * Automated tests cover alias mapping and fastest-lap/sector highlighting. - Done.
-* Live rFactor 2 AI session, when provided, updates the kiosk near real-time.
+* Live rFactor 2 validation updates the kiosk near real-time. - Done for the local PC/current displayed fields.
+* Live validation confirmed autodiscovery, tray icon status colors, live board updates, flag state, temperatures, session type, track name, and displayed leaderboard fields.
 
 ### Phase 2 - Staff controls and historical boards
 
@@ -542,13 +543,11 @@ Venue validation:
 
 If an implementation agent starts from this document, begin with the post-PoC baseline:
 
-1. Validate auto-discovery against a live rFactor 2 Dedicated Server restart and confirm it follows the new PID without config changes.
-2. Harden the shared-memory scoring parser against a real rFactor 2 scoring map or captured scoring bytes.
-3. Confirm field coverage for session type, weather/temperature, flags, positions, gaps, lap times, sector times, and lap progress.
-4. Add captured shared-memory regression fixtures once live validation input is available, including torn-frame/update-counter cases.
-5. Replace config-backed aliases with the first staff workflow when Phase 2 starts.
-6. Continue shaping the kiosk as a layout layer over the normalized snapshot, keeping data/feed logic outside presentation components.
-7. Carry forward the telemetry source requirements from `docs/telemetry-report-poc-plan.md` when report work begins.
+1. Optionally capture a small set of validated scoring snapshots for regression fixtures once convenient; this is useful hardening but no longer blocks Phase 1 behavior.
+2. Replace config-backed aliases with the first staff workflow when Phase 2 starts.
+3. Start Phase 2 storage design: SQLite-backed stores behind application-level interfaces for aliases, sessions, laps/sectors, and historical summaries.
+4. Keep shaping the kiosk as a layout layer over the normalized snapshot, keeping data/feed logic outside presentation components.
+5. Carry forward the telemetry source requirements from `docs/telemetry-report-poc-plan.md` when report work begins; high-cadence shared-memory robustness belongs with telemetry/report work, not the current low-cadence live timing board.
 
 Do not restart Phase 0A, Steam setup, venue setup, printer setup, or camera plugin work unless the user explicitly provides those prerequisites and asks for that phase.
 

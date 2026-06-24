@@ -30,10 +30,20 @@ export interface LiveSessionInfo {
   currentSessionSeconds?: number | null;
   /** Scheduled session duration in seconds. */
   scheduledDurationSeconds?: number | null;
+  /** Full lap distance in meters. */
+  lapDistanceMeters?: number | null;
+  /** Number of visible driver rows. */
+  vehicleCount: number;
   /** Ambient air temperature in Celsius. */
   airTemperatureCelsius?: number | null;
   /** Track temperature in Celsius. */
   trackTemperatureCelsius?: number | null;
+  /** Rain intensity normalized between 0 and 1. */
+  rainIntensity?: number | null;
+  /** Cloud intensity normalized between 0 and 1. */
+  cloudIntensity?: number | null;
+  /** Track wetness normalized between 0 and 1. */
+  trackWetness?: number | null;
   /** Concise overall flag text. */
   overallFlag: string;
 }
@@ -86,6 +96,8 @@ export interface DriverSnapshot {
   currentSector?: number | null;
   /** Approximate lap progress percentage. */
   trackPositionPercent?: number | null;
+  /** Current lap distance in meters. */
+  lapDistanceMeters?: number | null;
   /** Sector timing rows. */
   sectors: SectorSnapshot[];
 }
