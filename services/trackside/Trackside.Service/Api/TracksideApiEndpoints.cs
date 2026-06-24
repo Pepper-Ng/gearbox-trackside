@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using Trackside.Application.Configuration;
 using Trackside.Application.LiveSession;
@@ -243,12 +244,36 @@ public static class TracksideApiEndpoints
     private static async Task<IResult> SaveSourceConfigurationAsync(
         SourceConfigurationRequest request,
         TracksideSourceConfigurationStore configurationStore,
+        IConfiguration configuration,
+        IRf2SharedMemoryMapDiscovery mapDiscovery,
+        Rf2ScoringMapResolver mapResolver,
         CancellationToken cancellationToken)
     {
         try
         {
             await configurationStore.SaveAsync(request, cancellationToken);
-            return Results.Ok(new { status = "saved", configurationPath = configurationStore.WritableConfigurationPath });
+            if (configuration is IConfigurationRoot configurationRoot)
+            {
+                configurationRoot.Reload();
+            }
+
+            var source = new TracksideSourceOptions
+            {
+                Mode = request.Mode,
+                FixturePath = request.FixturePath,
+                DriverAliases = request.DriverAliases,
+                SharedMemory = request.SharedMemory,
+            };
+
+            return Results.Ok(new SourceConfigurationResponse
+            {
+                Mode = source.Mode,
+                FixturePath = source.FixturePath,
+                DriverAliases = source.DriverAliases,
+                SharedMemory = source.SharedMemory,
+                WritableConfigurationPath = configurationStore.WritableConfigurationPath,
+                Discovery = BuildDiscoveryResponse(source.SharedMemory, mapDiscovery, mapResolver),
+            });
         }
         catch (ArgumentException ex)
         {

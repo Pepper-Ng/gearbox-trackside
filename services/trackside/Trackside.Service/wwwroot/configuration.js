@@ -21,7 +21,6 @@ const scoringPollHzElement = document.querySelector('#scoringPollHz');
 const telemetryEnabledElement = document.querySelector('#telemetryEnabled');
 const telemetryPollHzElement = document.querySelector('#telemetryPollHz');
 const driverAliasesElement = document.querySelector('#driverAliases');
-const saveElement = document.querySelector('#saveConfiguration');
 const refreshElement = document.querySelector('#refreshDiscovery');
 const discoveryStatusElement = document.querySelector('#discoveryStatus');
 const candidateMapsElement = document.querySelector('#candidateMaps');
@@ -37,15 +36,18 @@ const newPasswordElement = document.querySelector('#newPassword');
 const changePasswordButton = document.querySelector('#changePasswordButton');
 const advancedStatusElement = document.querySelector('#advancedStatus');
 const refreshStatusButton = document.querySelector('#refreshStatus');
+let isPopulatingSourceForm = false;
+let autoSaveTimer = 0;
+let autoSaveSequence = 0;
 
 setupButton.addEventListener('click', () => createFirstAdmin().catch(showError));
 loginButton.addEventListener('click', () => login().catch(showError));
 logoutButton.addEventListener('click', () => logout().catch(showError));
-saveElement.addEventListener('click', () => saveConfiguration().catch(showError));
 refreshElement.addEventListener('click', () => loadConfiguration().catch(showError));
 createAdminButton.addEventListener('click', () => createAdmin().catch(showError));
 changePasswordButton.addEventListener('click', () => changePassword().catch(showError));
 refreshStatusButton.addEventListener('click', () => loadAdvancedStatus().catch(showError));
+bindSourceAutoSave();
 
 document.querySelectorAll('[data-tab]').forEach(button => {
   button.addEventListener('click', () => showTab(button.dataset.tab));
@@ -97,14 +99,21 @@ async function loadConfiguration() {
   const configuration = await fetchJson('/api/configuration/source');
   populateForm(configuration);
   renderDiscovery(configuration.discovery);
-  statusElement.textContent = `Loaded admin configuration from ${configuration.writableConfigurationPath}`;
+  setStatus(`Loaded admin configuration from ${configuration.writableConfigurationPath}`);
 }
 
 async function saveConfiguration() {
+  const sequence = ++autoSaveSequence;
   const payload = readSourceConfigurationForm();
-  const result = await putJson('/api/configuration/source', payload);
-  statusElement.textContent = `Saved to ${result.configurationPath}`;
-  await loadConfiguration();
+  setStatus('Saving source configuration...');
+  const saved = await putJson('/api/configuration/source', payload);
+  if (sequence !== autoSaveSequence) {
+    return;
+  }
+
+  populateForm(saved);
+  renderDiscovery(saved.discovery);
+  setStatus(`Saved admin configuration to ${saved.writableConfigurationPath}`);
 }
 
 async function loadUsers() {
@@ -145,6 +154,7 @@ async function loadAdvancedStatus() {
 }
 
 function populateForm(configuration) {
+  isPopulatingSourceForm = true;
   const sharedMemory = configuration.sharedMemory ?? {};
   sourceModeElement.value = configuration.mode ?? 'Fixture';
   fixturePathElement.value = configuration.fixturePath ?? '';
@@ -157,6 +167,7 @@ function populateForm(configuration) {
   telemetryEnabledElement.checked = sharedMemory.telemetry?.enabled ?? false;
   telemetryPollHzElement.value = sharedMemory.telemetry?.pollHz ?? 100;
   driverAliasesElement.value = JSON.stringify(configuration.driverAliases ?? {}, null, 2);
+  isPopulatingSourceForm = false;
 }
 
 function readSourceConfigurationForm() {
@@ -310,6 +321,36 @@ function nullIfEmpty(value) {
 }
 
 function showError(error) {
-  statusElement.textContent = error instanceof Error ? error.message : String(error);
-  statusElement.className = 'warningText';
+  setStatus(error instanceof Error ? error.message : String(error), true);
+}
+
+function bindSourceAutoSave() {
+  const immediateElements = [sourceModeElement, autoDiscoverElement, multipleMapPolicyElement, telemetryEnabledElement];
+  const debouncedElements = [fixturePathElement, scoringMapNameElement, processIdElement, processNamesElement, scoringPollHzElement, telemetryPollHzElement, driverAliasesElement];
+
+  immediateElements.forEach(element => {
+    element.addEventListener('change', () => scheduleSourceAutoSave(0));
+  });
+
+  debouncedElements.forEach(element => {
+    element.addEventListener('input', () => scheduleSourceAutoSave(700));
+    element.addEventListener('change', () => scheduleSourceAutoSave(0));
+  });
+}
+
+function scheduleSourceAutoSave(delayMilliseconds) {
+  if (isPopulatingSourceForm) {
+    return;
+  }
+
+  window.clearTimeout(autoSaveTimer);
+  setStatus(delayMilliseconds === 0 ? 'Saving source configuration...' : 'Source configuration changed...');
+  autoSaveTimer = window.setTimeout(() => {
+    saveConfiguration().catch(showError);
+  }, delayMilliseconds);
+}
+
+function setStatus(message, isWarning = false) {
+  statusElement.textContent = message;
+  statusElement.className = isWarning ? 'warningText' : '';
 }
