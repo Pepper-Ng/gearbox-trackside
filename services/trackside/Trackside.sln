@@ -16,6 +16,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Trackside.Tray", "Trackside
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Trackside.Tests", "Trackside.Tests\Trackside.Tests.csproj", "{EAF430D9-2B46-4D72-B442-80C6F7D4CEC2}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Trackside.Updater", "Trackside.Updater\Trackside.Updater.csproj", "{A50F538C-75D2-4E0E-AF79-9180214C7EF3}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -50,6 +52,10 @@ Global
 		{EAF430D9-2B46-4D72-B442-80C6F7D4CEC2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{EAF430D9-2B46-4D72-B442-80C6F7D4CEC2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{EAF430D9-2B46-4D72-B442-80C6F7D4CEC2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A50F538C-75D2-4E0E-AF79-9180214C7EF3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A50F538C-75D2-4E0E-AF79-9180214C7EF3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A50F538C-75D2-4E0E-AF79-9180214C7EF3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A50F538C-75D2-4E0E-AF79-9180214C7EF3}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
 

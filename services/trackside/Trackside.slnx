@@ -6,4 +6,5 @@
   <Project Path="Trackside.Service/Trackside.Service.csproj" />
   <Project Path="Trackside.Tray/Trackside.Tray.csproj" />
   <Project Path="Trackside.Tests/Trackside.Tests.csproj" />
+  <Project Path="Trackside.Updater/Trackside.Updater.csproj" />
 </Solution>

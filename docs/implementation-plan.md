@@ -19,7 +19,7 @@ Trackside provides:
 * Later per-driver telemetry web reports.
 * Later PDF/printable telemetry reports.
 
-Current planning status: Phase 0A PoC is complete, the telemetry/source direction is decided, and ADR-0001 has accepted .NET / ASP.NET Core for the production host. The repo is ready for Phase 0B scaffolding; the production `services/trackside` backend and React kiosk app have not been created yet.
+Current planning status: Phase 0A PoC is complete, the telemetry/source direction is decided, ADR-0001 has accepted .NET / ASP.NET Core for the production host, Phase 0B has produced the service/tray/rig-agent/kiosk scaffold, and Phase 0C adds the packaged runtime skeleton before the leaderboard vertical slice.
 
 Confirmed venue facts:
 
@@ -72,9 +72,9 @@ When a phase needs rFactor 2, the plan must word that as a prerequisite or valid
 
 The backend stack decision is complete. `docs/architecture-decisions.md` records the accepted choice: **.NET / ASP.NET Core** for the production host, with Python retained only for diagnostics and optional offline/report workloads.
 
-Phase 0B should now execute against that decision rather than reopen the stack comparison. The completed Phase 0A PoC informed the choice, but the temporary Python implementation is no longer the target production shape.
+Phase 0B executed against that decision rather than reopening the stack comparison. The completed Phase 0A PoC informed the choice, but the temporary Python implementation is no longer the target production shape.
 
-Current repository finding: the runnable implementation is still the Python Phase 0A PoC plus the vendored shared-memory plugin/monitor source. The PoC compiles and its tests pass, including fixture report generation, telemetry analysis, and Windows shared-memory offset parsing. Treat that code as reference evidence and diagnostics while building the production .NET host.
+Current repository finding: the runnable production scaffold is now `services/trackside`, with `Trackside.Service`, `Trackside.Tray`, `Trackside.RigAgent`, `Trackside.Updater`, tests, fixture data, SignalR wiring, and Phase 0C packaging scripts. The Python Phase 0A PoC remains under `tools/rf2-poc` as reference evidence and diagnostics, and the rF2 shared-memory plugin snapshot remains under `vendor/rf2-shared-memory-map` as a dependency/reference.
 
 ---
 
@@ -326,7 +326,7 @@ Human prerequisites:
 
 Agent implementation tasks:
 
-* Keep the monorepo structure: `/plugin`, `/services`, `/web`, `/docs`.
+* Keep the monorepo structure: `/plugin`, `/services`, `/web`, `/docs`, `/tools`, and `/vendor`.
 * Use ADR-0001 as the implementation baseline: .NET 10 / ASP.NET Core 10, C# 14, SignalR, SQLite, and Node.js only for React/Vite tooling.
 * Create the backend project layout using the selected stack. - Done for Phase 0B scaffold.
 * Create the React/Vite/TypeScript kiosk/admin app layout in `web/kiosk`. - Done for basic kiosk shell.
@@ -342,6 +342,34 @@ Validation:
 * Kiosk app displays a mock live session table. - Done as a basic shell.
 * README commands reproduce the local mock run. - Done.
 * Parser tests cover wrapper-offset and zero-offset shared-memory payloads. - Done.
+
+### Phase 0C - Packaged runtime and update skeleton
+
+Status: scaffolding target before Phase 1. This phase establishes the packaged runtime shape without building a full installer, remote update host, code-signing pipeline, or silent update flow.
+
+Human prerequisites:
+
+* Provide admin rights only when installing as a real Windows Service is being tested. Dry-run and bundle smoke tests do not require elevation.
+* Choose final venue install locations later; the scripts default to `C:\Program Files\Gearbox Trackside` for service installs and `artifacts\trackside\bundles` for repo-local bundles.
+
+Agent implementation tasks:
+
+* Add a repeatable package script that builds/tests the .NET solution, builds the kiosk, publishes `Trackside.Service`, `Trackside.Tray`, `Trackside.RigAgent`, and `Trackside.Updater`, and writes a versioned bundle.
+* Keep bundle layout explicit: read-only app files, editable config, durable data, logs, and update staging are separate paths.
+* Add PowerShell install/uninstall scripts for `Trackside.Service` as a Windows Service and current-user tray auto-start.
+* Add manifest schema version 1 with app version, bundle version, minimum compatible version, entry points, file list, SHA-256 checksums, and byte lengths.
+* Add a tiny out-of-process `Trackside.Updater` boundary for manifest inspect/verify/plan commands; do not make `Trackside.Service` replace its own files.
+* Extend `/api/health` with version, install mode, service state, layout paths, manifest path, and update placeholder fields.
+* Add dry-run and fixture-backed bundle smoke tests.
+* Document the commands and limits in `docs/deployment-skeleton.md`.
+
+Validation:
+
+* `dotnet test services\trackside\Trackside.slnx` passes.
+* PowerShell scripts parse successfully.
+* The package script creates a versioned bundle and manifest.
+* `Trackside.Updater verify` accepts the generated manifest.
+* The bundle smoke test starts the packaged service in fixture mode, checks `/api/health`, and fetches `/api/live-session/current`.
 
 ### Phase 1 - Live session leaderboard MVP
 
@@ -486,13 +514,13 @@ Human prerequisites:
 
 Agent implementation/support tasks:
 
-* Package releases as versioned file-based bundles so rollback is simple.
-* Configure services to auto-start and auto-restart on Windows, using the chosen service hosting approach.
-* Add or package a tray companion/status surface that auto-starts for the venue user account when appropriate and can reopen dashboards after reboot.
+* Use the Phase 0C bundle/install skeleton for canary releases and rollback.
+* Configure final service auto-start/restart settings for the chosen venue service host.
+* Package the tray companion/status surface so it auto-starts for the venue user account when appropriate and can reopen dashboards after reboot.
 * Add rotating log files for backend services and any plugin control surface.
 * Add manual disable/override switches for every automated feature.
 * Implement dashboard-visible update checks against a signed/versioned manifest hosted on an operator-controlled server.
-* Implement a staff-approved update flow: download bundle, verify version/signature/checksum, stop affected services, swap files with rollback, restart services, and report success/failure.
+* Extend the Phase 0C updater boundary into a staff-approved update flow: download bundle, verify version/signature/checksum, stop affected services, swap files with rollback, restart services, and report success/failure.
 * Prevent silent updates during active sessions; require an idle/safe restart window.
 * Write a short non-technical runbook for venue staff.
 * Document rFactor 2/Steam update control and re-test procedure.
@@ -524,7 +552,7 @@ Do not restart Phase 0A, Steam setup, venue setup, printer setup, or camera plug
 
 ## 10. Engineering Recommendations
 
-**Repo structure**: keep the single monorepo: `/plugin`, `/services`, `/web`, `/docs`. The project is small and tightly coupled enough that a split would add friction now.
+**Repo structure**: keep the single monorepo: `/plugin`, `/services`, `/web`, `/docs`, `/tools`, and `/vendor`. The project is small and tightly coupled enough that a split would add friction now.
 
 **Dependency policy**:
 

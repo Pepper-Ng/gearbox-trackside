@@ -31,4 +31,36 @@ public sealed class TracksideCommandLineTests
 
         Assert.Equal(["--Trackside:LiveSession:PublishIntervalSeconds=2"], normalized);
     }
+
+    /// <summary>
+    /// Maps packaged-runtime arguments to deployment and update configuration keys.
+    /// </summary>
+    [Fact]
+    public void NormalizeMapsDeploymentArguments()
+    {
+        var normalized = TracksideCommandLine.Normalize([
+            "--config-root", "C:\\Trackside\\config",
+            "--install-mode", "Service",
+            "--install-root", "C:\\Trackside",
+            "--data-path", "C:\\Trackside\\data",
+            "--logs-path", "C:\\Trackside\\logs",
+            "--updates-path", "C:\\Trackside\\updates",
+            "--bundle-version", "0.1.0-dev",
+            "--manifest-path", "C:\\Trackside\\manifest.json",
+            "--service-name", "TracksideVenue",
+            "--update-candidate-manifest", "C:\\Trackside\\updates\\candidate.json",
+        ], out _, out var configRoot);
+
+        Assert.Equal("C:\\Trackside\\config", configRoot);
+        Assert.Contains("--Trackside:Deployment:ConfigPath=C:\\Trackside\\config", normalized);
+        Assert.Contains("--Trackside:Deployment:InstallMode=Service", normalized);
+        Assert.Contains("--Trackside:Deployment:InstallRoot=C:\\Trackside", normalized);
+        Assert.Contains("--Trackside:Deployment:DataPath=C:\\Trackside\\data", normalized);
+        Assert.Contains("--Trackside:Deployment:LogsPath=C:\\Trackside\\logs", normalized);
+        Assert.Contains("--Trackside:Deployment:UpdatesPath=C:\\Trackside\\updates", normalized);
+        Assert.Contains("--Trackside:Deployment:BundleVersion=0.1.0-dev", normalized);
+        Assert.Contains("--Trackside:Deployment:ManifestPath=C:\\Trackside\\manifest.json", normalized);
+        Assert.Contains("--Trackside:Deployment:ServiceName=TracksideVenue", normalized);
+        Assert.Contains("--Trackside:Updates:CandidateManifestPath=C:\\Trackside\\updates\\candidate.json", normalized);
+    }
 }

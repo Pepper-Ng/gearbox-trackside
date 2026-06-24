@@ -24,4 +24,13 @@ public sealed class ApiContractTests
     {
         Assert.Equal("/hubs/live-session", LiveSessionRoutes.HubPath);
     }
+
+    /// <summary>
+    /// Keeps the health endpoint aligned with deployment scripts and tray diagnostics.
+    /// </summary>
+    [Fact]
+    public void HealthPathMatchesArchitectureDecision()
+    {
+        Assert.Equal("/api/health", LiveSessionRoutes.HealthPath);
+    }
 }

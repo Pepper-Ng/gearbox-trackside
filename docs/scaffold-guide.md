@@ -112,9 +112,29 @@ dotnet run --project services\trackside\Trackside.RigAgent
 
 ## Deployment Direction
 
-Early venue builds should be versioned file bundles copied or extracted into a known install folder. Add service install/update scripts before venue rollout. A full installer can come later if service setup, shortcuts, firewall rules, or rollback become too awkward for scripts.
+Early venue builds are versioned file bundles copied or extracted into a known install folder. The Phase 0C scripts live under `services/trackside/scripts` and produce a bundle with separate `app`, `config`, `data`, `logs`, and `updates` paths.
 
-Remote updates should be a later dashboard-controlled feature: check a signed/versioned manifest, show that an update is available, download a bundle, verify signature/checksum, stop services, swap files with rollback, and restart. Do not silently auto-update during active sessions.
+Create a bundle from the repository root:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File services\trackside\scripts\New-TracksideBundle.ps1
+```
+
+Smoke-test the generated bundle:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File <bundle>\install\Invoke-TracksideBundleSmoke.ps1
+```
+
+Preview install actions without elevation:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File <bundle>\install\Install-Trackside.ps1 -DryRun
+```
+
+A full installer can come later if service setup, shortcuts, firewall rules, or rollback become too awkward for scripts.
+
+Remote updates should be a later dashboard-controlled feature: check a signed/versioned manifest, show that an update is available, download a bundle, verify signature/checksum through `Trackside.Updater`, stop services, swap files with rollback, and restart. Do not silently auto-update during active sessions.
 
 ## How To Extend
 
@@ -138,8 +158,8 @@ The scaffold intentionally does not yet include:
 - real leaderboard sorting/highlighting logic beyond fixture display;
 - SQLite persistence;
 - staff alias/admin flows;
-- packaging/service installation;
-- remote update installation;
+- full MSI/MSIX packaging;
+- remote update application;
 - camera, telemetry reports, PDF, or printing.
 
 Those features should be added on top of the existing seams rather than by replacing the host shape.

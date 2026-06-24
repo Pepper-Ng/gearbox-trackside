@@ -33,6 +33,15 @@ public sealed class TracksideOptions
     /// </summary>
     public TracksideCorsOptions Cors { get; init; } = new();
 
+    /// <summary>
+    /// Installed runtime layout surfaced through diagnostics and used by scripts.
+    /// </summary>
+    public TracksideDeploymentOptions Deployment { get; init; } = new();
+
+    /// <summary>
+    /// Update-check placeholders used by health and the future admin dashboard.
+    /// </summary>
+    public TracksideUpdateOptions Updates { get; init; } = new();
 }
 
 /// <summary>
@@ -67,4 +76,107 @@ public sealed class TracksideCorsOptions
     /// Explicit browser origins allowed to call the local API and SignalR hub.
     /// </summary>
     public string[] AllowedOrigins { get; init; } = [];
+}
+
+/// <summary>
+/// Runtime installation layout used by packaged Trackside builds.
+/// </summary>
+public sealed class TracksideDeploymentOptions
+{
+    /// <summary>
+    /// Default install mode used by repo-local development runs.
+    /// </summary>
+    public const string DefaultInstallMode = "Development";
+
+    /// <summary>
+    /// Logical install mode, for example Development, Service, BundleSmoke, or RigAgent.
+    /// </summary>
+    [Required]
+    public string InstallMode { get; init; } = DefaultInstallMode;
+
+    /// <summary>
+    /// Root folder of the installed Trackside bundle, when installed.
+    /// </summary>
+    public string? InstallRoot { get; init; }
+
+    /// <summary>
+    /// External configuration root. Packaged installs use service and tray subfolders below this path.
+    /// </summary>
+    public string? ConfigPath { get; init; }
+
+    /// <summary>
+    /// Writable data directory for SQLite and durable runtime state.
+    /// </summary>
+    public string? DataPath { get; init; }
+
+    /// <summary>
+    /// Writable logs directory for service, tray, updater, and diagnostics output.
+    /// </summary>
+    public string? LogsPath { get; init; }
+
+    /// <summary>
+    /// Writable update staging directory for downloaded or candidate bundles.
+    /// </summary>
+    public string? UpdatesPath { get; init; }
+
+    /// <summary>
+    /// Manifest path for the currently installed bundle.
+    /// </summary>
+    public string? ManifestPath { get; init; }
+
+    /// <summary>
+    /// Versioned bundle identifier produced by the package script.
+    /// </summary>
+    public string? BundleVersion { get; init; }
+
+    /// <summary>
+    /// Windows Service name used by install/uninstall scripts.
+    /// </summary>
+    [Required]
+    public string ServiceName { get; init; } = "Trackside";
+
+    /// <summary>
+    /// Current-user Run entry name used for tray auto-start.
+    /// </summary>
+    [Required]
+    public string TrayAutostartName { get; init; } = "Trackside Tray";
+}
+
+/// <summary>
+/// Placeholder update-check configuration for future dashboard-controlled updates.
+/// </summary>
+public sealed class TracksideUpdateOptions
+{
+    /// <summary>
+    /// Default status before remote update checks exist.
+    /// </summary>
+    public const string DefaultStatus = "NotConfigured";
+
+    /// <summary>
+    /// Human-readable update status surfaced in health responses.
+    /// </summary>
+    [Required]
+    public string Status { get; init; } = DefaultStatus;
+
+    /// <summary>
+    /// Update channel name used when remote manifests are introduced.
+    /// </summary>
+    [Required]
+    public string Channel { get; init; } = "local";
+
+    /// <summary>
+    /// Remote update manifest URL. Empty until update checks are configured.
+    /// </summary>
+    public string? ManifestUrl { get; init; }
+
+    /// <summary>
+    /// Local candidate manifest path used by installer/updater smoke tests.
+    /// </summary>
+    public string? CandidateManifestPath { get; init; }
+
+    /// <summary>
+    /// Minimum app version that can safely consume current update manifests.
+    /// </summary>
+    [Required]
+    public string MinimumCompatibleVersion { get; init; } = "0.1.0";
 }

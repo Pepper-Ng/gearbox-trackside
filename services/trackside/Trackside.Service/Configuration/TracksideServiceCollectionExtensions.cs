@@ -28,6 +28,10 @@ public static class TracksideServiceCollectionExtensions
                 "Fixture mode requires Trackside:Source:FixturePath.")
             .Validate(options => options.LiveSession.PublishIntervalSeconds is >= TracksideLiveSessionOptions.MinimumPublishIntervalSeconds and <= 60.0,
                 "Trackside:LiveSession:PublishIntervalSeconds must be between 0.25 and 60 seconds.")
+            .Validate(options => !string.IsNullOrWhiteSpace(options.Deployment.InstallMode),
+                "Trackside:Deployment:InstallMode is required.")
+            .Validate(options => !string.IsNullOrWhiteSpace(options.Deployment.ServiceName),
+                "Trackside:Deployment:ServiceName is required.")
             .ValidateOnStart();
 
         services.AddOptions<TracksideSourceOptions>()

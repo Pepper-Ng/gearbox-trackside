@@ -27,6 +27,7 @@
     <ProjectReference Include="..\Trackside.Domain\Trackside.Domain.csproj" />
     <ProjectReference Include="..\Trackside.Infrastructure\Trackside.Infrastructure.csproj" />
     <ProjectReference Include="..\Trackside.Service\Trackside.Service.csproj" />
+    <ProjectReference Include="..\Trackside.Updater\Trackside.Updater.csproj" />
   </ItemGroup>
 
 </Project>

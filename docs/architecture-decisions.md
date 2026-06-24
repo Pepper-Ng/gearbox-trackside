@@ -192,19 +192,21 @@ This split keeps the current central-server deployment simple while leaving room
 
 ### Packaging, service, and update decision
 
-Initial deployment should use versioned file-based bundles plus install/update scripts, not a full MSI-style installer.
+Initial deployment should use versioned file-based bundles plus install/update scripts, not a full MSI-style installer. Phase 0C adds the repeatable bundle, manifest, install/uninstall scripts, updater boundary, and bundle smoke test before the leaderboard vertical slice grows around development-only assumptions.
 
 Decision:
 
 * Early venue builds should be published as versioned folders or archives that can be copied or extracted into a known install directory.
+* Bundles should keep read-only app files separate from editable config, durable data, logs, and update staging.
 * Production host operation should be a Windows Service or service-like background process.
 * A tray companion should auto-start for the venue user account when appropriate, show host/rig-agent status, and open dashboards/actions after reboot. It should be useful operationally, but the host service must remain healthy if no user is logged in.
 * Rig agents, if used, should also run as Windows services or scheduled/service-like background processes on the rigs.
 * A full installer can be added later if service setup, shortcuts, firewall rules, or non-technical staff rollout become painful enough to justify it.
-* Remote updates should be designed as a later, explicit feature: the host checks a signed/versioned update manifest, shows update availability in the admin dashboard, downloads a versioned bundle, stops affected services, swaps files with rollback, and restarts services.
+* The service exposes deployment/update status, but a separate updater executable or script owns manifest verification and future file replacement so the service does not overwrite its own running binaries.
+* Remote updates should be designed as a later, explicit feature: the host checks a signed/versioned update manifest, shows update availability in the admin dashboard, downloads a versioned bundle, asks the updater boundary to verify/apply it, stops affected services, swaps files with rollback, and restarts services.
 * Do not auto-apply updates silently during sessions. Staff/admin approval and a safe restart window are required.
 
-This gives the venue a practical path for remote maintenance without making update logic part of the Phase 0B scaffold or the live timing path.
+This gives the venue a practical path for remote maintenance without putting update application logic in the live timing path.
 
 ### Storage decision
 
@@ -234,6 +236,6 @@ If live validation shows that one .NET process still cannot keep telemetry and w
 
 ### Consequences
 
-Immediate Phase 0B work should scaffold a new .NET backend under `services\trackside` and keep the Python PoC under `tools\\rf2-poc` as a reference and validation tool.
+Phase 0B scaffolded the .NET backend under `services\trackside`, and Phase 0C added the packaged runtime skeleton. Keep the Python PoC under `tools\rf2-poc` as a reference and validation tool.
 
 The architecture deliberately chooses reliability over having one language everywhere. The frontend remains TypeScript/React, the live backend is .NET, and Python is reserved for diagnostics and optional offline/report workloads where it is strongest.
