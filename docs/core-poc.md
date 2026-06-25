@@ -39,7 +39,7 @@ The validated runtime shape is:
   Browser at http://127.0.0.1:8877/poc
 ```
 
-The PoC process must run on a Windows account/session that can see the rFactor 2 shared-memory maps.
+The PoC process must run on a Windows account/session that can see the rFactor 2 shared-memory maps. The browser may be local or on the LAN if the PoC binds to a non-loopback interface.
 
 ---
 
@@ -89,14 +89,14 @@ Important interpretation notes:
 
 ## Telemetry Cadence Evidence
 
-Earlier Bahrain captures kept under `services/leaderboard/poc/tests/data/` showed that the older combined collector did not preserve stable 50 Hz per-driver telemetry:
+Earlier Bahrain captures kept under `tools/rf2-poc/tests/data/` showed that the older combined collector did not preserve stable 50 Hz per-driver telemetry:
 
 * Practice: 48,181 stored telemetry samples, 24 proper laps, 10 excluded laps; proper-lap rates ranged from about 1.4 Hz to 14.2 Hz, with an 8.2 Hz median.
 * Qualifying: 54,269 stored telemetry samples, 7 proper laps, 6 excluded laps; proper-lap rates ranged from about 26.5 Hz to 30.0 Hz, with a 28.0 Hz median.
 
 Those fixtures remain useful regression data for collector design, but they are not the final source-quality verdict.
 
-The later telemetry-only diagnostic in `services/leaderboard/poc/diagnostic-raw/` isolated the source cadence more cleanly:
+The later telemetry-only diagnostic in `tools/rf2-poc/diagnostic-raw/` isolated the source cadence more cleanly:
 
 * target polling rate: `100 Hz`;
 * captured duration: about `600 s`;
@@ -119,65 +119,29 @@ Required runtime:
 * No `pip install` step is currently required.
 * A browser on the same machine, or LAN access to the selected HTTP port.
 
-Mock run from repository root:
+Reference procedure followed during the PoC:
+
+* verify Python on the host and run from the repository root;
+* prove the browser/API path first with fixture mode;
+* validate the shared-memory reader with the repo tests;
+* run against live shared memory from `rFactor2.exe` or `Dedicated.exe`;
+* inspect visible maps and analyze recorded captures when live decoding or cadence looked suspicious.
+
+Reference commands:
 
 ```powershell
-python services/leaderboard/poc/run_poc.py --source mock
-```
-
-Open:
-
-```text
-http://127.0.0.1:8877/poc
-```
-
-Normal rFactor 2 client live run:
-
-```powershell
-python services/leaderboard/poc/run_poc.py --source shared-memory
-```
-
-Dedicated-server live run:
-
-```powershell
+python tools/rf2-poc/run_poc.py --source mock
+python tools/rf2-poc/run_poc.py --source shared-memory
 Get-CimInstance Win32_Process | Where-Object { $_.Name -like '*Dedicated*.exe' } | Select-Object ProcessId, Name, ExecutablePath, CommandLine
-python services/leaderboard/poc/run_poc.py --source shared-memory --pid <PID>
+python tools/rf2-poc/run_poc.py --source shared-memory --pid <PID>
+python tools/rf2-poc/run_poc.py --source shared-memory --map-name 'Global\$rFactor2SMMP_Scoring$12345' --telemetry-map-name 'Global\$rFactor2SMMP_Telemetry$12345'
+python tools/rf2-poc/list_memory_maps.py --pid <PID>
+python tools/rf2-poc/analyze_recordings.py tools/rf2-poc/diagnostic-raw
+python -m compileall -q tools/rf2-poc
+python -m unittest discover tools/rf2-poc/tests
 ```
 
-Pass exact names only when the automatic probes are insufficient:
-
-```powershell
-python services/leaderboard/poc/run_poc.py --source shared-memory --map-name 'Global\$rFactor2SMMP_Scoring$12345' --telemetry-map-name 'Global\$rFactor2SMMP_Telemetry$12345'
-```
-
-Inspect visible maps:
-
-```powershell
-python services/leaderboard/poc/list_memory_maps.py --pid <PID>
-```
-
-Analyze recordings:
-
-```powershell
-python services/leaderboard/poc/analyze_recordings.py services/leaderboard/poc/diagnostic-raw
-python services/leaderboard/poc/analyze_recordings.py --json --output services/leaderboard/poc/diagnostic-raw/analysis.json services/leaderboard/poc/diagnostic-raw
-```
-
-Validation commands:
-
-```powershell
-python -m compileall -q services/leaderboard/poc
-python -m unittest discover services/leaderboard/poc/tests
-```
-
-Smoke-test endpoints while `run_poc.py` is running:
-
-```powershell
-curl.exe --noproxy "*" -s -o NUL -w "%{http_code}" http://127.0.0.1:8877/poc
-curl.exe --noproxy "*" -s -o NUL -w "%{http_code}" http://127.0.0.1:8877/history
-Invoke-RestMethod http://127.0.0.1:8877/api/snapshot
-Invoke-RestMethod http://127.0.0.1:8877/api/history
-```
+If LAN viewing is needed, bind to `0.0.0.0` and open `http://<host-pc-ip>:8877/poc` from another machine.
 
 ---
 
@@ -197,5 +161,13 @@ If the browser shows impossible values, such as huge vehicle counts or nonsensic
 If the browser shows fixture data, check the source/status line. `mock` or `shared memory unavailable; using fixture replay` is not live proof.
 
 If the browser cannot connect, confirm the PoC process is still running, the URL uses the selected port, and firewall rules allow the port when viewing from another machine.
+
+If dedicated-server live mode still fails while client mode works, check only these points before changing code:
+
+* the dedicated-server profile's `CustomPluginVariables.json` actually enables the plugin;
+* `Dedicated.exe` was restarted after the config change;
+* the server session is active enough to emit scoring;
+* the map is visible in the expected namespace;
+* exact PID-suffixed map names were tried when automatic probes were insufficient.
 
 For deeper plugin startup, namespace, and logging analysis, use `docs/shared-memory-plugin-investigation.md` rather than expanding this PoC note again.

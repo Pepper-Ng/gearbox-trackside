@@ -1,6 +1,6 @@
 # rF2 Shared-Memory Plugin Investigation
 
-This note summarizes the source-level behavior of `TheIronWolfModding/rF2SharedMemoryMapPlugin` as vendored under `memorymap/src`.
+This note summarizes the source-level behavior of `TheIronWolfModding/rF2SharedMemoryMapPlugin` as vendored under `vendor/rf2-shared-memory-map/src`.
 
 The practical goal is to document how the plugin loads, creates maps, names dedicated-server maps, logs status, and publishes scoring data so future development can use the shared-memory data path confidently.
 
@@ -250,13 +250,13 @@ If the map exists but no session/vehicles are active, consumers may see a valid 
 7. Run the diagnostic:
 
    ```powershell
-   python services/leaderboard/poc/list_memory_maps.py --pid <PID>
+   python tools/rf2-poc/list_memory_maps.py --pid <PID>
    ```
 
 8. If a scoring map is `OPEN`, run:
 
    ```powershell
-   python services/leaderboard/poc/run_poc.py --source shared-memory --pid <PID>
+   python tools/rf2-poc/run_poc.py --source shared-memory --pid <PID>
    ```
 
 9. If no dedicated maps are visible/openable but debug output says files mapped successfully, the remaining suspect is Windows namespace/user/session visibility. Run Python from the same account/session as `Dedicated.exe`, or enable global mapping with the required permission.

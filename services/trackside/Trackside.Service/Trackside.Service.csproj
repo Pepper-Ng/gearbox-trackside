@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <AssemblyName>Trackside.Service</AssemblyName>
+    <RootNamespace>Trackside.Service</RootNamespace>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.9" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Assets\app.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Update="Fixtures\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Update="wwwroot\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Trackside.Application\Trackside.Application.csproj" />
+    <ProjectReference Include="..\Trackside.Domain\Trackside.Domain.csproj" />
+    <ProjectReference Include="..\Trackside.Infrastructure\Trackside.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

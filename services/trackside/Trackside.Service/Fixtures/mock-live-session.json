@@ -1,0 +1,69 @@
+{
+  "source": "fixture",
+  "status": "baseline fixture",
+  "timestampUtc": "2026-06-23T12:00:00+00:00",
+  "updateSequence": 0,
+  "session": {
+    "trackName": "Loch Drummond - Short",
+    "kind": "Practice",
+    "phase": "GreenFlag",
+    "currentSessionSeconds": 126.5,
+    "scheduledDurationSeconds": 1800.0,
+    "airTemperatureCelsius": 22.5,
+    "trackTemperatureCelsius": 30.0,
+    "overallFlag": "GREEN"
+  },
+  "drivers": [
+    {
+      "driverId": "1",
+      "rigName": "Setup1",
+      "displayName": "Setup1",
+      "vehicleName": "Formula Pro",
+      "position": 1,
+      "completedLaps": 3,
+      "bestLapSeconds": 82.417,
+      "lastLapSeconds": 83.901,
+      "currentLapSeconds": 36.2,
+      "gapToLeaderSeconds": 0.0,
+      "sectors": [
+        { "number": 1, "bestSeconds": 25.211, "lastSeconds": 25.8, "isOverallBest": true },
+        { "number": 2, "bestSeconds": 27.891, "lastSeconds": 27.9, "isOverallBest": true },
+        { "number": 3, "bestSeconds": 29.315, "lastSeconds": 30.201, "isOverallBest": true }
+      ]
+    },
+    {
+      "driverId": "2",
+      "rigName": "Setup2",
+      "displayName": "Setup2",
+      "vehicleName": "Formula Pro",
+      "position": 2,
+      "completedLaps": 3,
+      "bestLapSeconds": 83.104,
+      "lastLapSeconds": 84.12,
+      "currentLapSeconds": 48.6,
+      "gapToLeaderSeconds": 0.687,
+      "sectors": [
+        { "number": 1, "bestSeconds": 25.4, "lastSeconds": 25.9, "isOverallBest": false },
+        { "number": 2, "bestSeconds": 28.4, "lastSeconds": 28.3, "isOverallBest": false },
+        { "number": 3, "bestSeconds": 29.304, "lastSeconds": 29.92, "isOverallBest": false }
+      ]
+    },
+    {
+      "driverId": "3",
+      "rigName": "Setup3",
+      "displayName": "Setup3",
+      "vehicleName": "Formula Pro",
+      "position": 3,
+      "completedLaps": 2,
+      "bestLapSeconds": 84.992,
+      "lastLapSeconds": 85.5,
+      "currentLapSeconds": 71.8,
+      "gapToLeaderSeconds": 2.575,
+      "sectors": [
+        { "number": 1, "bestSeconds": 26.1, "lastSeconds": 26.3, "isOverallBest": false },
+        { "number": 2, "bestSeconds": 28.9, "lastSeconds": 29.1, "isOverallBest": false },
+        { "number": 3, "bestSeconds": 29.992, "lastSeconds": 30.1, "isOverallBest": false }
+      ]
+    }
+  ]
+}

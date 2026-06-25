@@ -34,14 +34,14 @@ In shared-memory mode, `--telemetry-collector auto` now starts a dedicated telem
 
 Caveat: lap distance / lap percent currently come from the scoring row, while throttle/brake/steer/gear/G/speed come from telemetry. If scoring updates slower than telemetry, the high-rate samples can contain repeated lap-percent values with changing telemetry values. That is still useful for this proof, but final report quality should be validated live.
 
-Earlier Bahrain practice/qualifying captures in `services/leaderboard/poc/tests/data/` showed that the older combined Python collector did not consistently record effective 50 Hz per-driver telemetry. The qualifying proper laps were around 28-30 Hz, while the practice proper laps were much lower and uneven. Later telemetry-only diagnostics isolated that as a collector-design issue rather than proof that the dedicated-server shared-memory source is insufficient.
+Earlier Bahrain practice/qualifying captures in `tools/rf2-poc/tests/data/` showed that the older combined Python collector did not consistently record effective 50 Hz per-driver telemetry. The qualifying proper laps were around 28-30 Hz, while the practice proper laps were much lower and uneven. Later telemetry-only diagnostics isolated that as a collector-design issue rather than proof that the dedicated-server shared-memory source is insufficient.
 
 ## Runtime files
 
 The PoC writes runtime report data under:
 
 ```text
-services/leaderboard/poc/telemetry-recordings/
+tools/rf2-poc/telemetry-recordings/
 ```
 
 This folder is gitignored. Each session gets:
@@ -53,7 +53,7 @@ This folder is gitignored. Each session gets:
 The PoC writes rotating runtime logs under:
 
 ```text
-services/leaderboard/poc/logs/
+tools/rf2-poc/logs/
 ```
 
 The logs include session start/finalize events, sample-file write failures, report-build failures, report-build timing, and report API requests. Routine successful dashboard polling is kept out of the normal log output.

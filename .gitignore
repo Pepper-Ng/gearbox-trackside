@@ -1,5 +1,12 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
-services/leaderboard/poc/telemetry-recordings/
-services/leaderboard/poc/logs/
+.vs/
+bin/
+obj/
+node_modules/
+dist/
+artifacts/
+tools/rf2-poc/telemetry-recordings/
+tools/rf2-poc/logs/
+web/kiosk/dist/
