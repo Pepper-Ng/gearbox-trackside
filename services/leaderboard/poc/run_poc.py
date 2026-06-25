@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import logging
+import sys
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from rf2_poc.server import run_server
@@ -32,8 +35,59 @@ def parse_args() -> argparse.Namespace:
         help="Browser polling interval for /api/snapshot.",
     )
     parser.add_argument(
+        "--telemetry-record-hz",
+        type=float,
+        default=50.0,
+        help="Background telemetry recording target rate. Use 0 to record only when the browser/API asks for a snapshot.",
+    )
+    parser.add_argument(
+        "--telemetry-collector",
+        choices=("auto", "process", "in-process", "off"),
+        default="auto",
+        help="Telemetry collection strategy. In shared-memory mode, 'auto' uses the dedicated telemetry process.",
+    )
+    parser.add_argument(
+        "--scoring-record-hz",
+        type=float,
+        default=5.0,
+        help="Scoring/session metadata polling rate when telemetry is collected by a dedicated process.",
+    )
+    parser.add_argument(
+        "--telemetry-process-priority",
+        choices=("normal", "high"),
+        default="high",
+        help="Windows priority class for the dedicated telemetry process.",
+    )
+    parser.add_argument(
+        "--telemetry-affinity-mask",
+        type=lambda value: int(value, 0),
+        help="Optional CPU affinity mask for the dedicated telemetry process, for example 0x4.",
+    )
+    parser.add_argument(
+        "--telemetry-flush-frames",
+        type=int,
+        default=10,
+        help="Flush compact raw telemetry output after this many written frames.",
+    )
+    parser.add_argument(
+        "--telemetry-output-dir",
+        type=Path,
+        default=Path(__file__).parent / "telemetry-recordings",
+        help="Directory for runtime telemetry JSONL samples and finalized report JSON files.",
+    )
+    parser.add_argument(
+        "--log-dir",
+        type=Path,
+        default=Path(__file__).parent / "logs",
+        help="Directory for rotating PoC log files.",
+    )
+    parser.add_argument(
         "--map-name",
         help="Exact Windows memory-map name to read, for example '$rFactor2SMMP_Scoring$' or 'Global\\$rFactor2SMMP_Scoring$12345'.",
+    )
+    parser.add_argument(
+        "--telemetry-map-name",
+        help="Exact telemetry memory-map name to read, for example '$rFactor2SMMP_Telemetry$' or 'Global\\$rFactor2SMMP_Telemetry$12345'.",
     )
     parser.add_argument(
         "--pid",
@@ -43,13 +97,41 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def configure_logging(log_dir: Path) -> None:
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / "trackside-poc.log"
+    formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+    console = logging.StreamHandler(sys.stdout)
+    console.setLevel(logging.INFO)
+    console.setFormatter(formatter)
+    file_handler = RotatingFileHandler(
+        log_file,
+        maxBytes=2_000_000,
+        backupCount=5,
+        encoding="utf-8",
+    )
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(formatter)
+    logging.basicConfig(level=logging.INFO, handlers=[console, file_handler], force=True)
+    logging.getLogger("rf2_poc.server").info("Logging to %s", log_file)
+
+
 def main() -> None:
     args = parse_args()
+    configure_logging(args.log_dir)
     source = build_source(
         source_kind=args.source,
         fixture_path=args.fixture,
         map_name=args.map_name,
         pid=args.pid,
+        telemetry_map_name=args.telemetry_map_name,
+        telemetry_output_dir=args.telemetry_output_dir,
+        telemetry_record_hz=args.telemetry_record_hz,
+        telemetry_collector=args.telemetry_collector,
+        scoring_record_hz=args.scoring_record_hz,
+        telemetry_process_priority=args.telemetry_process_priority,
+        telemetry_affinity_mask=args.telemetry_affinity_mask,
+        telemetry_flush_frames=args.telemetry_flush_frames,
     )
     run_server(
         source=source,

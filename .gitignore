@@ -1,3 +1,5 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+services/leaderboard/poc/telemetry-recordings/
+services/leaderboard/poc/logs/

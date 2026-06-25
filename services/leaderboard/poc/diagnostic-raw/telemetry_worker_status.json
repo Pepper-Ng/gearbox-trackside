@@ -1,0 +1,20 @@
+{
+  "schema": "gearbox-trackside.telemetry-raw.v1",
+  "status": "stopped",
+  "started_at": 1782168600.117359,
+  "output_file": "services\\leaderboard\\poc\\telemetry-recordings\\diagnostic-raw\\telemetry_raw.jsonl",
+  "target_hz": 100.0,
+  "map_name": "$rFactor2SMMP_Telemetry$20356",
+  "loops": 59118,
+  "frames_written": 29502,
+  "vehicle_samples_written": 147510,
+  "duplicate_update_counter_reads": 29616,
+  "update_counter_gap_count": 191,
+  "late_loop_count": 262,
+  "torn_read_count": 1,
+  "last_update_counter": 32401,
+  "last_error": null,
+  "elapsed_seconds": 600.003,
+  "effective_frame_hz": 49.17,
+  "updated_at": 1782169200.1204188
+}
