@@ -399,6 +399,16 @@ Validation:
 * Live rFactor 2 validation updates the kiosk near real-time. - Done for the local PC/current displayed fields.
 * Live validation confirmed autodiscovery, tray icon status colors, live board updates, flag state, temperatures, session type, track name, and displayed leaderboard fields.
 
+Deferred from Phase 1, but still tracked:
+
+* High-cadence shared-memory robustness belongs with telemetry/report work in Phase 5, where the polling rate and data-loss consequences are different from low-cadence live timing.
+* Telemetry channels remain Phase 5; Phase 1 intentionally uses scoring/session channels only.
+* Historical persistence, SQLite/database storage, result summaries, and daily/weekly/monthly boards remain Phase 2.
+* The proper staff alias workflow, session inclusion/exclusion, corrections, and kiosk display-mode controls remain Phase 2. Phase 1 only has config-backed aliases.
+* Venue rollout hardening, runbooks, final host/install decisions, canary rollout, restart/recovery checks, update flow, and rollback validation remain Phases 3 and 7.
+* More polished kiosk layout/graphics remain a follow-up UI task after the live data contract is stable; the current Phase 1 board is functional.
+* Captured raw memory-map regression fixtures are useful hardening and should be added when convenient, but they no longer block Phase 1 because live validation has proven the current leaderboard path.
+
 ### Phase 2 - Staff controls and historical boards
 
 Current admin/security baseline: the service has cookie-based admin login, local file-backed admin accounts with salted PBKDF2-HMAC-SHA256 password hashes, installer-first initial admin bootstrap, first-run web setup fallback when no admin users exist, protected source configuration, protected admin user management, and protected advanced status. The public kiosk and basic health endpoint remain unauthenticated; detailed paths, source diagnostics, discovery candidates, and admin user status are admin-only. Config and admin-store writes use temp-file replacement; packaged installs restrict the admin-store ACL to SYSTEM and Administrators.
