@@ -21,6 +21,11 @@ public sealed record SectorSnapshot
     public double? LastSeconds { get; init; }
 
     /// <summary>
+    /// Driver's current in-progress time for this sector, in seconds, when known.
+    /// </summary>
+    public double? CurrentSeconds { get; init; }
+
+    /// <summary>
     /// True when this sector currently represents the best known sector overall.
     /// </summary>
     public bool IsOverallBest { get; init; }

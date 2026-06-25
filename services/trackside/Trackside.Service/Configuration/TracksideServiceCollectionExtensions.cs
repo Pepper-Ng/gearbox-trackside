@@ -3,8 +3,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Trackside.Application.Configuration;
 using Trackside.Application.LiveSession;
-using Trackside.Infrastructure.LiveSession;
-using Trackside.Infrastructure.LiveSession.Fixtures;
+using Trackside.Infrastructure.Rf2.SharedMemory;
+using Trackside.Service.Security;
 using Trackside.Service.Workers;
 
 namespace Trackside.Service.Configuration;
@@ -44,22 +44,17 @@ public static class TracksideServiceCollectionExtensions
 
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<LiveSessionState>();
-        services.AddSingleton<ILiveSessionSource>(CreateLiveSessionSource);
+        services.AddSingleton<TracksideSourceConfigurationStore>();
+        services.AddSingleton<AdminUserStore>();
+        services.AddSingleton<ILeaderboardSnapshotBuilder, LeaderboardSnapshotBuilder>();
+        services.AddSingleton<MappedBufferPayloadLocator>();
+        services.AddSingleton<Rf2SharedMemoryMapReader>();
+        services.AddSingleton<IRf2SharedMemoryMapDiscovery, Rf2SharedMemoryMapDiscovery>();
+        services.AddSingleton<Rf2ScoringMapResolver>();
+        services.AddSingleton<IRf2ScoringPayloadParser, Rf2ScoringPayloadParser>();
+        services.AddSingleton<ILiveSessionSource, ReloadingLiveSessionSource>();
         services.AddHostedService<LiveSessionPublisher>();
 
         return services;
-    }
-
-    private static ILiveSessionSource CreateLiveSessionSource(IServiceProvider serviceProvider)
-    {
-        var options = serviceProvider.GetRequiredService<IOptionsMonitor<TracksideOptions>>().CurrentValue;
-        return options.Source.Mode switch
-        {
-            LiveSessionSourceMode.Fixture => ActivatorUtilities.CreateInstance<FixtureLiveSessionSource>(
-                serviceProvider,
-                options.Source.FixturePath,
-                AppContext.BaseDirectory),
-            _ => ActivatorUtilities.CreateInstance<UnsupportedLiveSessionSource>(serviceProvider, options.Source.Mode),
-        };
     }
 }

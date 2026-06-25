@@ -6,6 +6,11 @@ namespace Trackside.Domain.LiveSession;
 public sealed record DriverSnapshot
 {
     /// <summary>
+    /// One-based leaderboard rank after Trackside sorting rules have been applied.
+    /// </summary>
+    public int LeaderboardRank { get; init; }
+
+    /// <summary>
     /// Stable source-provided vehicle or scoring identifier for this row.
     /// </summary>
     public string DriverId { get; init; } = string.Empty;
@@ -31,6 +36,11 @@ public sealed record DriverSnapshot
     public int? Position { get; init; }
 
     /// <summary>
+    /// True when this row owns the best known lap in the current snapshot.
+    /// </summary>
+    public bool IsOverallBestLap { get; init; }
+
+    /// <summary>
     /// Completed lap count for this driver.
     /// </summary>
     public int CompletedLaps { get; init; }
@@ -54,6 +64,31 @@ public sealed record DriverSnapshot
     /// Gap to the current leader in seconds when available.
     /// </summary>
     public double? GapToLeaderSeconds { get; init; }
+
+    /// <summary>
+    /// Gap to the next car ahead in seconds when available.
+    /// </summary>
+    public double? GapToNextSeconds { get; init; }
+
+    /// <summary>
+    /// Laps behind the current leader when available.
+    /// </summary>
+    public int? LapsBehindLeader { get; init; }
+
+    /// <summary>
+    /// Current zero-based rFactor 2 sector index when available.
+    /// </summary>
+    public int? CurrentSector { get; init; }
+
+    /// <summary>
+    /// Approximate lap progress percentage from scoring data when available.
+    /// </summary>
+    public double? TrackPositionPercent { get; init; }
+
+    /// <summary>
+    /// Current lap distance in meters from scoring data when available.
+    /// </summary>
+    public double? LapDistanceMeters { get; init; }
 
     /// <summary>
     /// Sector timing details for this driver.

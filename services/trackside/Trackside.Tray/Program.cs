@@ -24,6 +24,8 @@ internal static class Program
         builder.Services.AddOptions<TracksideTrayOptions>()
             .Bind(builder.Configuration.GetSection(TracksideTrayOptions.SectionName))
             .ValidateOnStart();
+        builder.Services.AddSingleton<HttpClient>();
+        builder.Services.AddSingleton<ITrayStatusClient, TrayStatusClient>();
         builder.Services.AddSingleton<TrayApplicationContext>();
 
         using var host = builder.Build();

@@ -31,6 +31,16 @@ public sealed record LiveSessionInfo
     public double? ScheduledDurationSeconds { get; init; }
 
     /// <summary>
+    /// Full lap distance in meters when known.
+    /// </summary>
+    public double? LapDistanceMeters { get; init; }
+
+    /// <summary>
+    /// Number of visible driver rows in the current normalized snapshot.
+    /// </summary>
+    public int VehicleCount { get; init; }
+
+    /// <summary>
     /// Ambient air temperature in Celsius.
     /// </summary>
     public double? AirTemperatureCelsius { get; init; }
@@ -39,6 +49,21 @@ public sealed record LiveSessionInfo
     /// Track surface temperature in Celsius.
     /// </summary>
     public double? TrackTemperatureCelsius { get; init; }
+
+    /// <summary>
+    /// Rain intensity from the source, normalized between 0 and 1 when available.
+    /// </summary>
+    public double? RainIntensity { get; init; }
+
+    /// <summary>
+    /// Cloud intensity from the source, normalized between 0 and 1 when available.
+    /// </summary>
+    public double? CloudIntensity { get; init; }
+
+    /// <summary>
+    /// Average path wetness from the source, normalized between 0 and 1 when available.
+    /// </summary>
+    public double? TrackWetness { get; init; }
 
     /// <summary>
     /// Concise flag state suitable for kiosk display.

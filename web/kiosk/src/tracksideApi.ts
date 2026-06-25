@@ -30,10 +30,20 @@ export interface LiveSessionInfo {
   currentSessionSeconds?: number | null;
   /** Scheduled session duration in seconds. */
   scheduledDurationSeconds?: number | null;
+  /** Full lap distance in meters. */
+  lapDistanceMeters?: number | null;
+  /** Number of visible driver rows. */
+  vehicleCount: number;
   /** Ambient air temperature in Celsius. */
   airTemperatureCelsius?: number | null;
   /** Track temperature in Celsius. */
   trackTemperatureCelsius?: number | null;
+  /** Rain intensity normalized between 0 and 1. */
+  rainIntensity?: number | null;
+  /** Cloud intensity normalized between 0 and 1. */
+  cloudIntensity?: number | null;
+  /** Track wetness normalized between 0 and 1. */
+  trackWetness?: number | null;
   /** Concise overall flag text. */
   overallFlag: string;
 }
@@ -46,12 +56,16 @@ export interface SectorSnapshot {
   bestSeconds?: number | null;
   /** Driver's last sector time in seconds. */
   lastSeconds?: number | null;
+  /** Driver's current in-progress sector time in seconds. */
+  currentSeconds?: number | null;
   /** True when this is the overall best sector. */
   isOverallBest: boolean;
 }
 
 /** Normalized driver row shown on the kiosk. */
 export interface DriverSnapshot {
+  /** One-based leaderboard rank after Trackside ordering rules. */
+  leaderboardRank: number;
   /** Stable source-provided driver or scoring identifier. */
   driverId: string;
   /** Underlying fixed rig name. */
@@ -62,6 +76,8 @@ export interface DriverSnapshot {
   vehicleName: string;
   /** Current scored position. */
   position?: number | null;
+  /** True when this row owns the best known lap. */
+  isOverallBestLap: boolean;
   /** Completed lap count. */
   completedLaps: number;
   /** Best lap time in seconds. */
@@ -72,6 +88,16 @@ export interface DriverSnapshot {
   currentLapSeconds?: number | null;
   /** Gap to leader in seconds. */
   gapToLeaderSeconds?: number | null;
+  /** Gap to next car ahead in seconds. */
+  gapToNextSeconds?: number | null;
+  /** Laps behind the leader. */
+  lapsBehindLeader?: number | null;
+  /** Current zero-based rFactor 2 sector index. */
+  currentSector?: number | null;
+  /** Approximate lap progress percentage. */
+  trackPositionPercent?: number | null;
+  /** Current lap distance in meters. */
+  lapDistanceMeters?: number | null;
   /** Sector timing rows. */
   sectors: SectorSnapshot[];
 }
@@ -92,8 +118,44 @@ export interface LiveSessionSnapshot {
   drivers: DriverSnapshot[];
 }
 
+/** Minimal connection handle used by React and tests. */
+export interface LiveSessionConnection {
+  /** Stops receiving live-session updates. */
+  stop(): Promise<void>;
+}
+
+/** Client shape needed to start a live-session feed. */
+export interface LiveSessionFeedClient {
+  /** Fetches endpoint configuration from the backend. */
+  getClientConfiguration(): Promise<ClientConfiguration>;
+  /** Fetches the current snapshot through the REST recovery endpoint. */
+  getCurrentSession(path?: string): Promise<LiveSessionSnapshot>;
+  /** Opens the live SignalR feed. */
+  connectLiveSession(
+    hubPath: string,
+    onSnapshot: (snapshot: LiveSessionSnapshot) => void,
+  ): Promise<LiveSessionConnection>;
+}
+
+/** Loads the current snapshot first, then attaches live SignalR updates. */
+export async function startLiveSessionFeed(
+  client: LiveSessionFeedClient,
+  onSnapshot: (snapshot: LiveSessionSnapshot) => void,
+  onStatus: (status: string) => void,
+): Promise<LiveSessionConnection> {
+  const configuration = await client.getClientConfiguration();
+  const current = await client.getCurrentSession(configuration.currentSessionPath);
+  onSnapshot(current);
+  onStatus('Connected through REST recovery endpoint');
+
+  return client.connectLiveSession(configuration.liveSessionHubPath, pushedSnapshot => {
+    onSnapshot(pushedSnapshot);
+    onStatus('Connected through SignalR live updates');
+  });
+}
+
 /** Browser API client for REST and SignalR communication with Trackside.Host. */
-export class TracksideApiClient {
+export class TracksideApiClient implements LiveSessionFeedClient {
   /** Base URL for the backend; empty string means same-origin. */
   private readonly baseUrl: string;
 
@@ -116,7 +178,7 @@ export class TracksideApiClient {
   public async connectLiveSession(
     hubPath: string,
     onSnapshot: (snapshot: LiveSessionSnapshot) => void,
-  ): Promise<signalR.HubConnection> {
+  ): Promise<LiveSessionConnection> {
     const connection = new signalR.HubConnectionBuilder()
       .withUrl(this.toUrl(hubPath))
       .withAutomaticReconnect()

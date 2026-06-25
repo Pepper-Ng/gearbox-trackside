@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Extensions.Configuration;
@@ -36,6 +37,7 @@ public static class TracksideWebApplication
             builder.Host.UseWindowsService(options => options.ServiceName = "Trackside");
         }
 
+        AddWritableLocalConfiguration(builder, normalizedArgs);
         AddExternalConfiguration(builder, configRoot, normalizedArgs);
 
         var listenUrl = builder.Configuration.GetSection(TracksideOptions.SectionName)
@@ -45,6 +47,29 @@ public static class TracksideWebApplication
         builder.WebHost.UseUrls(listenUrl);
         builder.Services.AddSingleton(new TracksideRuntimeContext(forceConsoleMode, isWindowsService, builder.Environment.ContentRootPath, configRoot));
         builder.Services.AddTracksideFoundation(builder.Configuration);
+        builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+            .AddCookie(options =>
+            {
+                options.Cookie.Name = "Trackside.Admin";
+                options.Cookie.HttpOnly = true;
+                options.Cookie.SameSite = SameSiteMode.Strict;
+                options.LoginPath = "/configuration.html";
+                options.AccessDeniedPath = "/configuration.html";
+                options.ExpireTimeSpan = TimeSpan.FromHours(8);
+                options.SlidingExpiration = true;
+                options.Events.OnRedirectToLogin = context =>
+                {
+                    if (context.Request.Path.StartsWithSegments("/api"))
+                    {
+                        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                        return Task.CompletedTask;
+                    }
+
+                    context.Response.Redirect(context.RedirectUri);
+                    return Task.CompletedTask;
+                };
+            });
+        builder.Services.AddAuthorization();
         builder.Services.Configure<JsonOptions>(options => TracksideJson.Configure(options.SerializerOptions));
         builder.Services.AddSignalR().AddJsonProtocol(options => TracksideJson.Configure(options.PayloadSerializerOptions));
         builder.Services.AddCors(options =>
@@ -73,6 +98,8 @@ public static class TracksideWebApplication
         app.UseDefaultFiles();
         app.UseStaticFiles();
         app.UseCors(TracksideCors.PolicyName);
+        app.UseAuthentication();
+        app.UseAuthorization();
         app.MapTracksideApi();
         app.MapHub<LiveSessionHub>(LiveSessionRoutes.HubPath);
         app.MapFallbackToFile("index.html");
@@ -91,6 +118,14 @@ public static class TracksideWebApplication
         builder.Configuration
             .AddJsonFile(Path.Combine(serviceConfigRoot, "appsettings.json"), optional: true, reloadOnChange: true)
             .AddJsonFile(Path.Combine(serviceConfigRoot, $"appsettings.{builder.Environment.EnvironmentName}.json"), optional: true, reloadOnChange: true)
+            .AddEnvironmentVariables()
+            .AddCommandLine(normalizedArgs);
+    }
+
+    private static void AddWritableLocalConfiguration(WebApplicationBuilder builder, string[] normalizedArgs)
+    {
+        builder.Configuration
+            .AddJsonFile(Path.Combine(builder.Environment.ContentRootPath, "appsettings.Local.json"), optional: true, reloadOnChange: true)
             .AddEnvironmentVariables()
             .AddCommandLine(normalizedArgs);
     }

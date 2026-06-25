@@ -9,6 +9,18 @@ function formatSeconds(value) {
   return `${minutes}:${seconds}`;
 }
 
+function formatGap(seconds, laps) {
+  if (laps !== null && laps !== undefined && laps > 0) return `+${laps}L`;
+  if (seconds === 0) return 'Leader';
+  if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) return '-';
+  return `+${seconds.toFixed(3)}`;
+}
+
+function formatPercent(value) {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '-';
+  return `${value.toFixed(1)}%`;
+}
+
 function setMetric(label, value) {
   const item = document.createElement('div');
   item.className = 'metric';
@@ -30,14 +42,52 @@ function render(snapshot) {
   driversElement.replaceChildren();
   for (const driver of snapshot.drivers ?? []) {
     const row = document.createElement('tr');
-    row.innerHTML = `
-      <td>${driver.position ?? '-'}</td>
-      <td>${driver.displayName ?? '-'}</td>
-      <td>${driver.rigName ?? '-'}</td>
-      <td>${formatSeconds(driver.bestLapSeconds)}</td>
-      <td>${driver.gapToLeaderSeconds ? '+' + driver.gapToLeaderSeconds.toFixed(3) : '-'}</td>`;
+    if (driver.isOverallBestLap) row.className = 'bestLapRow';
+    appendCell(row, driver.leaderboardRank || driver.position || '-', 'rankCell');
+    appendDriverCell(row, driver);
+    appendCell(row, driver.rigName ?? '-');
+    appendCell(row, driver.vehicleName ?? '-');
+    appendCell(row, driver.completedLaps ?? 0);
+    appendCell(row, formatSeconds(driver.bestLapSeconds), driver.isOverallBestLap ? 'bestTime' : undefined);
+    appendCell(row, formatSeconds(driver.currentLapSeconds));
+    appendSectorCell(row, driver, 1);
+    appendSectorCell(row, driver, 2);
+    appendSectorCell(row, driver, 3);
+    appendCell(row, formatGap(driver.gapToLeaderSeconds, driver.lapsBehindLeader));
     driversElement.appendChild(row);
   }
+}
+
+function appendCell(row, value, className) {
+  const cell = document.createElement('td');
+  if (className) cell.className = className;
+  cell.textContent = value ?? '-';
+  row.appendChild(cell);
+}
+
+function appendDriverCell(row, driver) {
+  const cell = document.createElement('td');
+  const wrapper = document.createElement('div');
+  wrapper.className = 'driverCell';
+  const name = document.createElement('strong');
+  name.textContent = driver.displayName ?? '-';
+  const progress = document.createElement('span');
+  progress.textContent = formatPercent(driver.trackPositionPercent);
+  wrapper.append(name, progress);
+  cell.appendChild(wrapper);
+  row.appendChild(cell);
+}
+
+function appendSectorCell(row, driver, sectorNumber) {
+  const sector = (driver.sectors ?? []).find(candidate => candidate.number === sectorNumber);
+  const cell = document.createElement('td');
+  cell.className = sector?.isOverallBest ? 'bestTime sectorCell' : 'sectorCell';
+  const best = document.createElement('span');
+  best.textContent = formatSeconds(sector?.bestSeconds);
+  const current = document.createElement('small');
+  current.textContent = formatSeconds(sector?.currentSeconds ?? sector?.lastSeconds);
+  cell.append(best, current);
+  row.appendChild(cell);
 }
 
 async function loadSnapshot() {
@@ -49,3 +99,9 @@ async function loadSnapshot() {
 loadSnapshot().catch(error => {
   statusElement.textContent = `Unable to load fixture snapshot: ${error}`;
 });
+
+window.setInterval(() => {
+  loadSnapshot().catch(error => {
+    statusElement.textContent = `Unable to refresh live snapshot: ${error}`;
+  });
+}, 1000);

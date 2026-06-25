@@ -33,4 +33,31 @@ public sealed class ApiContractTests
     {
         Assert.Equal("/api/health", LiveSessionRoutes.HealthPath);
     }
+
+    /// <summary>
+    /// Keeps the source configuration endpoint stable for the tray menu and configuration page.
+    /// </summary>
+    [Fact]
+    public void SourceConfigurationPathIsStable()
+    {
+        Assert.Equal("/api/configuration/source", LiveSessionRoutes.SourceConfigurationPath);
+    }
+
+    /// <summary>
+    /// Keeps the admin session endpoint stable for the admin dashboard.
+    /// </summary>
+    [Fact]
+    public void AdminSessionPathIsStable()
+    {
+        Assert.Equal("/api/admin/session", LiveSessionRoutes.AdminSessionPath);
+    }
+
+    /// <summary>
+    /// Keeps the admin status endpoint stable for the admin dashboard.
+    /// </summary>
+    [Fact]
+    public void AdminStatusPathIsStable()
+    {
+        Assert.Equal("/api/admin/status", LiveSessionRoutes.AdminStatusPath);
+    }
 }
