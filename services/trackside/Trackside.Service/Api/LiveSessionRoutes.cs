@@ -56,6 +56,16 @@ public static class LiveSessionRoutes
     public const string AdminSessionsPath = "/api/admin/sessions";
 
     /// <summary>
+    /// Admin endpoint for kiosk display defaults.
+    /// </summary>
+    public const string AdminKioskPath = "/api/admin/kiosk";
+
+    /// <summary>
+    /// Admin endpoint for persistence maintenance actions.
+    /// </summary>
+    public const string AdminPersistencePath = "/api/admin/persistence";
+
+    /// <summary>
     /// REST endpoint for editable source and shared-memory discovery configuration.
     /// </summary>
     public const string SourceConfigurationPath = "/api/configuration/source";

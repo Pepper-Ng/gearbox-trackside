@@ -10,7 +10,12 @@ export interface ClientConfiguration {
   healthPath: string;
   /** Recommended reconnect delay in seconds. */
   recommendedReconnectSeconds: number;
+  /** Default display mode a kiosk screen should open with. */
+  defaultDisplayMode: KioskDisplayMode;
 }
+
+/** Supported backend-configured kiosk display modes. */
+export type KioskDisplayMode = 'Monthly' | 'Weekly' | 'Daily' | 'LastSession' | 'Live';
 
 /** Coarse session category used by the kiosk. */
 export type SessionKind = 'Unknown' | 'Practice' | 'Qualifying' | 'Race';
@@ -164,6 +169,10 @@ export interface BestLapBoardResponse {
   mode: BestLapBoardMode;
   /** Track filter used by the board. */
   trackName?: string | null;
+  /** Vehicle/content filter used by the board. */
+  vehicleName?: string | null;
+  /** Session-kind filter used by the board. */
+  sessionKind?: SessionKind | null;
   /** Inclusive lower UTC bound used by the query. */
   fromUtc?: string | null;
   /** Exclusive upper UTC bound used by the query. */

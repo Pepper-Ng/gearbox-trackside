@@ -32,6 +32,8 @@ This solution is intentionally small but shaped like the final application: one 
 - Best-lap boards use stored lap records, not aggregate best-lap summaries. Trackside exposes rFactor 2's lap validity field as `ValidLapFlag`; it must be `2` before a lap is eligible for daily/weekly/monthly timing boards. Public boards default to one fastest lap per entered screen name so one driver cannot fill the whole display.
 - Prepared session setup lives in the durable store: staff assign screen names to rigs before sessions and may optionally link a recurring-customer driver profile. The setup remains active until staff saves changes or clears it.
 - The admin Sessions tab reads persisted sessions and participants from `ITracksideStore`; toggling session inclusion updates `count_for_history`, which historical best-lap queries already honor.
+- Participant display-name corrections, participant exclusions, and lap invalidations are persisted separately from captured source data, then projected into long-lived derived track-best records used by historical boards.
+- Kiosk screens read a backend-configured default display mode from `/api/configuration/client`; admins can change the default mode without editing files.
 
 ## Commands
 
@@ -44,7 +46,7 @@ dotnet run --project services\trackside\Trackside.Service -- --console --source 
 ```
 
 Open `http://127.0.0.1:8877` for the packaged/static kiosk shell.
-Open `http://127.0.0.1:8877/configuration.html` for the admin dashboard. On a new install, the installer should create the first admin user; if no admin store exists, the dashboard shows a first-run setup form. After login, admins can edit source/alias/shared-memory discovery settings, prepare rig/session assignments, browse persisted sessions and participants, toggle whether a session counts for historical boards, create admin users, change passwords, and view advanced service status.
+Open `http://127.0.0.1:8877/configuration.html` for the admin dashboard. On a new install, the installer should create the first admin user; if no admin store exists, the dashboard shows a first-run setup form. After login, admins can edit source/alias/shared-memory discovery settings, prepare rig/session assignments, browse persisted sessions and participants, correct/exclude participants, invalidate laps, toggle whether a session counts for historical boards, configure the default kiosk display mode, run retention cleanup, create admin users, change passwords, and view advanced service status.
 
 Use `--console` for local development. Without it, `Trackside.Service` is configured for Windows Service lifetime when run as an installed service.
 
@@ -88,7 +90,8 @@ The `Trackside` section in `Trackside.Service/appsettings.json` controls:
 - `Persistence.Enabled` - enables the durable Phase 2 store.
 - `Persistence.DatabasePath` / `Persistence.DatabaseFileName` - optional database location override or file name under the resolved data directory.
 - `Persistence.CountSessionsByDefault` - default inclusion flag for newly persisted live-session summaries until staff changes a session in the admin Sessions tab.
-- `Persistence.Retention.*` - retention policy targets for detailed lap records, session summaries, long-lived track best records, monthly track periods, and future telemetry samples. Cleanup enforcement is deferred until derived long-term records are separated from short-lived raw details.
+- `Persistence.Retention.*` - retention policy targets for detailed lap records, session summaries, long-lived track best records, monthly track periods, and future telemetry samples. A background cleanup worker and admin trigger enforce these windows while preserving derived track-best records by default.
+- `Kiosk.DefaultDisplayMode` - default kiosk view for newly opened screens: Monthly, Weekly, Daily, LastSession, or Live.
 - `Deployment.*` - install mode, service name, bundle version, install root, config/data/log/update paths, and manifest path. Detailed paths are surfaced through the authenticated admin status endpoint rather than public `/api/health`.
 - `Updates.*` - placeholder update status/channel/manifest fields for future dashboard-controlled updates.
 

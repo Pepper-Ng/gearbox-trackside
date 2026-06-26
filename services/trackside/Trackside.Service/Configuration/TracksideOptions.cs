@@ -34,6 +34,11 @@ public sealed class TracksideOptions
     public TracksidePersistenceOptions Persistence { get; init; } = new();
 
     /// <summary>
+    /// Kiosk display defaults for venue screens.
+    /// </summary>
+    public TracksideKioskOptions Kiosk { get; init; } = new();
+
+    /// <summary>
     /// Browser origins allowed to call the local API during frontend development.
     /// </summary>
     public TracksideCorsOptions Cors { get; init; } = new();
@@ -47,6 +52,48 @@ public sealed class TracksideOptions
     /// Update-check placeholders used by health and the future admin dashboard.
     /// </summary>
     public TracksideUpdateOptions Updates { get; init; } = new();
+}
+
+/// <summary>
+/// Display defaults for kiosk screens.
+/// </summary>
+public sealed class TracksideKioskOptions
+{
+    /// <summary>
+    /// Default kiosk display mode used when a screen first opens.
+    /// </summary>
+    public KioskDisplayMode DefaultDisplayMode { get; init; } = KioskDisplayMode.Monthly;
+}
+
+/// <summary>
+/// Supported kiosk display modes.
+/// </summary>
+public enum KioskDisplayMode
+{
+    /// <summary>
+    /// Active monthly track board.
+    /// </summary>
+    Monthly,
+
+    /// <summary>
+    /// Current weekly best-lap board.
+    /// </summary>
+    Weekly,
+
+    /// <summary>
+    /// Current daily best-lap board.
+    /// </summary>
+    Daily,
+
+    /// <summary>
+    /// Most recently finished session result.
+    /// </summary>
+    LastSession,
+
+    /// <summary>
+    /// Live timing board.
+    /// </summary>
+    Live,
 }
 
 /// <summary>

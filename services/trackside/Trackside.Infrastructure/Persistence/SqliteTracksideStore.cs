@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Data.Sqlite;
+using Trackside.Application.Configuration;
 using Trackside.Application.Persistence;
 using Trackside.Domain.LiveSession;
 
@@ -12,7 +13,7 @@ namespace Trackside.Infrastructure.Persistence;
 /// </summary>
 public sealed class SqliteTracksideStore : ITracksideStore
 {
-    private const int SchemaVersion = 1;
+    private const int SchemaVersion = 2;
     private const string LegacyAliasSeededKey = "legacy_alias_seeded";
     private const string PreparedSessionSetupConfiguredKey = "prepared_session_setup_configured";
     private static readonly TimeSpan SessionStartBucket = TimeSpan.FromMinutes(5);
@@ -62,19 +63,7 @@ public sealed class SqliteTracksideStore : ITracksideStore
             Directory.CreateDirectory(Path.GetDirectoryName(_options.DatabasePath) ?? AppContext.BaseDirectory);
             await using var connection = await OpenConnectionAsync(cancellationToken);
             await ExecuteAsync(connection, SchemaSql, cancellationToken);
-            await EnsureSchemaCompatibilityAsync(connection, cancellationToken);
-            await ExecuteAsync(
-                connection,
-                """
-                INSERT OR IGNORE INTO schema_migrations (version, applied_utc)
-                VALUES ($version, $appliedUtc);
-                """,
-                cancellationToken,
-                parameters:
-                [
-                    ("$version", SchemaVersion),
-                    ("$appliedUtc", FormatDateTime(_timeProvider.GetUtcNow())),
-                ]);
+            await ApplyMigrationsAsync(connection, cancellationToken);
 
             _initialized = true;
         }
@@ -333,6 +322,7 @@ public sealed class SqliteTracksideStore : ITracksideStore
             await InsertCompletedLapAsync(connection, transaction, participantId, driver, previousCompletedLaps, observedUtc, cancellationToken);
             await UpsertSectorsAsync(connection, transaction, participantId, driver, observedUtc, cancellationToken);
             await UpsertSummaryResultAsync(connection, transaction, sessionId, participantId, driver, observedUtc, cancellationToken);
+            await RefreshTrackBestRecordsForParticipantAsync(connection, transaction, participantId, cancellationToken);
         }
 
         transaction.Commit();
@@ -350,79 +340,83 @@ public sealed class SqliteTracksideStore : ITracksideStore
         await InitializeAsync(cancellationToken);
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        var where = new StringBuilder("WHERE sessions.count_for_history = 1 AND laps.is_valid_timed_lap = 1");
+        var where = new StringBuilder("WHERE count_for_history = 1 AND participant_excluded = 0 AND staff_invalidated = 0 AND is_valid_timed_lap = 1");
 
         if (query.FromUtc is not null)
         {
-            where.Append(" AND laps.observed_utc >= $fromUtc");
+            where.Append(" AND observed_utc >= $fromUtc");
             command.Parameters.AddWithValue("$fromUtc", FormatDateTime(query.FromUtc.Value));
         }
 
         if (query.ToUtc is not null)
         {
-            where.Append(" AND laps.observed_utc < $toUtc");
+            where.Append(" AND observed_utc < $toUtc");
             command.Parameters.AddWithValue("$toUtc", FormatDateTime(query.ToUtc.Value));
         }
 
         if (!string.IsNullOrWhiteSpace(query.TrackName))
         {
-            where.Append(" AND sessions.track_name = $trackName");
+            where.Append(" AND track_name = $trackName");
             command.Parameters.AddWithValue("$trackName", query.TrackName.Trim());
         }
 
         if (query.SessionKind is not null)
         {
-            where.Append(" AND sessions.session_kind = $sessionKind");
+            where.Append(" AND session_kind = $sessionKind");
             command.Parameters.AddWithValue("$sessionKind", query.SessionKind.Value.ToString());
         }
 
-                command.CommandText = $$"""
-                        WITH eligible AS (
-                                SELECT sessions.session_id,
-                                             sessions.track_name,
-                                             sessions.session_kind,
-                                             laps.lap_number,
-                                             participants.rig_name,
-                                             participants.display_name,
-                                             participants.vehicle_name,
-                                             laps.lap_time_seconds,
-                                             laps.valid_lap_flag,
-                                             laps.is_valid_lap,
-                                             laps.is_valid_timed_lap,
-                                             sessions.first_seen_utc,
-                                             sessions.last_seen_utc,
-                                             laps.observed_utc,
-                                             lower(trim(coalesce(nullif(participants.display_name, ''), participants.rig_name))) AS driver_key
-                                FROM laps
-                                INNER JOIN participants ON participants.participant_id = laps.participant_id
-                                INNER JOIN sessions ON sessions.session_id = participants.session_id
-                                {{where}}
-                        ), ranked AS (
-                                SELECT *,
-                                             ROW_NUMBER() OVER (PARTITION BY track_name, driver_key ORDER BY lap_time_seconds ASC, observed_utc ASC) AS driver_lap_rank
-                                FROM eligible
-                        )
-                        SELECT session_id,
-                                     track_name,
-                                     session_kind,
-                                     lap_number,
-                                     rig_name,
-                                     display_name,
-                                     vehicle_name,
-                                     lap_time_seconds,
-                                     valid_lap_flag,
-                                     is_valid_lap,
-                                     is_valid_timed_lap,
-                                     first_seen_utc,
-                                     last_seen_utc,
-                                     observed_utc
-                        FROM ranked
-                        WHERE $mode = 'all-laps' OR driver_lap_rank = 1
-                        ORDER BY {{(query.SortByTrack ? "track_name ASC, " : string.Empty)}}lap_time_seconds ASC, observed_utc ASC
+        if (!string.IsNullOrWhiteSpace(query.VehicleName))
+        {
+            where.Append(" AND vehicle_name = $vehicleName");
+            command.Parameters.AddWithValue("$vehicleName", query.VehicleName.Trim());
+        }
+
+        command.CommandText = $$"""
+            WITH eligible AS (
+                SELECT session_id,
+                       track_name,
+                       session_kind,
+                       lap_number,
+                       rig_name,
+                       display_name,
+                       vehicle_name,
+                       lap_time_seconds,
+                       valid_lap_flag,
+                       is_valid_lap,
+                       is_valid_timed_lap,
+                       first_seen_utc,
+                       last_seen_utc,
+                       observed_utc,
+                       lower(trim(coalesce(nullif(display_name, ''), rig_name))) AS driver_key
+                FROM track_best_records
+                {{where}}
+            ), ranked AS (
+                SELECT *,
+                       ROW_NUMBER() OVER (PARTITION BY track_name, driver_key ORDER BY lap_time_seconds ASC, observed_utc ASC) AS driver_lap_rank
+                FROM eligible
+            )
+            SELECT session_id,
+                   track_name,
+                   session_kind,
+                   lap_number,
+                   rig_name,
+                   display_name,
+                   vehicle_name,
+                   lap_time_seconds,
+                   valid_lap_flag,
+                   is_valid_lap,
+                   is_valid_timed_lap,
+                   first_seen_utc,
+                   last_seen_utc,
+                   observed_utc
+            FROM ranked
+            WHERE $mode = 'all-laps' OR driver_lap_rank = 1
+            ORDER BY {{(query.SortByTrack ? "track_name ASC, " : string.Empty)}}lap_time_seconds ASC, observed_utc ASC
             LIMIT $limit;
             """;
         command.Parameters.AddWithValue("$limit", Math.Clamp(query.Limit, 1, 500));
-                command.Parameters.AddWithValue("$mode", query.Mode == BestLapBoardMode.AllLaps ? "all-laps" : "per-driver");
+        command.Parameters.AddWithValue("$mode", query.Mode == BestLapBoardMode.AllLaps ? "all-laps" : "per-driver");
 
         var results = new List<HistoricalBestLap>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -488,16 +482,22 @@ public sealed class SqliteTracksideStore : ITracksideStore
         await sessionReader.DisposeAsync();
         await using var rowsCommand = connection.CreateCommand();
         rowsCommand.CommandText = """
-            SELECT display_name,
+             SELECT coalesce(nullif(display_name_override, ''), display_name),
                    rig_name,
                    driver_profile_id,
                    vehicle_name,
                    completed_laps,
-                   best_lap_seconds,
+                 (SELECT MIN(track_best_records.lap_time_seconds)
+                  FROM track_best_records
+                  WHERE track_best_records.participant_id = participants.participant_id
+                 AND track_best_records.count_for_history = 1
+                 AND track_best_records.participant_excluded = 0
+                 AND track_best_records.staff_invalidated = 0
+                 AND track_best_records.is_valid_timed_lap = 1) AS best_lap_seconds,
                    latest_rank,
                    latest_position
             FROM participants
-            WHERE session_id = $sessionId
+             WHERE session_id = $sessionId AND excluded_from_history = 0
             ORDER BY latest_rank ASC, latest_position ASC, display_name ASC;
             """;
         rowsCommand.Parameters.AddWithValue("$sessionId", sessionId);
@@ -583,7 +583,9 @@ public sealed class SqliteTracksideStore : ITracksideStore
                    participants.latest_rank,
                    participants.rig_name,
                    participants.display_name,
-                   participants.driver_profile_id,
+                 participants.display_name_override,
+                   coalesce(nullif(participants.display_name_override, ''), participants.display_name) AS effective_display_name,
+                 participants.driver_profile_id,
                    participants.vehicle_name,
                    participants.first_seen_utc,
                    participants.last_seen_utc,
@@ -591,7 +593,10 @@ public sealed class SqliteTracksideStore : ITracksideStore
                    participants.best_lap_seconds,
                    participants.last_lap_seconds,
                    (SELECT COUNT(*) FROM laps WHERE laps.participant_id = participants.participant_id) AS lap_count,
-                   (SELECT COUNT(*) FROM laps WHERE laps.participant_id = participants.participant_id AND laps.is_valid_timed_lap = 1) AS valid_timed_lap_count
+                 (SELECT COUNT(*) FROM laps WHERE laps.participant_id = participants.participant_id AND laps.is_valid_timed_lap = 1 AND laps.staff_invalidated = 0) AS valid_timed_lap_count,
+                 participants.excluded_from_history,
+                 participants.correction_reason,
+                 participants.corrected_utc
             FROM participants
             WHERE participants.session_id = $sessionId
             ORDER BY participants.latest_rank ASC, participants.latest_position ASC, participants.display_name ASC;
@@ -604,6 +609,12 @@ public sealed class SqliteTracksideStore : ITracksideStore
         {
             participants.Add(ReadHistoricalSessionParticipant(participantsReader));
         }
+
+        var laps = await GetSessionLapsAsync(connection, summary.SessionId, cancellationToken);
+        var lapsByParticipant = laps.ToLookup(lap => lap.ParticipantId);
+        var participantsWithLaps = participants
+            .Select(participant => participant with { Laps = lapsByParticipant[participant.ParticipantId].ToList() })
+            .ToList();
 
         return new HistoricalSessionDetail
         {
@@ -620,7 +631,7 @@ public sealed class SqliteTracksideStore : ITracksideStore
             LapCount = summary.LapCount,
             ValidTimedLapCount = summary.ValidTimedLapCount,
             BestLapSeconds = summary.BestLapSeconds,
-            Participants = participants,
+            Participants = participantsWithLaps,
         };
     }
 
@@ -642,7 +653,216 @@ public sealed class SqliteTracksideStore : ITracksideStore
             """;
         command.Parameters.AddWithValue("$countForHistory", countForHistory ? 1 : 0);
         command.Parameters.AddWithValue("$sessionId", sessionId.Trim());
-        return await command.ExecuteNonQueryAsync(cancellationToken) > 0;
+        var updated = await command.ExecuteNonQueryAsync(cancellationToken) > 0;
+        if (updated)
+        {
+            await ExecuteAsync(
+                connection,
+                """
+                UPDATE track_best_records
+                SET count_for_history = $countForHistory
+                WHERE session_id = $sessionId;
+                """,
+                cancellationToken,
+                parameters:
+                [
+                    ("$countForHistory", countForHistory ? 1 : 0),
+                    ("$sessionId", sessionId.Trim()),
+                ]);
+        }
+
+        return updated;
+    }
+
+    /// <inheritdoc />
+    public async Task<HistoricalSessionDetail?> CorrectParticipantAsync(
+        string sessionId,
+        long participantId,
+        ParticipantCorrectionRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (!IsEnabled || string.IsNullOrWhiteSpace(sessionId) || participantId <= 0)
+        {
+            return null;
+        }
+
+        await InitializeAsync(cancellationToken);
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        using var transaction = connection.BeginTransaction();
+        var updated = await ExecuteNonQueryAsync(
+            connection,
+            """
+            UPDATE participants
+            SET display_name_override = $displayNameOverride,
+                excluded_from_history = $excludedFromHistory,
+                correction_reason = $reason,
+                corrected_utc = $correctedUtc
+            WHERE session_id = $sessionId AND participant_id = $participantId;
+            """,
+            cancellationToken,
+            transaction,
+            ("$displayNameOverride", DbValue(request.DisplayNameOverride)),
+            ("$excludedFromHistory", request.ExcludedFromHistory ? 1 : 0),
+            ("$reason", DbValue(request.Reason)),
+            ("$correctedUtc", FormatDateTime(_timeProvider.GetUtcNow())),
+            ("$sessionId", sessionId.Trim()),
+            ("$participantId", participantId));
+
+        if (updated == 0)
+        {
+            transaction.Rollback();
+            return null;
+        }
+
+        await RefreshTrackBestRecordsForParticipantAsync(connection, transaction, participantId, cancellationToken);
+        transaction.Commit();
+        return await GetHistoricalSessionAsync(sessionId, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<HistoricalSessionDetail?> CorrectLapAsync(
+        string sessionId,
+        long lapId,
+        LapCorrectionRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (!IsEnabled || string.IsNullOrWhiteSpace(sessionId) || lapId <= 0)
+        {
+            return null;
+        }
+
+        if (request.LapSecondsOverride is { } lapSecondsOverride && (!double.IsFinite(lapSecondsOverride) || lapSecondsOverride <= 0))
+        {
+            throw new ArgumentException("Corrected lap time must be a positive finite number.", nameof(request));
+        }
+
+        await InitializeAsync(cancellationToken);
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        using var transaction = connection.BeginTransaction();
+        var participantId = await GetLapParticipantIdAsync(connection, transaction, sessionId.Trim(), lapId, cancellationToken);
+        if (participantId is null)
+        {
+            transaction.Rollback();
+            return null;
+        }
+
+        var updated = await ExecuteNonQueryAsync(
+            connection,
+            """
+            UPDATE laps
+            SET lap_time_seconds_override = $lapTimeSecondsOverride,
+                staff_invalidated = $staffInvalidated,
+                correction_reason = $reason,
+                corrected_utc = $correctedUtc
+            WHERE lap_id = $lapId;
+            """,
+            cancellationToken,
+            transaction,
+            ("$lapTimeSecondsOverride", DbValue(request.LapSecondsOverride)),
+            ("$staffInvalidated", request.StaffInvalidated ? 1 : 0),
+            ("$reason", DbValue(request.Reason)),
+            ("$correctedUtc", FormatDateTime(_timeProvider.GetUtcNow())),
+            ("$lapId", lapId));
+
+        if (updated == 0)
+        {
+            transaction.Rollback();
+            return null;
+        }
+
+        await RefreshTrackBestRecordsForParticipantAsync(connection, transaction, participantId.Value, cancellationToken);
+        transaction.Commit();
+        return await GetHistoricalSessionAsync(sessionId, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<TracksideRetentionCleanupResult> EnforceRetentionAsync(
+        TracksideRetentionOptions retention,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(retention);
+        if (!IsEnabled)
+        {
+            return new TracksideRetentionCleanupResult();
+        }
+
+        await InitializeAsync(cancellationToken);
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        var deletedLaps = 0;
+        var deletedSessions = 0;
+        var deletedTrackBestRecords = 0;
+        var deletedMonthlyTrackPeriods = 0;
+
+        if (retention.DetailedLapRecordsDays > 0)
+        {
+            deletedLaps = await ExecuteNonQueryAsync(
+                connection,
+                """
+                DELETE FROM laps
+                                WHERE observed_utc < $cutoffUtc;
+                """,
+                cancellationToken,
+                parameters:
+                [
+                    ("$cutoffUtc", FormatDateTime(nowUtc.AddDays(-retention.DetailedLapRecordsDays))),
+                ]);
+        }
+
+        if (retention.SessionSummariesDays > 0)
+        {
+            deletedSessions = await ExecuteNonQueryAsync(
+                connection,
+                """
+                DELETE FROM sessions
+                WHERE last_seen_utc < $cutoffUtc;
+                """,
+                cancellationToken,
+                parameters:
+                [
+                    ("$cutoffUtc", FormatDateTime(nowUtc.AddDays(-retention.SessionSummariesDays))),
+                ]);
+        }
+
+        if (retention.TrackBestRecordsDays is > 0)
+        {
+            deletedTrackBestRecords = await ExecuteNonQueryAsync(
+                connection,
+                """
+                DELETE FROM track_best_records
+                WHERE observed_utc < $cutoffUtc;
+                """,
+                cancellationToken,
+                parameters:
+                [
+                    ("$cutoffUtc", FormatDateTime(nowUtc.AddDays(-retention.TrackBestRecordsDays.Value))),
+                ]);
+        }
+
+        if (retention.MonthlyTrackPeriodsDays is > 0)
+        {
+            deletedMonthlyTrackPeriods = await ExecuteNonQueryAsync(
+                connection,
+                """
+                DELETE FROM monthly_track_periods
+                WHERE ended_utc IS NOT NULL AND ended_utc < $cutoffUtc;
+                """,
+                cancellationToken,
+                parameters:
+                [
+                    ("$cutoffUtc", FormatDateTime(nowUtc.AddDays(-retention.MonthlyTrackPeriodsDays.Value))),
+                ]);
+        }
+
+        return new TracksideRetentionCleanupResult
+        {
+            DetailedLapRecordsDeleted = deletedLaps,
+            SessionSummariesDeleted = deletedSessions,
+            TrackBestRecordsDeleted = deletedTrackBestRecords,
+            MonthlyTrackPeriodsDeleted = deletedMonthlyTrackPeriods,
+        };
     }
 
     /// <inheritdoc />
@@ -729,38 +949,74 @@ public sealed class SqliteTracksideStore : ITracksideStore
             Cache = SqliteCacheMode.Shared,
         }.ToString());
         await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "PRAGMA foreign_keys = ON;";
+        await command.ExecuteNonQueryAsync(cancellationToken);
         return connection;
     }
 
-    private static async Task EnsureSchemaCompatibilityAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    private static async Task ApplyMigrationsAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
-        var lapColumns = await GetColumnNamesAsync(connection, "laps", cancellationToken);
-        if (!lapColumns.Contains("valid_lap_flag"))
+        var appliedVersions = await GetAppliedMigrationVersionsAsync(connection, cancellationToken);
+        if (!appliedVersions.Contains(1))
         {
-            await ExecuteAsync(connection, "ALTER TABLE laps ADD COLUMN valid_lap_flag INTEGER NULL;", cancellationToken);
+            await RecordMigrationAsync(connection, 1, cancellationToken);
         }
 
-        if (!lapColumns.Contains("is_valid_lap"))
+        if (!appliedVersions.Contains(2))
         {
-            await ExecuteAsync(connection, "ALTER TABLE laps ADD COLUMN is_valid_lap INTEGER NOT NULL DEFAULT 0;", cancellationToken);
+            await ApplyMigration2Async(connection, cancellationToken);
+            await RecordMigrationAsync(connection, 2, cancellationToken);
+        }
+    }
+
+    private static async Task<HashSet<int>> GetAppliedMigrationVersionsAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT version FROM schema_migrations;";
+        var versions = new HashSet<int>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            versions.Add(reader.GetInt32(0));
         }
 
-        if (!lapColumns.Contains("is_valid_timed_lap"))
-        {
-            await ExecuteAsync(connection, "ALTER TABLE laps ADD COLUMN is_valid_timed_lap INTEGER NOT NULL DEFAULT 0;", cancellationToken);
-        }
+        return versions;
+    }
 
-        var aliasColumns = await GetColumnNamesAsync(connection, "driver_aliases", cancellationToken);
-        if (!aliasColumns.Contains("driver_profile_id"))
-        {
-            await ExecuteAsync(connection, "ALTER TABLE driver_aliases ADD COLUMN driver_profile_id TEXT NULL;", cancellationToken);
-        }
+    private static async Task RecordMigrationAsync(SqliteConnection connection, int version, CancellationToken cancellationToken)
+    {
+        await ExecuteAsync(
+            connection,
+            """
+            INSERT OR IGNORE INTO schema_migrations (version, applied_utc)
+            VALUES ($version, $appliedUtc);
+            """,
+            cancellationToken,
+            parameters:
+            [
+                ("$version", version),
+                ("$appliedUtc", FormatDateTime(DateTimeOffset.UtcNow)),
+            ]);
+    }
 
-        var participantColumns = await GetColumnNamesAsync(connection, "participants", cancellationToken);
-        if (!participantColumns.Contains("driver_profile_id"))
-        {
-            await ExecuteAsync(connection, "ALTER TABLE participants ADD COLUMN driver_profile_id TEXT NULL;", cancellationToken);
-        }
+    private static async Task ApplyMigration2Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        await AddColumnIfMissingAsync(connection, "laps", "valid_lap_flag", "INTEGER NULL", cancellationToken);
+        await AddColumnIfMissingAsync(connection, "laps", "is_valid_lap", "INTEGER NOT NULL DEFAULT 0", cancellationToken);
+        await AddColumnIfMissingAsync(connection, "laps", "is_valid_timed_lap", "INTEGER NOT NULL DEFAULT 0", cancellationToken);
+        await AddColumnIfMissingAsync(connection, "laps", "lap_time_seconds_override", "REAL NULL", cancellationToken);
+        await AddColumnIfMissingAsync(connection, "laps", "staff_invalidated", "INTEGER NOT NULL DEFAULT 0", cancellationToken);
+        await AddColumnIfMissingAsync(connection, "laps", "correction_reason", "TEXT NULL", cancellationToken);
+        await AddColumnIfMissingAsync(connection, "laps", "corrected_utc", "TEXT NULL", cancellationToken);
+
+        await AddColumnIfMissingAsync(connection, "driver_aliases", "driver_profile_id", "TEXT NULL", cancellationToken);
+
+        await AddColumnIfMissingAsync(connection, "participants", "driver_profile_id", "TEXT NULL", cancellationToken);
+        await AddColumnIfMissingAsync(connection, "participants", "display_name_override", "TEXT NULL", cancellationToken);
+        await AddColumnIfMissingAsync(connection, "participants", "excluded_from_history", "INTEGER NOT NULL DEFAULT 0", cancellationToken);
+        await AddColumnIfMissingAsync(connection, "participants", "correction_reason", "TEXT NULL", cancellationToken);
+        await AddColumnIfMissingAsync(connection, "participants", "corrected_utc", "TEXT NULL", cancellationToken);
 
         var refreshedColumns = await GetColumnNamesAsync(connection, "laps", cancellationToken);
         if (refreshedColumns.Contains("count_lap_flag"))
@@ -776,6 +1032,23 @@ public sealed class SqliteTracksideStore : ITracksideStore
         if (refreshedColumns.Contains("counts_for_timing"))
         {
             await ExecuteAsync(connection, "UPDATE laps SET is_valid_timed_lap = counts_for_timing WHERE is_valid_timed_lap = 0;", cancellationToken);
+        }
+
+        await ExecuteAsync(connection, TrackBestRecordsSchemaSql, cancellationToken);
+        await RefreshAllTrackBestRecordsAsync(connection, cancellationToken);
+    }
+
+    private static async Task AddColumnIfMissingAsync(
+        SqliteConnection connection,
+        string tableName,
+        string columnName,
+        string columnDefinition,
+        CancellationToken cancellationToken)
+    {
+        var columns = await GetColumnNamesAsync(connection, tableName, cancellationToken);
+        if (!columns.Contains(columnName))
+        {
+            await ExecuteAsync(connection, $"ALTER TABLE {tableName} ADD COLUMN {columnName} {columnDefinition};", cancellationToken);
         }
     }
 
@@ -1153,6 +1426,133 @@ public sealed class SqliteTracksideStore : ITracksideStore
             ("$lapDistanceMeters", DbValue(driver.LapDistanceMeters)),
         ];
 
+    private static async Task<long?> GetLapParticipantIdAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string sessionId,
+        long lapId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT laps.participant_id
+            FROM laps
+            INNER JOIN participants ON participants.participant_id = laps.participant_id
+            WHERE participants.session_id = $sessionId AND laps.lap_id = $lapId;
+            """;
+        command.Parameters.AddWithValue("$sessionId", sessionId);
+        command.Parameters.AddWithValue("$lapId", lapId);
+        var value = await command.ExecuteScalarAsync(cancellationToken);
+        return value is null ? null : Convert.ToInt64(value, CultureInfo.InvariantCulture);
+    }
+
+    private static async Task RefreshTrackBestRecordsForParticipantAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        long participantId,
+        CancellationToken cancellationToken)
+    {
+        if (!await HasRawLapsForParticipantAsync(connection, transaction, participantId, cancellationToken))
+        {
+            await UpdateDerivedTrackBestParticipantFieldsAsync(connection, transaction, participantId, cancellationToken);
+            return;
+        }
+
+        await RefreshTrackBestRecordsAsync(connection, cancellationToken, transaction, participantId);
+    }
+
+    private static Task RefreshAllTrackBestRecordsAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
+        RefreshTrackBestRecordsAsync(connection, cancellationToken, transaction: null, participantId: null);
+
+    private static async Task RefreshTrackBestRecordsAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken,
+        SqliteTransaction? transaction,
+        long? participantId)
+    {
+        var where = participantId is null ? string.Empty : "WHERE participant_id = $participantId";
+        await ExecuteAsync(
+            connection,
+            $"DELETE FROM track_best_records {where};",
+            cancellationToken,
+            transaction,
+            participantId is null ? [] : [("$participantId", participantId.Value)]);
+
+        var participantFilter = participantId is null ? string.Empty : "AND participants.participant_id = $participantId";
+        await ExecuteAsync(
+            connection,
+            $$"""
+            INSERT INTO track_best_records (
+                session_id, participant_id, lap_id, track_name, session_kind, rig_name, display_name, vehicle_name,
+                lap_number, lap_time_seconds, valid_lap_flag, is_valid_lap, is_valid_timed_lap, count_for_history,
+                participant_excluded, staff_invalidated, first_seen_utc, last_seen_utc, observed_utc)
+            SELECT sessions.session_id,
+                   participants.participant_id,
+                   laps.lap_id,
+                   sessions.track_name,
+                   sessions.session_kind,
+                   participants.rig_name,
+                   coalesce(nullif(participants.display_name_override, ''), participants.display_name),
+                   participants.vehicle_name,
+                   laps.lap_number,
+                   coalesce(laps.lap_time_seconds_override, laps.lap_time_seconds),
+                   laps.valid_lap_flag,
+                   laps.is_valid_lap,
+                   laps.is_valid_timed_lap,
+                   sessions.count_for_history,
+                   participants.excluded_from_history,
+                   laps.staff_invalidated,
+                   sessions.first_seen_utc,
+                   sessions.last_seen_utc,
+                   laps.observed_utc
+            FROM laps
+            INNER JOIN participants ON participants.participant_id = laps.participant_id
+            INNER JOIN sessions ON sessions.session_id = participants.session_id
+            WHERE laps.lap_time_seconds > 0 {{participantFilter}};
+            """,
+            cancellationToken,
+            transaction,
+            participantId is null ? [] : [("$participantId", participantId.Value)]);
+    }
+
+    private static async Task<bool> HasRawLapsForParticipantAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        long participantId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT 1 FROM laps WHERE participant_id = $participantId LIMIT 1;";
+        command.Parameters.AddWithValue("$participantId", participantId);
+        return await command.ExecuteScalarAsync(cancellationToken) is not null;
+    }
+
+    private static Task UpdateDerivedTrackBestParticipantFieldsAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        long participantId,
+        CancellationToken cancellationToken) => ExecuteAsync(
+            connection,
+            """
+            UPDATE track_best_records
+            SET display_name = (
+                    SELECT coalesce(nullif(participants.display_name_override, ''), participants.display_name)
+                    FROM participants
+                    WHERE participants.participant_id = $participantId
+                ),
+                participant_excluded = (
+                    SELECT participants.excluded_from_history
+                    FROM participants
+                    WHERE participants.participant_id = $participantId
+                )
+            WHERE participant_id = $participantId;
+            """,
+            cancellationToken,
+            transaction,
+            ("$participantId", participantId));
+
     private static async Task ExecuteAsync(
         SqliteConnection connection,
         string commandText,
@@ -1169,6 +1569,24 @@ public sealed class SqliteTracksideStore : ITracksideStore
         }
 
         await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task<int> ExecuteNonQueryAsync(
+        SqliteConnection connection,
+        string commandText,
+        CancellationToken cancellationToken,
+        SqliteTransaction? transaction = null,
+        params (string Name, object Value)[] parameters)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = commandText;
+        foreach (var parameter in parameters)
+        {
+            command.Parameters.AddWithValue(parameter.Name, parameter.Value);
+        }
+
+        return await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private static Dictionary<string, string> NormalizeAliases(IReadOnlyDictionary<string, string> aliases)
@@ -1210,6 +1628,44 @@ public sealed class SqliteTracksideStore : ITracksideStore
         return normalized.Values.OrderBy(entry => entry.RigName, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
+    private static async Task<IReadOnlyList<HistoricalSessionLap>> GetSessionLapsAsync(
+        SqliteConnection connection,
+        string sessionId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT laps.lap_id,
+                   laps.participant_id,
+                   laps.lap_number,
+                   laps.lap_time_seconds,
+                   laps.lap_time_seconds_override,
+                   coalesce(laps.lap_time_seconds_override, laps.lap_time_seconds) AS effective_lap_time_seconds,
+                   laps.valid_lap_flag,
+                   laps.is_valid_lap,
+                   laps.is_valid_timed_lap,
+                   laps.staff_invalidated,
+                   CASE WHEN laps.is_valid_timed_lap = 1 AND laps.staff_invalidated = 0 THEN 1 ELSE 0 END AS counts_for_timing,
+                   laps.correction_reason,
+                   laps.corrected_utc,
+                   laps.observed_utc
+            FROM laps
+            INNER JOIN participants ON participants.participant_id = laps.participant_id
+            WHERE participants.session_id = $sessionId
+            ORDER BY participants.latest_rank ASC, laps.lap_number ASC;
+            """;
+        command.Parameters.AddWithValue("$sessionId", sessionId);
+
+        var laps = new List<HistoricalSessionLap>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            laps.Add(ReadHistoricalSessionLap(reader));
+        }
+
+        return laps;
+    }
+
     private static HistoricalSessionSummary ReadHistoricalSessionSummary(SqliteDataReader reader) => new()
     {
         SessionId = reader.GetString(0),
@@ -1233,15 +1689,38 @@ public sealed class SqliteTracksideStore : ITracksideStore
         Rank = reader.GetInt32(1),
         RigName = reader.GetString(2),
         DisplayName = reader.GetString(3),
-        DriverProfileId = reader.IsDBNull(4) ? null : reader.GetString(4),
-        VehicleName = reader.GetString(5),
-        FirstSeenUtc = ParseDateTime(reader.GetString(6)),
-        LastSeenUtc = ParseDateTime(reader.GetString(7)),
-        CompletedLaps = reader.GetInt32(8),
-        BestLapSeconds = reader.IsDBNull(9) ? null : reader.GetDouble(9),
-        LastLapSeconds = reader.IsDBNull(10) ? null : reader.GetDouble(10),
-        LapCount = ReadInt32(reader, 11),
-        ValidTimedLapCount = ReadInt32(reader, 12),
+        DisplayNameOverride = reader.IsDBNull(4) ? null : reader.GetString(4),
+        EffectiveDisplayName = reader.GetString(5),
+        DriverProfileId = reader.IsDBNull(6) ? null : reader.GetString(6),
+        VehicleName = reader.GetString(7),
+        FirstSeenUtc = ParseDateTime(reader.GetString(8)),
+        LastSeenUtc = ParseDateTime(reader.GetString(9)),
+        CompletedLaps = reader.GetInt32(10),
+        BestLapSeconds = reader.IsDBNull(11) ? null : reader.GetDouble(11),
+        LastLapSeconds = reader.IsDBNull(12) ? null : reader.GetDouble(12),
+        LapCount = ReadInt32(reader, 13),
+        ValidTimedLapCount = ReadInt32(reader, 14),
+        ExcludedFromHistory = reader.GetInt32(15) == 1,
+        CorrectionReason = reader.IsDBNull(16) ? null : reader.GetString(16),
+        CorrectedUtc = reader.IsDBNull(17) ? null : ParseDateTime(reader.GetString(17)),
+    };
+
+    private static HistoricalSessionLap ReadHistoricalSessionLap(SqliteDataReader reader) => new()
+    {
+        LapId = reader.GetInt64(0),
+        ParticipantId = reader.GetInt64(1),
+        LapNumber = reader.GetInt32(2),
+        LapSeconds = reader.GetDouble(3),
+        LapSecondsOverride = reader.IsDBNull(4) ? null : reader.GetDouble(4),
+        EffectiveLapSeconds = reader.GetDouble(5),
+        ValidLapFlag = reader.IsDBNull(6) ? null : reader.GetInt32(6),
+        IsValidLap = reader.GetInt32(7) == 1,
+        IsValidTimedLap = reader.GetInt32(8) == 1,
+        StaffInvalidated = reader.GetInt32(9) == 1,
+        CountsForTiming = reader.GetInt32(10) == 1,
+        CorrectionReason = reader.IsDBNull(11) ? null : reader.GetString(11),
+        CorrectedUtc = reader.IsDBNull(12) ? null : ParseDateTime(reader.GetString(12)),
+        ObservedUtc = ParseDateTime(reader.GetString(13)),
     };
 
     private static DriverProfile ReadDriverProfile(SqliteDataReader reader) => new()
@@ -1333,12 +1812,47 @@ public sealed class SqliteTracksideStore : ITracksideStore
                (SELECT COUNT(*)
                 FROM laps
                 INNER JOIN participants timed_lap_participants ON timed_lap_participants.participant_id = laps.participant_id
-                WHERE timed_lap_participants.session_id = sessions.session_id AND laps.is_valid_timed_lap = 1) AS valid_timed_lap_count,
-               (SELECT MIN(laps.lap_time_seconds)
+                                WHERE timed_lap_participants.session_id = sessions.session_id
+                                    AND timed_lap_participants.excluded_from_history = 0
+                                    AND laps.is_valid_timed_lap = 1
+                                    AND laps.staff_invalidated = 0) AS valid_timed_lap_count,
+                             (SELECT MIN(coalesce(laps.lap_time_seconds_override, laps.lap_time_seconds))
                 FROM laps
                 INNER JOIN participants best_lap_participants ON best_lap_participants.participant_id = laps.participant_id
-                WHERE best_lap_participants.session_id = sessions.session_id AND laps.is_valid_timed_lap = 1) AS best_lap_seconds
+                                WHERE best_lap_participants.session_id = sessions.session_id
+                                    AND best_lap_participants.excluded_from_history = 0
+                                    AND laps.is_valid_timed_lap = 1
+                                    AND laps.staff_invalidated = 0) AS best_lap_seconds
         FROM sessions
+        """;
+
+    private const string TrackBestRecordsSchemaSql = """
+        CREATE TABLE IF NOT EXISTS track_best_records (
+            track_best_record_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            participant_id INTEGER NOT NULL,
+            lap_id INTEGER NULL,
+            track_name TEXT NOT NULL,
+            session_kind TEXT NOT NULL,
+            rig_name TEXT NOT NULL,
+            display_name TEXT NOT NULL,
+            vehicle_name TEXT NOT NULL,
+            lap_number INTEGER NOT NULL,
+            lap_time_seconds REAL NOT NULL,
+            valid_lap_flag INTEGER NULL,
+            is_valid_lap INTEGER NOT NULL DEFAULT 0,
+            is_valid_timed_lap INTEGER NOT NULL DEFAULT 0,
+            count_for_history INTEGER NOT NULL DEFAULT 1,
+            participant_excluded INTEGER NOT NULL DEFAULT 0,
+            staff_invalidated INTEGER NOT NULL DEFAULT 0,
+            first_seen_utc TEXT NOT NULL,
+            last_seen_utc TEXT NOT NULL,
+            observed_utc TEXT NOT NULL,
+            UNIQUE(lap_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS ix_track_best_records_board ON track_best_records(count_for_history, participant_excluded, staff_invalidated, is_valid_timed_lap, track_name, observed_utc, lap_time_seconds);
+        CREATE INDEX IF NOT EXISTS ix_track_best_records_session ON track_best_records(session_id, participant_id);
         """;
 
     private const string SchemaSql = """

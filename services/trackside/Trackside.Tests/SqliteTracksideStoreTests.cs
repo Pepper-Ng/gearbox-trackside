@@ -1,4 +1,5 @@
 using Microsoft.Data.Sqlite;
+using Trackside.Application.Configuration;
 using Trackside.Application.Persistence;
 using Trackside.Domain.LiveSession;
 using Trackside.Infrastructure.Persistence;
@@ -122,6 +123,139 @@ public sealed class SqliteTracksideStoreTests
 
         Assert.NotNull(stillExcludedDetail);
         Assert.False(stillExcludedDetail.CountForHistory);
+    }
+
+    /// <summary>
+    /// Participant corrections and lap invalidations flow through to historical best-lap boards.
+    /// </summary>
+    [Fact]
+    public async Task ParticipantAndLapCorrectionsUpdateHistoricalBoards()
+    {
+        using var temporaryDirectory = new TemporaryDirectory();
+        ITracksideStore store = CreateStore(temporaryDirectory);
+        await store.SaveLiveSessionSnapshotAsync(BuildSnapshot(), countForHistory: true, CancellationToken.None);
+        var session = Assert.Single(await store.GetHistoricalSessionsAsync(new HistoricalSessionQuery(), CancellationToken.None));
+        var detail = await store.GetHistoricalSessionAsync(session.SessionId, CancellationToken.None);
+        Assert.NotNull(detail);
+        var noah = detail.Participants.Single(participant => participant.DisplayName == "Noah");
+        var maya = detail.Participants.Single(participant => participant.DisplayName == "Maya");
+
+        detail = await store.CorrectLapAsync(
+            session.SessionId,
+            noah.Laps.Single().LapId,
+            new LapCorrectionRequest { StaffInvalidated = true, Reason = "Timing marshal invalidated lap" },
+            CancellationToken.None);
+        detail = await store.CorrectParticipantAsync(
+            session.SessionId,
+            maya.ParticipantId,
+            new ParticipantCorrectionRequest { DisplayNameOverride = "Maya Corrected", Reason = "Name spelling" },
+            CancellationToken.None);
+
+        Assert.NotNull(detail);
+        var correctedMaya = detail.Participants.Single(participant => participant.ParticipantId == maya.ParticipantId);
+        Assert.Equal("Maya", correctedMaya.DisplayName);
+        Assert.Equal("Maya Corrected", correctedMaya.EffectiveDisplayName);
+        Assert.Equal("Maya Corrected", correctedMaya.DisplayNameOverride);
+
+        var bestLaps = await store.GetBestLapsAsync(new HistoricalBestLapQuery
+        {
+            TrackName = "Loch Drummond - Short",
+        }, CancellationToken.None);
+
+        Assert.Single(bestLaps);
+        Assert.Equal("Maya Corrected", bestLaps[0].DisplayName);
+        Assert.Equal(83.4, bestLaps[0].BestLapSeconds, precision: 3);
+
+        await store.CorrectParticipantAsync(
+            session.SessionId,
+            maya.ParticipantId,
+            new ParticipantCorrectionRequest { DisplayNameOverride = "Maya Corrected", ExcludedFromHistory = true, Reason = "Wrong driver" },
+            CancellationToken.None);
+
+        Assert.Empty(await store.GetBestLapsAsync(new HistoricalBestLapQuery
+        {
+            TrackName = "Loch Drummond - Short",
+        }, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// Retention can prune raw laps after derived track-best records exist without breaking historical boards.
+    /// </summary>
+    [Fact]
+    public async Task RetentionPrunesRawLapsButPreservesDerivedBoards()
+    {
+        using var temporaryDirectory = new TemporaryDirectory();
+        ITracksideStore store = CreateStore(temporaryDirectory);
+        await store.SaveLiveSessionSnapshotAsync(BuildSnapshot(), countForHistory: true, CancellationToken.None);
+
+        var result = await store.EnforceRetentionAsync(
+            new TracksideRetentionOptions { DetailedLapRecordsDays = 1, SessionSummariesDays = 730 },
+            DateTimeOffset.Parse("2026-07-01T00:00:00+00:00"),
+            CancellationToken.None);
+        var bestLaps = await store.GetBestLapsAsync(new HistoricalBestLapQuery
+        {
+            TrackName = "Loch Drummond - Short",
+        }, CancellationToken.None);
+
+        Assert.Equal(2, result.DetailedLapRecordsDeleted);
+        Assert.Equal(2, bestLaps.Count);
+
+        var session = Assert.Single(await store.GetHistoricalSessionsAsync(new HistoricalSessionQuery(), CancellationToken.None));
+        var detail = await store.GetHistoricalSessionAsync(session.SessionId, CancellationToken.None);
+        Assert.NotNull(detail);
+        var maya = detail.Participants.Single(participant => participant.DisplayName == "Maya");
+
+        await store.CorrectParticipantAsync(
+            session.SessionId,
+            maya.ParticipantId,
+            new ParticipantCorrectionRequest { DisplayNameOverride = "Maya After Retention", Reason = "Correction after raw lap pruning" },
+            CancellationToken.None);
+
+        bestLaps = await store.GetBestLapsAsync(new HistoricalBestLapQuery
+        {
+            TrackName = "Loch Drummond - Short",
+        }, CancellationToken.None);
+
+        Assert.Contains(bestLaps, lap => lap.DisplayName == "Maya After Retention");
+
+        result = await store.EnforceRetentionAsync(
+            new TracksideRetentionOptions { DetailedLapRecordsDays = 1, SessionSummariesDays = 730, TrackBestRecordsDays = 1 },
+            DateTimeOffset.Parse("2026-07-01T00:00:00+00:00"),
+            CancellationToken.None);
+
+        Assert.Equal(2, result.TrackBestRecordsDeleted);
+        Assert.Empty(await store.GetBestLapsAsync(new HistoricalBestLapQuery
+        {
+            TrackName = "Loch Drummond - Short",
+        }, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// Session summary retention deletes child rows through SQLite foreign-key cascades.
+    /// </summary>
+    [Fact]
+    public async Task SessionRetentionCascadesChildRows()
+    {
+        using var temporaryDirectory = new TemporaryDirectory();
+        ITracksideStore store = CreateStore(temporaryDirectory);
+        await store.SaveLiveSessionSnapshotAsync(BuildSnapshot(), countForHistory: true, CancellationToken.None);
+
+        var result = await store.EnforceRetentionAsync(
+            new TracksideRetentionOptions { DetailedLapRecordsDays = 35, SessionSummariesDays = 1 },
+            DateTimeOffset.Parse("2026-07-01T00:00:00+00:00"),
+            CancellationToken.None);
+
+        Assert.Equal(1, result.SessionSummariesDeleted);
+        Assert.Empty(await store.GetHistoricalSessionsAsync(new HistoricalSessionQuery(), CancellationToken.None));
+
+        var databasePath = Path.Combine(temporaryDirectory.Path, "trackside-test.db");
+        await using var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = databasePath }.ToString());
+        await connection.OpenAsync();
+
+        Assert.Equal(0L, await CountRowsAsync(connection, "participants"));
+        Assert.Equal(0L, await CountRowsAsync(connection, "laps"));
+        Assert.Equal(0L, await CountRowsAsync(connection, "sectors"));
+        Assert.Equal(0L, await CountRowsAsync(connection, "summary_results"));
     }
 
     /// <summary>
@@ -363,6 +497,13 @@ public sealed class SqliteTracksideStoreTests
             },
         ],
     };
+
+    private static async Task<long> CountRowsAsync(SqliteConnection connection, string tableName)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"SELECT COUNT(*) FROM {tableName};";
+        return (long)(await command.ExecuteScalarAsync() ?? 0L);
+    }
 
     private sealed class TemporaryDirectory : IDisposable
     {

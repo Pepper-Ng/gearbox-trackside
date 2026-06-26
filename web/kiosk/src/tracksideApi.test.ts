@@ -18,6 +18,7 @@ describe('startLiveSessionFeed', () => {
           liveSessionHubPath: '/hubs/live-session',
           healthPath: '/api/health',
           recommendedReconnectSeconds: 2,
+          defaultDisplayMode: 'Monthly',
         };
       },
       async getCurrentSession(path) {

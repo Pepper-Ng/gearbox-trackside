@@ -273,7 +273,8 @@ td:nth-child(4) {
 .sessionSetupRow input,
 .sessionSetupRow select,
 .sessionSetupRow button,
-.tableButton {
+.tableButton,
+.tableInput {
   box-sizing: border-box;
   width: 100%;
   border: 1px solid color-mix(in srgb, CanvasText 25%, transparent);
@@ -329,6 +330,22 @@ td:nth-child(4) {
   width: auto;
   cursor: pointer;
   padding: 6px 10px;
+}
+
+.tableInput {
+  min-width: 120px;
+  padding: 6px 8px;
+}
+
+.lapCorrectionTable {
+  margin: 8px 0 12px;
+  min-width: 720px;
+}
+
+.lapCorrectionTable th,
+.lapCorrectionTable td {
+  font-size: 13px;
+  padding: 6px 8px;
 }
 
 .selectedRow {

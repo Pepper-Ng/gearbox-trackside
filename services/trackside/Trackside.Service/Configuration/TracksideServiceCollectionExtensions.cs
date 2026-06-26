@@ -54,6 +54,7 @@ public static class TracksideServiceCollectionExtensions
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<LiveSessionState>();
         services.AddSingleton<TracksideSourceConfigurationStore>();
+        services.AddSingleton<TracksideWritableConfigurationStore>();
         services.AddSingleton<AdminUserStore>();
         services.AddSingleton(ResolveSqliteStoreOptions);
         services.AddSingleton<ITracksideStore, SqliteTracksideStore>();
@@ -65,6 +66,7 @@ public static class TracksideServiceCollectionExtensions
         services.AddSingleton<IRf2ScoringPayloadParser, Rf2ScoringPayloadParser>();
         services.AddSingleton<ILiveSessionSource, ReloadingLiveSessionSource>();
         services.AddHostedService<TracksidePersistenceInitializer>();
+        services.AddHostedService<TracksideRetentionCleanupWorker>();
         services.AddHostedService<LiveSessionPublisher>();
 
         return services;

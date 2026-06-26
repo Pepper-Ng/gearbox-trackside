@@ -43,9 +43,13 @@ const createProfileButton = document.querySelector('#createProfile');
 const monthlyTrackStatusElement = document.querySelector('#monthlyTrackStatus');
 const monthlyTrackNameElement = document.querySelector('#monthlyTrackName');
 const monthlyTrackReasonElement = document.querySelector('#monthlyTrackReason');
+const kioskDisplayModeElement = document.querySelector('#kioskDisplayMode');
+const saveKioskDisplayModeButton = document.querySelector('#saveKioskDisplayMode');
 const setMonthlyTrackButton = document.querySelector('#setMonthlyTrack');
 const resetMonthlyTrackButton = document.querySelector('#resetMonthlyTrack');
 const monthlyBestLapsElement = document.querySelector('#monthlyBestLaps');
+const retentionCleanupStatusElement = document.querySelector('#retentionCleanupStatus');
+const runRetentionCleanupButton = document.querySelector('#runRetentionCleanup');
 const newAdminUsernameElement = document.querySelector('#newAdminUsername');
 const newAdminDisplayNameElement = document.querySelector('#newAdminDisplayName');
 const newAdminPasswordElement = document.querySelector('#newAdminPassword');
@@ -195,8 +199,10 @@ addSetupRowButton.addEventListener('click', () => {
 });
 clearSessionSetupButton.addEventListener('click', () => clearSessionSetup().catch(showError));
 createProfileButton.addEventListener('click', () => createDriverProfile().catch(showError));
+saveKioskDisplayModeButton.addEventListener('click', () => saveKioskSettings().catch(showError));
 setMonthlyTrackButton.addEventListener('click', () => setMonthlyTrack().catch(showError));
 resetMonthlyTrackButton.addEventListener('click', () => resetMonthlyTrack().catch(showError));
+runRetentionCleanupButton.addEventListener('click', () => runRetentionCleanup().catch(showError));
 createAdminButton.addEventListener('click', () => createAdmin().catch(showError));
 changePasswordButton.addEventListener('click', () => changePassword().catch(showError));
 refreshStatusButton.addEventListener('click', () => loadAdvancedStatus().catch(showError));
@@ -222,7 +228,7 @@ async function loadSession() {
   }
 
   showDashboard(session);
-  await Promise.all([loadConfiguration(), loadSessionSetup(), loadSessions(), loadLeaderboards(), loadUsers(), loadAdvancedStatus()]);
+  await Promise.all([loadConfiguration(), loadSessionSetup(), loadSessions(), loadKioskSettings(), loadLeaderboards(), loadUsers(), loadAdvancedStatus()]);
 }
 
 async function createFirstAdmin() {
@@ -232,7 +238,7 @@ async function createFirstAdmin() {
     password: setupPasswordElement.value,
   });
   showDashboard(session);
-  await Promise.all([loadConfiguration(), loadSessionSetup(), loadSessions(), loadLeaderboards(), loadUsers(), loadAdvancedStatus()]);
+  await Promise.all([loadConfiguration(), loadSessionSetup(), loadSessions(), loadKioskSettings(), loadLeaderboards(), loadUsers(), loadAdvancedStatus()]);
 }
 
 async function login() {
@@ -241,7 +247,7 @@ async function login() {
     password: loginPasswordElement.value,
   });
   showDashboard(session);
-  await Promise.all([loadConfiguration(), loadSessionSetup(), loadSessions(), loadLeaderboards(), loadUsers(), loadAdvancedStatus()]);
+  await Promise.all([loadConfiguration(), loadSessionSetup(), loadSessions(), loadKioskSettings(), loadLeaderboards(), loadUsers(), loadAdvancedStatus()]);
 }
 
 async function logout() {
@@ -351,7 +357,7 @@ function renderSessionParticipants(participants) {
   if (participants.length === 0) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 8;
+    cell.colSpan = 11;
     cell.textContent = t('sessions.noParticipants');
     row.appendChild(cell);
     sessionParticipantRowsElement.appendChild(row);
@@ -361,15 +367,109 @@ function renderSessionParticipants(participants) {
   for (const participant of participants) {
     const row = document.createElement('tr');
     appendCell(row, participant.rank);
-    appendCell(row, participant.displayName);
+    appendCell(row, participant.effectiveDisplayName || participant.displayName);
     appendCell(row, participant.rigName);
     appendCell(row, participant.vehicleName);
     appendCell(row, participant.completedLaps);
     appendCell(row, formatSeconds(participant.bestLapSeconds));
     appendCell(row, formatSeconds(participant.lastLapSeconds));
     appendCell(row, `${participant.validTimedLapCount}/${participant.lapCount}`);
+    const correctionInput = appendTextInputCell(row, participant.displayNameOverride ?? '');
+    const excludeCheckbox = appendPlainCheckboxCell(row, participant.excludedFromHistory);
+    appendButtonCell(row, 'Save', () => saveParticipantCorrection(participant.participantId, correctionInput.value, excludeCheckbox.checked).catch(showError));
     sessionParticipantRowsElement.appendChild(row);
+
+    const lapsRow = document.createElement('tr');
+    const lapsCell = document.createElement('td');
+    lapsCell.colSpan = 11;
+    lapsCell.appendChild(renderLapCorrectionTable(participant));
+    lapsRow.appendChild(lapsCell);
+    sessionParticipantRowsElement.appendChild(lapsRow);
   }
+}
+
+function renderLapCorrectionTable(participant) {
+  const table = document.createElement('table');
+  table.className = 'lapCorrectionTable';
+  const head = document.createElement('thead');
+  const headRow = document.createElement('tr');
+  ['Lap', 'Time', 'Flag', 'Counts', 'Correction', 'Invalid', 'Reason', ''].forEach(label => {
+    const cell = document.createElement('th');
+    cell.textContent = label;
+    headRow.appendChild(cell);
+  });
+  head.appendChild(headRow);
+  table.appendChild(head);
+
+  const body = document.createElement('tbody');
+  for (const lap of participant.laps ?? []) {
+    const row = document.createElement('tr');
+    appendCell(row, lap.lapNumber);
+    appendCell(row, formatSeconds(lap.effectiveLapSeconds));
+    appendCell(row, lap.validLapFlag ?? '-');
+    appendCell(row, lap.countsForTiming ? 'Yes' : 'No');
+    const correctionInput = appendTextInputCell(row, lap.lapSecondsOverride ?? '');
+    const invalidCheckbox = appendPlainCheckboxCell(row, lap.staffInvalidated);
+    const reasonInput = appendTextInputCell(row, lap.correctionReason ?? '');
+    appendButtonCell(row, 'Save', () => saveLapCorrection(lap.lapId, correctionInput.value, invalidCheckbox.checked, reasonInput.value).catch(showError));
+    body.appendChild(row);
+  }
+
+  if ((participant.laps ?? []).length === 0) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 8;
+    cell.textContent = 'No completed laps persisted for this participant.';
+    row.appendChild(cell);
+    body.appendChild(row);
+  }
+
+  table.appendChild(body);
+  return table;
+}
+
+async function saveParticipantCorrection(participantId, displayNameOverride, excludedFromHistory) {
+  if (!selectedSessionId) return;
+  const session = await putJson(`/api/admin/sessions/${encodeURIComponent(selectedSessionId)}/participants/${participantId}/correction`, {
+    displayNameOverride: nullIfEmpty(displayNameOverride),
+    excludedFromHistory,
+    reason: excludedFromHistory ? 'Staff excluded participant' : null,
+  });
+  renderSessionParticipants(session.participants ?? []);
+  await loadLeaderboards();
+  setStatus('Participant correction saved.');
+}
+
+async function saveLapCorrection(lapId, lapSecondsOverride, staffInvalidated, reason) {
+  if (!selectedSessionId) return;
+  const parsedOverride = parseLapSecondsInput(lapSecondsOverride);
+  const session = await putJson(`/api/admin/sessions/${encodeURIComponent(selectedSessionId)}/laps/${lapId}/correction`, {
+    lapSecondsOverride: parsedOverride,
+    staffInvalidated,
+    reason: nullIfEmpty(reason) ?? (staffInvalidated ? 'Staff invalidated lap' : null),
+  });
+  renderSessionParticipants(session.participants ?? []);
+  await loadLeaderboards();
+  setStatus('Lap correction saved.');
+}
+
+function parseLapSecondsInput(value) {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^\d+(?:\.\d+)?$/.test(trimmed)) {
+    const seconds = Number.parseFloat(trimmed);
+    if (seconds > 0) return seconds;
+  }
+
+  const minuteMatch = /^(\d+):([0-5]?\d(?:\.\d+)?)$/.exec(trimmed);
+  if (minuteMatch) {
+    const minutes = Number.parseInt(minuteMatch[1], 10);
+    const seconds = Number.parseFloat(minuteMatch[2]);
+    const totalSeconds = minutes * 60 + seconds;
+    if (totalSeconds > 0) return totalSeconds;
+  }
+
+  throw new Error('Lap correction must be blank, seconds, or m:ss.mmm.');
 }
 
 function highlightSelectedSessionRow() {
@@ -520,6 +620,24 @@ async function loadLeaderboards() {
   ]);
   renderMonthlyTrack(monthlyTrack);
   renderMonthlyBestLaps(monthlyBoard.rows ?? []);
+}
+
+async function loadKioskSettings() {
+  const settings = await fetchJson('/api/admin/kiosk');
+  kioskDisplayModeElement.value = settings.defaultDisplayMode ?? 'Monthly';
+}
+
+async function saveKioskSettings() {
+  const settings = await putJson('/api/admin/kiosk', { defaultDisplayMode: kioskDisplayModeElement.value });
+  kioskDisplayModeElement.value = settings.defaultDisplayMode ?? 'Monthly';
+  setStatus('Kiosk display mode saved.');
+}
+
+async function runRetentionCleanup() {
+  const result = await postJson('/api/admin/persistence/retention/cleanup', {});
+  retentionCleanupStatusElement.textContent = `Deleted ${result.detailedLapRecordsDeleted} raw laps, ${result.sessionSummariesDeleted} sessions, ${result.trackBestRecordsDeleted} track bests, and ${result.monthlyTrackPeriodsDeleted} monthly periods.`;
+  await loadSessions();
+  await loadLeaderboards();
 }
 
 async function setMonthlyTrack() {
@@ -807,6 +925,29 @@ function appendCheckboxCell(row, checked, onChange) {
   });
   cell.appendChild(checkbox);
   row.appendChild(cell);
+}
+
+function appendPlainCheckboxCell(row, checked) {
+  const cell = document.createElement('td');
+  const checkbox = document.createElement('input');
+  checkbox.className = 'tableCheckbox';
+  checkbox.type = 'checkbox';
+  checkbox.checked = Boolean(checked);
+  cell.appendChild(checkbox);
+  row.appendChild(cell);
+  return checkbox;
+}
+
+function appendTextInputCell(row, value) {
+  const cell = document.createElement('td');
+  const input = document.createElement('input');
+  input.className = 'tableInput';
+  input.type = 'text';
+  input.value = value ?? '';
+  input.spellcheck = false;
+  cell.appendChild(input);
+  row.appendChild(cell);
+  return input;
 }
 
 function appendButtonCell(row, label, onClick) {

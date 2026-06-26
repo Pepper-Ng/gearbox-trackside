@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { formatGap, formatLapTime, formatNumber } from '../format';
-import { BestLapBoardResponse, BestLapRow, BestLapWindow, DriverSnapshot, LastFinishedSessionResponse, LastFinishedSessionRow, LiveSessionConnection, LiveSessionSnapshot, SectorSnapshot, startLiveSessionFeed, TracksideApiClient } from '../tracksideApi';
+import { BestLapBoardResponse, BestLapRow, BestLapWindow, DriverSnapshot, KioskDisplayMode, LastFinishedSessionResponse, LastFinishedSessionRow, LiveSessionConnection, LiveSessionSnapshot, SectorSnapshot, startLiveSessionFeed, TracksideApiClient } from '../tracksideApi';
 
 type ViewMode = BestLapWindow | 'last' | 'live';
 
@@ -13,6 +13,22 @@ export function App() {
   const [view, setView] = useState<ViewMode>('monthly');
   const [status, setStatus] = useState('Loading configuration...');
   const [boardStatus, setBoardStatus] = useState('Loading best laps...');
+
+  useEffect(() => {
+    let cancelled = false;
+    client.getClientConfiguration()
+      .then(configuration => {
+        if (!cancelled) {
+          setView(toViewMode(configuration.defaultDisplayMode));
+        }
+      })
+      .catch(() => {
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
 
   useEffect(() => {
     let connection: LiveSessionConnection | null = null;
@@ -321,6 +337,21 @@ function formatDate(value: string | null | undefined): string {
 
 function capitalize(value: string): string {
   return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
+}
+
+function toViewMode(displayMode: KioskDisplayMode): ViewMode {
+  switch (displayMode) {
+    case 'Weekly':
+      return 'weekly';
+    case 'Daily':
+      return 'daily';
+    case 'LastSession':
+      return 'last';
+    case 'Live':
+      return 'live';
+    default:
+      return 'monthly';
+  }
 }
 
 interface MetricProps {

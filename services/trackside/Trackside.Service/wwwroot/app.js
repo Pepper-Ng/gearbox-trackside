@@ -7,6 +7,13 @@ const bestLapsElement = document.querySelector('#bestLaps');
 const driversElement = document.querySelector('#drivers');
 const liveSectionElement = document.querySelector('#liveSection');
 let currentView = 'monthly';
+const displayModeToView = {
+  Monthly: 'monthly',
+  Weekly: 'weekly',
+  Daily: 'daily',
+  LastSession: 'last',
+  Live: 'live',
+};
 
 document.querySelectorAll('[data-view]').forEach(button => {
   button.addEventListener('click', () => setView(button.dataset.view));
@@ -222,7 +229,15 @@ async function loadLastSession() {
   renderLastSession(await response.json());
 }
 
-setView('monthly');
+async function loadClientConfiguration() {
+  const response = await fetch('/api/configuration/client', { cache: 'no-store' });
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  return response.json();
+}
+
+loadClientConfiguration()
+  .then(configuration => setView(displayModeToView[configuration.defaultDisplayMode] ?? 'monthly'))
+  .catch(() => setView('monthly'));
 
 window.setInterval(() => {
   if (currentView === 'live') {

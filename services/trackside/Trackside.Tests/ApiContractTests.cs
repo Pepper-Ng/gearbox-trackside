@@ -107,6 +107,24 @@ public sealed class ApiContractTests
     }
 
     /// <summary>
+    /// Keeps kiosk settings endpoint stable for the admin dashboard.
+    /// </summary>
+    [Fact]
+    public void AdminKioskPathIsStable()
+    {
+        Assert.Equal("/api/admin/kiosk", LiveSessionRoutes.AdminKioskPath);
+    }
+
+    /// <summary>
+    /// Keeps persistence maintenance endpoint stable for the admin dashboard.
+    /// </summary>
+    [Fact]
+    public void AdminPersistencePathIsStable()
+    {
+        Assert.Equal("/api/admin/persistence", LiveSessionRoutes.AdminPersistencePath);
+    }
+
+    /// <summary>
     /// Keeps the admin session endpoint stable for the admin dashboard.
     /// </summary>
     [Fact]

@@ -1,3 +1,5 @@
+using Trackside.Service.Configuration;
+
 namespace Trackside.Service.Api;
 
 /// <summary>
@@ -24,4 +26,9 @@ public sealed record ClientConfigurationResponse
     /// Recommended delay before a browser attempts SignalR reconnect.
     /// </summary>
     public double RecommendedReconnectSeconds { get; init; } = 2.0;
+
+    /// <summary>
+    /// Default display mode a kiosk screen should open with.
+    /// </summary>
+    public KioskDisplayMode DefaultDisplayMode { get; init; } = KioskDisplayMode.Monthly;
 }

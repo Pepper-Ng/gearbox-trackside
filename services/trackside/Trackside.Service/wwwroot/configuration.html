@@ -230,6 +230,9 @@
                   <th data-i18n="sessions.best">Best</th>
                   <th data-i18n="sessions.lastLap">Last</th>
                   <th data-i18n="sessions.timed">Timed</th>
+                  <th>Correction</th>
+                  <th>Exclude</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody id="sessionParticipantRows"></tbody>
@@ -239,6 +242,22 @@
       </section>
 
       <section id="leaderboardsTab" class="adminTab" hidden aria-label="Leaderboard controls">
+        <section class="configurationPanel">
+          <h2>Kiosk Display</h2>
+          <label>
+            <span>Default display mode</span>
+            <select id="kioskDisplayMode">
+              <option value="Monthly">Monthly</option>
+              <option value="Weekly">Weekly</option>
+              <option value="Daily">Daily</option>
+              <option value="LastSession">Last Session</option>
+              <option value="Live">Live</option>
+            </select>
+          </label>
+          <div class="buttonRow">
+            <button id="saveKioskDisplayMode" type="button">Save Display Mode</button>
+          </div>
+        </section>
         <section class="configurationPanel">
           <h2>Monthly Track</h2>
           <p id="monthlyTrackStatus" class="wideField">No monthly track loaded.</p>
@@ -271,6 +290,13 @@
               </thead>
               <tbody id="monthlyBestLaps"></tbody>
             </table>
+          </div>
+        </section>
+        <section class="configurationPanel">
+          <h2>Retention Cleanup</h2>
+          <p id="retentionCleanupStatus" class="wideField">Cleanup has not run from this page.</p>
+          <div class="buttonRow">
+            <button id="runRetentionCleanup" type="button">Run Cleanup</button>
           </div>
         </section>
       </section>

@@ -1,3 +1,4 @@
+using Trackside.Application.Configuration;
 using Trackside.Domain.LiveSession;
 
 namespace Trackside.Application.Persistence;
@@ -141,6 +142,35 @@ public interface ITracksideStore
     Task<bool> SetSessionCountForHistoryAsync(string sessionId, bool countForHistory, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Applies a staff correction or exclusion to a persisted participant.
+    /// </summary>
+    /// <param name="sessionId">Durable session identifier.</param>
+    /// <param name="participantId">Durable participant row identifier.</param>
+    /// <param name="request">Correction values.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Updated session detail or null when no matching participant exists.</returns>
+    Task<HistoricalSessionDetail?> CorrectParticipantAsync(string sessionId, long participantId, ParticipantCorrectionRequest request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Applies a staff correction or invalidation to a persisted lap.
+    /// </summary>
+    /// <param name="sessionId">Durable session identifier.</param>
+    /// <param name="lapId">Durable lap row identifier.</param>
+    /// <param name="request">Correction values.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Updated session detail or null when no matching lap exists.</returns>
+    Task<HistoricalSessionDetail?> CorrectLapAsync(string sessionId, long lapId, LapCorrectionRequest request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Enforces configured retention policy without deleting long-lived derived leaderboard records.
+    /// </summary>
+    /// <param name="retention">Retention settings.</param>
+    /// <param name="nowUtc">UTC time used to calculate cutoffs.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Cleanup counts by data category.</returns>
+    Task<TracksideRetentionCleanupResult> EnforceRetentionAsync(TracksideRetentionOptions retention, DateTimeOffset nowUtc, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Returns the active monthly track period, if one has been started by staff.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -182,6 +212,11 @@ public sealed record HistoricalBestLapQuery
     /// Optional session kind filter.
     /// </summary>
     public SessionKind? SessionKind { get; init; }
+
+    /// <summary>
+    /// Optional exact vehicle/content name filter.
+    /// </summary>
+    public string? VehicleName { get; init; }
 
     /// <summary>
     /// Ranking behavior for best-lap boards.
@@ -394,6 +429,16 @@ public sealed record HistoricalSessionParticipant
     public string DisplayName { get; init; } = string.Empty;
 
     /// <summary>
+    /// Staff-entered corrected display name, when it differs from the captured source value.
+    /// </summary>
+    public string? DisplayNameOverride { get; init; }
+
+    /// <summary>
+    /// Effective display name used by historical boards after corrections.
+    /// </summary>
+    public string EffectiveDisplayName { get; init; } = string.Empty;
+
+    /// <summary>
     /// Optional linked driver profile id.
     /// </summary>
     public string? DriverProfileId { get; init; }
@@ -437,6 +482,170 @@ public sealed record HistoricalSessionParticipant
     /// Number of persisted completed laps that count for timing boards.
     /// </summary>
     public int ValidTimedLapCount { get; init; }
+
+    /// <summary>
+    /// True when staff excluded this participant from historical boards.
+    /// </summary>
+    public bool ExcludedFromHistory { get; init; }
+
+    /// <summary>
+    /// Optional staff reason for the current participant correction.
+    /// </summary>
+    public string? CorrectionReason { get; init; }
+
+    /// <summary>
+    /// UTC timestamp of the most recent staff correction.
+    /// </summary>
+    public DateTimeOffset? CorrectedUtc { get; init; }
+
+    /// <summary>
+    /// Persisted completed laps for this participant.
+    /// </summary>
+    public IReadOnlyList<HistoricalSessionLap> Laps { get; init; } = [];
+}
+
+/// <summary>
+/// Persisted lap row shown in session detail and used by staff correction controls.
+/// </summary>
+public sealed record HistoricalSessionLap
+{
+    /// <summary>
+    /// Durable lap row identifier.
+    /// </summary>
+    public long LapId { get; init; }
+
+    /// <summary>
+    /// Durable participant row identifier.
+    /// </summary>
+    public long ParticipantId { get; init; }
+
+    /// <summary>
+    /// Completed lap number within the session.
+    /// </summary>
+    public int LapNumber { get; init; }
+
+    /// <summary>
+    /// Captured lap time in seconds.
+    /// </summary>
+    public double LapSeconds { get; init; }
+
+    /// <summary>
+    /// Staff-entered corrected lap time in seconds, when any.
+    /// </summary>
+    public double? LapSecondsOverride { get; init; }
+
+    /// <summary>
+    /// Effective lap time after staff correction.
+    /// </summary>
+    public double EffectiveLapSeconds { get; init; }
+
+    /// <summary>
+    /// rFactor 2 valid-lap flag captured for this lap.
+    /// </summary>
+    public int? ValidLapFlag { get; init; }
+
+    /// <summary>
+    /// True when rFactor 2 considers the lap valid.
+    /// </summary>
+    public bool IsValidLap { get; init; }
+
+    /// <summary>
+    /// True when the lap is valid for timing before staff corrections.
+    /// </summary>
+    public bool IsValidTimedLap { get; init; }
+
+    /// <summary>
+    /// True when staff invalidated this lap.
+    /// </summary>
+    public bool StaffInvalidated { get; init; }
+
+    /// <summary>
+    /// True when this lap is currently eligible for historical timing boards.
+    /// </summary>
+    public bool CountsForTiming { get; init; }
+
+    /// <summary>
+    /// Optional staff reason for the current lap correction.
+    /// </summary>
+    public string? CorrectionReason { get; init; }
+
+    /// <summary>
+    /// UTC timestamp of the most recent staff correction.
+    /// </summary>
+    public DateTimeOffset? CorrectedUtc { get; init; }
+
+    /// <summary>
+    /// UTC timestamp when Trackside observed this lap.
+    /// </summary>
+    public DateTimeOffset ObservedUtc { get; init; }
+}
+
+/// <summary>
+/// Staff correction request for a persisted participant.
+/// </summary>
+public sealed record ParticipantCorrectionRequest
+{
+    /// <summary>
+    /// Corrected display name. Blank or null clears the correction.
+    /// </summary>
+    public string? DisplayNameOverride { get; init; }
+
+    /// <summary>
+    /// True when this participant should be excluded from historical boards.
+    /// </summary>
+    public bool ExcludedFromHistory { get; init; }
+
+    /// <summary>
+    /// Optional staff reason for the correction.
+    /// </summary>
+    public string? Reason { get; init; }
+}
+
+/// <summary>
+/// Staff correction request for a persisted lap.
+/// </summary>
+public sealed record LapCorrectionRequest
+{
+    /// <summary>
+    /// Corrected lap time in seconds. Null clears the correction.
+    /// </summary>
+    public double? LapSecondsOverride { get; init; }
+
+    /// <summary>
+    /// True when staff invalidated this lap.
+    /// </summary>
+    public bool StaffInvalidated { get; init; }
+
+    /// <summary>
+    /// Optional staff reason for the correction.
+    /// </summary>
+    public string? Reason { get; init; }
+}
+
+/// <summary>
+/// Counts produced by retention cleanup enforcement.
+/// </summary>
+public sealed record TracksideRetentionCleanupResult
+{
+    /// <summary>
+    /// Detailed lap rows deleted.
+    /// </summary>
+    public int DetailedLapRecordsDeleted { get; init; }
+
+    /// <summary>
+    /// Session summary rows deleted.
+    /// </summary>
+    public int SessionSummariesDeleted { get; init; }
+
+    /// <summary>
+    /// Derived track-best rows deleted.
+    /// </summary>
+    public int TrackBestRecordsDeleted { get; init; }
+
+    /// <summary>
+    /// Monthly track period rows deleted.
+    /// </summary>
+    public int MonthlyTrackPeriodsDeleted { get; init; }
 }
 
 /// <summary>

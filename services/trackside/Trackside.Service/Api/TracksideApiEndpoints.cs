@@ -34,7 +34,7 @@ public static class TracksideApiEndpoints
             .WithName("GetCurrentLiveSession")
             .WithSummary("Returns the current normalized live-session snapshot.");
 
-        endpoints.MapGet(LiveSessionRoutes.ClientConfigurationPath, () => Results.Ok(new ClientConfigurationResponse()))
+        endpoints.MapGet(LiveSessionRoutes.ClientConfigurationPath, GetClientConfiguration)
             .WithName("GetClientConfiguration")
             .WithSummary("Returns stable frontend endpoint paths.");
 
@@ -105,6 +105,31 @@ public static class TracksideApiEndpoints
             .WithName("SetSessionHistoryInclusion")
             .WithSummary("Updates whether a session counts for historical boards.");
 
+        endpoints.MapPut($"{LiveSessionRoutes.AdminSessionsPath}/{{sessionId}}/participants/{{participantId:long}}/correction", CorrectParticipantAsync)
+            .RequireAuthorization()
+            .WithName("CorrectParticipant")
+            .WithSummary("Applies a participant display-name correction or exclusion.");
+
+        endpoints.MapPut($"{LiveSessionRoutes.AdminSessionsPath}/{{sessionId}}/laps/{{lapId:long}}/correction", CorrectLapAsync)
+            .RequireAuthorization()
+            .WithName("CorrectLap")
+            .WithSummary("Applies a lap correction or invalidation.");
+
+        endpoints.MapGet(LiveSessionRoutes.AdminKioskPath, GetKioskSettings)
+            .RequireAuthorization()
+            .WithName("GetKioskSettings")
+            .WithSummary("Returns kiosk display defaults.");
+
+        endpoints.MapPut(LiveSessionRoutes.AdminKioskPath, SaveKioskSettingsAsync)
+            .RequireAuthorization()
+            .WithName("SaveKioskSettings")
+            .WithSummary("Persists kiosk display defaults.");
+
+        endpoints.MapPost($"{LiveSessionRoutes.AdminPersistencePath}/retention/cleanup", EnforceRetentionAsync)
+            .RequireAuthorization()
+            .WithName("EnforceRetention")
+            .WithSummary("Runs persistence retention cleanup using configured policy.");
+
         endpoints.MapGet(LiveSessionRoutes.AdminSessionSetupPath, GetSessionSetupAsync)
             .RequireAuthorization()
             .WithName("GetSessionSetup")
@@ -172,10 +197,17 @@ public static class TracksideApiEndpoints
         return Results.Ok(snapshot);
     }
 
+    private static IResult GetClientConfiguration(IOptionsMonitor<TracksideOptions> options) => Results.Ok(new ClientConfigurationResponse
+    {
+        DefaultDisplayMode = options.CurrentValue.Kiosk.DefaultDisplayMode,
+    });
+
     private static async Task<IResult> GetBestLapsAsync(
         string? window,
         string? mode,
         string? trackName,
+        string? vehicleName,
+        string? sessionKind,
         int? limit,
         ITracksideStore store,
         TimeProvider timeProvider,
@@ -193,6 +225,12 @@ public static class TracksideApiEndpoints
             return Results.BadRequest(new { error = "Mode must be per-driver or all-laps." });
         }
 
+        var parsedSessionKind = ParseSessionKindFilter(sessionKind);
+        if (parsedSessionKind is null && !string.IsNullOrWhiteSpace(sessionKind))
+        {
+            return Results.BadRequest(new { error = "Session kind must be practice, qualifying, race, or unknown." });
+        }
+
         var nowUtc = timeProvider.GetUtcNow();
         var monthlyTrack = await store.GetActiveMonthlyTrackAsync(cancellationToken);
         var bounds = BuildBestLapWindow(normalizedWindow, trackName, monthlyTrack, nowUtc);
@@ -201,6 +239,8 @@ public static class TracksideApiEndpoints
             FromUtc = bounds.FromUtc,
             ToUtc = bounds.ToUtc,
             TrackName = bounds.TrackName,
+            VehicleName = string.IsNullOrWhiteSpace(vehicleName) ? null : vehicleName.Trim(),
+            SessionKind = parsedSessionKind,
             Mode = boardMode.Value,
             Limit = limit ?? 20,
             SortByTrack = string.IsNullOrWhiteSpace(bounds.TrackName),
@@ -211,6 +251,8 @@ public static class TracksideApiEndpoints
             Window = normalizedWindow,
             Mode = ToBestLapBoardModeValue(boardMode.Value),
             TrackName = bounds.TrackName,
+            VehicleName = string.IsNullOrWhiteSpace(vehicleName) ? null : vehicleName.Trim(),
+            SessionKind = parsedSessionKind,
             FromUtc = bounds.FromUtc,
             ToUtc = bounds.ToUtc,
             MonthlyTrack = monthlyTrack is null ? null : MonthlyTrackResponse.From(monthlyTrack),
@@ -266,6 +308,67 @@ public static class TracksideApiEndpoints
         }
 
         return await GetHistoricalSessionAsync(sessionId, store, cancellationToken);
+    }
+
+    private static async Task<IResult> CorrectParticipantAsync(
+        string sessionId,
+        long participantId,
+        ParticipantCorrectionRequest request,
+        ITracksideStore store,
+        CancellationToken cancellationToken)
+    {
+        var session = await store.CorrectParticipantAsync(sessionId, participantId, request, cancellationToken);
+        return session is null
+            ? Results.NotFound(new { error = "Participant not found." })
+            : Results.Ok(HistoricalSessionDetailResponse.From(session));
+    }
+
+    private static async Task<IResult> CorrectLapAsync(
+        string sessionId,
+        long lapId,
+        LapCorrectionRequest request,
+        ITracksideStore store,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var session = await store.CorrectLapAsync(sessionId, lapId, request, cancellationToken);
+            return session is null
+                ? Results.NotFound(new { error = "Lap not found." })
+                : Results.Ok(HistoricalSessionDetailResponse.From(session));
+        }
+        catch (ArgumentException ex)
+        {
+            return Results.BadRequest(new { error = ex.Message });
+        }
+    }
+
+    private static IResult GetKioskSettings(IOptionsMonitor<TracksideOptions> options) => Results.Ok(KioskSettingsResponse.From(options.CurrentValue.Kiosk));
+
+    private static async Task<IResult> SaveKioskSettingsAsync(
+        KioskSettingsRequest request,
+        TracksideWritableConfigurationStore configurationStore,
+        IConfiguration configuration,
+        CancellationToken cancellationToken)
+    {
+        var options = new TracksideKioskOptions { DefaultDisplayMode = request.DefaultDisplayMode };
+        await configurationStore.SaveKioskAsync(options, cancellationToken);
+        if (configuration is IConfigurationRoot configurationRoot)
+        {
+            configurationRoot.Reload();
+        }
+
+        return Results.Ok(KioskSettingsResponse.From(options));
+    }
+
+    private static async Task<IResult> EnforceRetentionAsync(
+        ITracksideStore store,
+        IOptionsMonitor<TracksideOptions> options,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var result = await store.EnforceRetentionAsync(options.CurrentValue.Persistence.Retention, timeProvider.GetUtcNow(), cancellationToken);
+        return Results.Ok(RetentionCleanupResponse.From(result));
     }
 
     private static async Task<IResult> GetSessionSetupAsync(ITracksideStore store, CancellationToken cancellationToken)
@@ -593,6 +696,15 @@ public static class TracksideApiEndpoints
     }
 
     private static string ToBestLapBoardModeValue(BestLapBoardMode mode) => mode == BestLapBoardMode.AllLaps ? "all-laps" : "per-driver";
+
+    private static SessionKind? ParseSessionKindFilter(string? sessionKind)
+    {
+        return string.IsNullOrWhiteSpace(sessionKind)
+            ? null
+            : Enum.TryParse<SessionKind>(sessionKind.Trim(), ignoreCase: true, out var parsed)
+                ? parsed
+                : null;
+    }
 
     private static BestLapWindowBounds BuildBestLapWindow(
         string window,
@@ -926,6 +1038,77 @@ public sealed record SessionHistoryRequest
 }
 
 /// <summary>
+/// Kiosk display settings response.
+/// </summary>
+public sealed record KioskSettingsResponse
+{
+    /// <summary>
+    /// Default display mode for newly opened kiosk screens.
+    /// </summary>
+    public KioskDisplayMode DefaultDisplayMode { get; init; }
+
+    /// <summary>
+    /// Maps configured kiosk options to an API response.
+    /// </summary>
+    /// <param name="options">Kiosk options.</param>
+    /// <returns>API response.</returns>
+    public static KioskSettingsResponse From(TracksideKioskOptions options) => new()
+    {
+        DefaultDisplayMode = options.DefaultDisplayMode,
+    };
+}
+
+/// <summary>
+/// Kiosk display settings save request.
+/// </summary>
+public sealed record KioskSettingsRequest
+{
+    /// <summary>
+    /// Default display mode for newly opened kiosk screens.
+    /// </summary>
+    public KioskDisplayMode DefaultDisplayMode { get; init; } = KioskDisplayMode.Monthly;
+}
+
+/// <summary>
+/// Persistence retention cleanup response.
+/// </summary>
+public sealed record RetentionCleanupResponse
+{
+    /// <summary>
+    /// Raw lap rows deleted.
+    /// </summary>
+    public int DetailedLapRecordsDeleted { get; init; }
+
+    /// <summary>
+    /// Session rows deleted.
+    /// </summary>
+    public int SessionSummariesDeleted { get; init; }
+
+    /// <summary>
+    /// Derived track-best rows deleted.
+    /// </summary>
+    public int TrackBestRecordsDeleted { get; init; }
+
+    /// <summary>
+    /// Monthly track period rows deleted.
+    /// </summary>
+    public int MonthlyTrackPeriodsDeleted { get; init; }
+
+    /// <summary>
+    /// Maps a store cleanup result to an API response.
+    /// </summary>
+    /// <param name="result">Store cleanup result.</param>
+    /// <returns>API response.</returns>
+    public static RetentionCleanupResponse From(TracksideRetentionCleanupResult result) => new()
+    {
+        DetailedLapRecordsDeleted = result.DetailedLapRecordsDeleted,
+        SessionSummariesDeleted = result.SessionSummariesDeleted,
+        TrackBestRecordsDeleted = result.TrackBestRecordsDeleted,
+        MonthlyTrackPeriodsDeleted = result.MonthlyTrackPeriodsDeleted,
+    };
+}
+
+/// <summary>
 /// Persisted session summary for the admin session browser.
 /// </summary>
 public record HistoricalSessionSummaryResponse
@@ -1078,6 +1261,16 @@ public sealed record HistoricalSessionParticipantResponse
     public string DisplayName { get; init; } = string.Empty;
 
     /// <summary>
+    /// Corrected display name entered by staff, when any.
+    /// </summary>
+    public string? DisplayNameOverride { get; init; }
+
+    /// <summary>
+    /// Effective display name after staff correction.
+    /// </summary>
+    public string EffectiveDisplayName { get; init; } = string.Empty;
+
+    /// <summary>
     /// Optional linked driver profile id.
     /// </summary>
     public string? DriverProfileId { get; init; }
@@ -1123,6 +1316,21 @@ public sealed record HistoricalSessionParticipantResponse
     public int ValidTimedLapCount { get; init; }
 
     /// <summary>
+    /// True when staff excluded this participant from public results and boards.
+    /// </summary>
+    public bool ExcludedFromHistory { get; init; }
+
+    /// <summary>
+    /// Optional staff correction reason.
+    /// </summary>
+    public string? CorrectionReason { get; init; }
+
+    /// <summary>
+    /// Persisted lap rows for this participant.
+    /// </summary>
+    public IReadOnlyList<HistoricalSessionLapResponse> Laps { get; init; } = [];
+
+    /// <summary>
     /// Maps a store participant row to an API response.
     /// </summary>
     /// <param name="participant">Store participant row.</param>
@@ -1133,6 +1341,8 @@ public sealed record HistoricalSessionParticipantResponse
         Rank = participant.Rank,
         RigName = participant.RigName,
         DisplayName = participant.DisplayName,
+        DisplayNameOverride = participant.DisplayNameOverride,
+        EffectiveDisplayName = participant.EffectiveDisplayName,
         DriverProfileId = participant.DriverProfileId,
         VehicleName = participant.VehicleName,
         FirstSeenUtc = participant.FirstSeenUtc,
@@ -1142,6 +1352,90 @@ public sealed record HistoricalSessionParticipantResponse
         LastLapSeconds = participant.LastLapSeconds,
         LapCount = participant.LapCount,
         ValidTimedLapCount = participant.ValidTimedLapCount,
+        ExcludedFromHistory = participant.ExcludedFromHistory,
+        CorrectionReason = participant.CorrectionReason,
+        Laps = participant.Laps.Select(HistoricalSessionLapResponse.From).ToList(),
+    };
+}
+
+/// <summary>
+/// Persisted lap row for a session detail response.
+/// </summary>
+public sealed record HistoricalSessionLapResponse
+{
+    /// <summary>
+    /// Durable lap row identifier.
+    /// </summary>
+    public long LapId { get; init; }
+
+    /// <summary>
+    /// Durable participant row identifier.
+    /// </summary>
+    public long ParticipantId { get; init; }
+
+    /// <summary>
+    /// Completed lap number within the session.
+    /// </summary>
+    public int LapNumber { get; init; }
+
+    /// <summary>
+    /// Captured lap time in seconds.
+    /// </summary>
+    public double LapSeconds { get; init; }
+
+    /// <summary>
+    /// Staff-entered corrected lap time in seconds.
+    /// </summary>
+    public double? LapSecondsOverride { get; init; }
+
+    /// <summary>
+    /// Effective lap time after staff correction.
+    /// </summary>
+    public double EffectiveLapSeconds { get; init; }
+
+    /// <summary>
+    /// rFactor 2 valid-lap flag captured for this lap.
+    /// </summary>
+    public int? ValidLapFlag { get; init; }
+
+    /// <summary>
+    /// True when this lap currently counts for timing boards.
+    /// </summary>
+    public bool CountsForTiming { get; init; }
+
+    /// <summary>
+    /// True when staff invalidated this lap.
+    /// </summary>
+    public bool StaffInvalidated { get; init; }
+
+    /// <summary>
+    /// Optional staff correction reason.
+    /// </summary>
+    public string? CorrectionReason { get; init; }
+
+    /// <summary>
+    /// UTC timestamp when Trackside observed this lap.
+    /// </summary>
+    public DateTimeOffset ObservedUtc { get; init; }
+
+    /// <summary>
+    /// Maps a store lap row to an API response.
+    /// </summary>
+    /// <param name="lap">Store lap row.</param>
+    /// <returns>API response.</returns>
+    public static HistoricalSessionLapResponse From(HistoricalSessionLap lap) => new()
+    {
+        LapId = lap.LapId,
+        ParticipantId = lap.ParticipantId,
+        LapNumber = lap.LapNumber,
+        LapSeconds = lap.LapSeconds,
+        LapSecondsOverride = lap.LapSecondsOverride,
+        EffectiveLapSeconds = lap.EffectiveLapSeconds,
+        ValidLapFlag = lap.ValidLapFlag,
+        CountsForTiming = lap.CountsForTiming,
+        StaffInvalidated = lap.StaffInvalidated,
+        CorrectionReason = lap.CorrectionReason,
+        ObservedUtc = lap.ObservedUtc,
     };
 }
 
@@ -1301,6 +1595,16 @@ public sealed record BestLapBoardResponse
     /// Track filter used by the board, when any.
     /// </summary>
     public string? TrackName { get; init; }
+
+    /// <summary>
+    /// Vehicle/content filter used by the board, when any.
+    /// </summary>
+    public string? VehicleName { get; init; }
+
+    /// <summary>
+    /// Session-kind filter used by the board, when any.
+    /// </summary>
+    public SessionKind? SessionKind { get; init; }
 
     /// <summary>
     /// Inclusive lower UTC bound used by the query.
