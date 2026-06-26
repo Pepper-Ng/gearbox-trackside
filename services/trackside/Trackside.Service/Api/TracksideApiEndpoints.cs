@@ -95,10 +95,20 @@ public static class TracksideApiEndpoints
             .WithName("GetHistoricalSessions")
             .WithSummary("Returns persisted sessions for staff review.");
 
+        endpoints.MapDelete($"{LiveSessionRoutes.AdminSessionsPath}/empty", DeleteEmptyHistoricalSessionsAsync)
+            .RequireAuthorization()
+            .WithName("DeleteEmptyHistoricalSessions")
+            .WithSummary("Deletes placeholder historical sessions with no participants or known track.");
+
         endpoints.MapGet($"{LiveSessionRoutes.AdminSessionsPath}/{{sessionId}}", GetHistoricalSessionAsync)
             .RequireAuthorization()
             .WithName("GetHistoricalSession")
             .WithSummary("Returns one persisted session with participant rows.");
+
+        endpoints.MapDelete($"{LiveSessionRoutes.AdminSessionsPath}/{{sessionId}}", DeleteHistoricalSessionAsync)
+            .RequireAuthorization()
+            .WithName("DeleteHistoricalSession")
+            .WithSummary("Deletes a persisted historical session.");
 
         endpoints.MapPut($"{LiveSessionRoutes.AdminSessionsPath}/{{sessionId}}/history", SetSessionHistoryInclusionAsync)
             .RequireAuthorization()
@@ -284,6 +294,14 @@ public static class TracksideApiEndpoints
         return Results.Ok(sessions.Select(HistoricalSessionSummaryResponse.From).ToList());
     }
 
+    private static async Task<IResult> DeleteEmptyHistoricalSessionsAsync(
+        ITracksideStore store,
+        CancellationToken cancellationToken)
+    {
+        var deleted = await store.DeleteEmptyHistoricalSessionsAsync(cancellationToken);
+        return Results.Ok(new DeleteSessionsResponse(deleted));
+    }
+
     private static async Task<IResult> GetHistoricalSessionAsync(
         string sessionId,
         ITracksideStore store,
@@ -293,6 +311,17 @@ public static class TracksideApiEndpoints
         return session is null
             ? Results.NotFound(new { error = "Session not found." })
             : Results.Ok(HistoricalSessionDetailResponse.From(session));
+    }
+
+    private static async Task<IResult> DeleteHistoricalSessionAsync(
+        string sessionId,
+        ITracksideStore store,
+        CancellationToken cancellationToken)
+    {
+        var deleted = await store.DeleteHistoricalSessionAsync(sessionId, cancellationToken);
+        return deleted
+            ? Results.NoContent()
+            : Results.NotFound(new { error = "Session not found." });
     }
 
     private static async Task<IResult> SetSessionHistoryInclusionAsync(
@@ -1036,6 +1065,12 @@ public sealed record SessionHistoryRequest
     /// </summary>
     public bool CountForHistory { get; init; }
 }
+
+/// <summary>
+/// Response for bulk stored-session deletion operations.
+/// </summary>
+/// <param name="DeletedCount">Number of stored sessions deleted.</param>
+public sealed record DeleteSessionsResponse(int DeletedCount);
 
 /// <summary>
 /// Kiosk display settings response.

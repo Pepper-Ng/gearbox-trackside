@@ -304,6 +304,11 @@ public sealed class SqliteTracksideStore : ITracksideStore
             return;
         }
 
+        if (!ShouldPersistSnapshot(snapshot))
+        {
+            return;
+        }
+
         await InitializeAsync(cancellationToken);
         var observedUtc = snapshot.TimestampUtc == DateTimeOffset.UnixEpoch
             ? _timeProvider.GetUtcNow()
@@ -672,6 +677,74 @@ public sealed class SqliteTracksideStore : ITracksideStore
         }
 
         return updated;
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> DeleteHistoricalSessionAsync(string sessionId, CancellationToken cancellationToken)
+    {
+        if (!IsEnabled || string.IsNullOrWhiteSpace(sessionId))
+        {
+            return false;
+        }
+
+        await InitializeAsync(cancellationToken);
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        using var transaction = connection.BeginTransaction();
+        await ExecuteAsync(
+            connection,
+            "DELETE FROM track_best_records WHERE session_id = $sessionId;",
+            cancellationToken,
+            transaction,
+            ("$sessionId", sessionId.Trim()));
+        var deleted = await ExecuteNonQueryAsync(
+            connection,
+            "DELETE FROM sessions WHERE session_id = $sessionId;",
+            cancellationToken,
+            transaction,
+            ("$sessionId", sessionId.Trim()));
+        transaction.Commit();
+        return deleted > 0;
+    }
+
+    /// <inheritdoc />
+    public async Task<int> DeleteEmptyHistoricalSessionsAsync(CancellationToken cancellationToken)
+    {
+        if (!IsEnabled)
+        {
+            return 0;
+        }
+
+        await InitializeAsync(cancellationToken);
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        using var transaction = connection.BeginTransaction();
+        await ExecuteAsync(
+            connection,
+            """
+            DELETE FROM track_best_records
+            WHERE session_id IN (
+                SELECT sessions.session_id
+                FROM sessions
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM participants WHERE participants.session_id = sessions.session_id
+                )
+                   OR lower(trim(sessions.track_name)) IN ('unknown', 'unknown track', 'unavailable')
+            );
+            """,
+            cancellationToken,
+            transaction);
+        var deleted = await ExecuteNonQueryAsync(
+            connection,
+            """
+            DELETE FROM sessions
+            WHERE NOT EXISTS (
+                SELECT 1 FROM participants WHERE participants.session_id = sessions.session_id
+            )
+               OR lower(trim(track_name)) IN ('unknown', 'unknown track', 'unavailable');
+            """,
+            cancellationToken,
+            transaction);
+        transaction.Commit();
+        return deleted;
     }
 
     /// <inheritdoc />
@@ -1740,6 +1813,24 @@ public sealed class SqliteTracksideStore : ITracksideStore
         : !string.IsNullOrWhiteSpace(driver.RigName)
             ? driver.RigName.Trim()
             : $"rank-{driver.LeaderboardRank}";
+
+    private static bool ShouldPersistSnapshot(LiveSessionSnapshot snapshot)
+    {
+        return snapshot.Drivers.Count > 0 && IsKnownTrackName(snapshot.Session.TrackName);
+    }
+
+    private static bool IsKnownTrackName(string? trackName)
+    {
+        if (string.IsNullOrWhiteSpace(trackName))
+        {
+            return false;
+        }
+
+        var normalized = trackName.Trim();
+        return !normalized.Equals("Unknown", StringComparison.OrdinalIgnoreCase)
+            && !normalized.Equals("Unknown track", StringComparison.OrdinalIgnoreCase)
+            && !normalized.Equals("Unavailable", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static string BuildSessionId(LiveSessionSnapshot snapshot, DateTimeOffset observedUtc)
     {

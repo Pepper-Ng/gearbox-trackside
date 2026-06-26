@@ -142,6 +142,21 @@ public interface ITracksideStore
     Task<bool> SetSessionCountForHistoryAsync(string sessionId, bool countForHistory, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Deletes a persisted historical session and its short-lived child records.
+    /// </summary>
+    /// <param name="sessionId">Durable session identifier.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>True when a session was deleted.</returns>
+    Task<bool> DeleteHistoricalSessionAsync(string sessionId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Deletes placeholder historical sessions that have no persisted participants or no known track.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Number of placeholder sessions deleted.</returns>
+    Task<int> DeleteEmptyHistoricalSessionsAsync(CancellationToken cancellationToken);
+
+    /// <summary>
     /// Applies a staff correction or exclusion to a persisted participant.
     /// </summary>
     /// <param name="sessionId">Durable session identifier.</param>

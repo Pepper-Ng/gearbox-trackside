@@ -33,6 +33,7 @@ const sessionRowsElement = document.querySelector('#sessionRows');
 const selectedSessionTitleElement = document.querySelector('#selectedSessionTitle');
 const sessionParticipantRowsElement = document.querySelector('#sessionParticipantRows');
 const refreshSessionsButton = document.querySelector('#refreshSessions');
+const deleteEmptySessionsButton = document.querySelector('#deleteEmptySessions');
 const sessionSetupRowsElement = document.querySelector('#sessionSetupRows');
 const addSetupRowButton = document.querySelector('#addSetupRow');
 const clearSessionSetupButton = document.querySelector('#clearSessionSetup');
@@ -107,9 +108,10 @@ const translations = {
     'profiles.email': 'Email',
     'profiles.notes': 'Notes',
     'profiles.create': 'Create Profile',
-    'sessions.title': 'Sessions',
+    'sessions.title': 'Session History',
+    'sessions.description': 'Stored sessions used for historical boards. This is not the live-session monitor.',
     'sessions.detailTitle': 'Session Detail',
-    'sessions.include': 'Include',
+    'sessions.history': 'History',
     'sessions.track': 'Track',
     'sessions.kind': 'Session',
     'sessions.phase': 'Phase',
@@ -118,7 +120,10 @@ const translations = {
     'sessions.laps': 'Laps',
     'sessions.best': 'Best',
     'sessions.refresh': 'Refresh Sessions',
+    'sessions.deleteEmpty': 'Delete Empty Sessions',
     'sessions.view': 'View',
+    'sessions.delete': 'Delete',
+    'sessions.actions': 'Actions',
     'sessions.rank': 'Rank',
     'sessions.driver': 'Driver',
     'sessions.rig': 'Rig',
@@ -127,6 +132,10 @@ const translations = {
     'sessions.timed': 'Timed',
     'sessions.empty': 'No persisted sessions yet.',
     'sessions.noParticipants': 'No participants persisted for this session.',
+    'sessions.deleted': 'Stored session deleted.',
+    'sessions.emptyDeleted': 'Deleted {count} empty stored sessions.',
+    'sessions.confirmDelete': 'Delete this stored session from history?',
+    'sessions.confirmDeleteEmpty': 'Delete stored sessions that have no participants or no known track?',
   },
   nl: {
     'admin.title': 'Beheer',
@@ -164,9 +173,10 @@ const translations = {
     'profiles.email': 'E-mail',
     'profiles.notes': 'Notities',
     'profiles.create': 'Profiel aanmaken',
-    'sessions.title': 'Sessies',
+    'sessions.title': 'Sessiehistorie',
+    'sessions.description': 'Opgeslagen sessies voor historische klassementen. Dit is niet de live-sessiemonitor.',
     'sessions.detailTitle': 'Sessiedetail',
-    'sessions.include': 'Meetellen',
+    'sessions.history': 'Historie',
     'sessions.track': 'Circuit',
     'sessions.kind': 'Sessie',
     'sessions.phase': 'Fase',
@@ -175,7 +185,10 @@ const translations = {
     'sessions.laps': 'Ronden',
     'sessions.best': 'Beste',
     'sessions.refresh': 'Sessies vernieuwen',
+    'sessions.deleteEmpty': 'Lege sessies verwijderen',
     'sessions.view': 'Bekijken',
+    'sessions.delete': 'Verwijderen',
+    'sessions.actions': 'Acties',
     'sessions.rank': 'Positie',
     'sessions.driver': 'Rijder',
     'sessions.rig': 'Rig',
@@ -184,6 +197,10 @@ const translations = {
     'sessions.timed': 'Tijd',
     'sessions.empty': 'Nog geen opgeslagen sessies.',
     'sessions.noParticipants': 'Geen rijders opgeslagen voor deze sessie.',
+    'sessions.deleted': 'Opgeslagen sessie verwijderd.',
+    'sessions.emptyDeleted': '{count} lege opgeslagen sessies verwijderd.',
+    'sessions.confirmDelete': 'Deze opgeslagen sessie uit de historie verwijderen?',
+    'sessions.confirmDeleteEmpty': 'Opgeslagen sessies zonder rijders of bekend circuit verwijderen?',
   },
 };
 
@@ -193,6 +210,7 @@ logoutButton.addEventListener('click', () => logout().catch(showError));
 languageSelectElement.addEventListener('change', () => setLanguage(languageSelectElement.value));
 refreshElement.addEventListener('click', () => loadConfiguration().catch(showError));
 refreshSessionsButton.addEventListener('click', () => loadSessions().catch(showError));
+deleteEmptySessionsButton.addEventListener('click', () => deleteEmptyHistoricalSessions().catch(showError));
 addSetupRowButton.addEventListener('click', () => {
   appendSessionSetupRow({ rigName: nextRigName(), displayName: '', driverProfileId: null });
   scheduleSessionSetupAutoSave(0);
@@ -303,7 +321,7 @@ async function loadSessions() {
   const selectedStillExists = sessions.some(session => session.sessionId === selectedSessionId);
   const nextSessionId = selectedStillExists ? selectedSessionId : sessions[0].sessionId;
   await loadSessionDetail(nextSessionId);
-  sessionsStatusElement.textContent = `${sessions.length} sessions loaded.`;
+  sessionsStatusElement.textContent = `${sessions.length} stored sessions loaded for historical boards.`;
 }
 
 async function loadSessionDetail(sessionId) {
@@ -312,12 +330,40 @@ async function loadSessionDetail(sessionId) {
   selectedSessionTitleElement.textContent = `${session.trackName} - ${session.sessionKind} - ${formatDate(session.lastSeenUtc)}`;
   renderSessionParticipants(session.participants ?? []);
   highlightSelectedSessionRow();
+  setStatus(`Viewing stored session from ${formatDate(session.lastSeenUtc)}.`);
 }
 
 async function setSessionCountForHistory(sessionId, countForHistory) {
   const session = await putJson(`/api/admin/sessions/${encodeURIComponent(sessionId)}/history`, { countForHistory });
   selectedSessionId = session.sessionId;
-  setStatus(t('status.sessionIncluded'));
+  setStatus(countForHistory ? 'Session included in historical boards.' : 'Session excluded from historical boards.');
+  await loadSessions();
+  await loadLeaderboards();
+}
+
+async function deleteHistoricalSession(sessionId) {
+  if (!window.confirm(t('sessions.confirmDelete'))) {
+    return;
+  }
+
+  await deleteJson(`/api/admin/sessions/${encodeURIComponent(sessionId)}`);
+  if (selectedSessionId === sessionId) {
+    selectedSessionId = null;
+  }
+
+  setStatus(t('sessions.deleted'));
+  await loadSessions();
+  await loadLeaderboards();
+}
+
+async function deleteEmptyHistoricalSessions() {
+  if (!window.confirm(t('sessions.confirmDeleteEmpty'))) {
+    return;
+  }
+
+  const result = await deleteJson('/api/admin/sessions/empty');
+  selectedSessionId = null;
+  setStatus(t('sessions.emptyDeleted').replace('{count}', result.deletedCount ?? 0));
   await loadSessions();
   await loadLeaderboards();
 }
@@ -345,7 +391,10 @@ function renderSessions(sessions) {
     appendCell(row, session.participantCount);
     appendCell(row, `${session.validTimedLapCount}/${session.lapCount}`);
     appendCell(row, formatSeconds(session.bestLapSeconds));
-    appendButtonCell(row, t('sessions.view'), () => loadSessionDetail(session.sessionId).catch(showError));
+    appendActionsCell(row, [
+      { label: t('sessions.view'), onClick: () => loadSessionDetail(session.sessionId).catch(showError) },
+      { label: t('sessions.delete'), onClick: () => deleteHistoricalSession(session.sessionId).catch(showError), danger: true },
+    ]);
     sessionRowsElement.appendChild(row);
   }
 
@@ -896,6 +945,10 @@ async function readJsonResponse(response) {
     throw new Error(detail);
   }
 
+  if (response.status === 204) {
+    return null;
+  }
+
   return response.json();
 }
 
@@ -958,6 +1011,23 @@ function appendButtonCell(row, label, onClick) {
   button.textContent = label;
   button.addEventListener('click', onClick);
   cell.appendChild(button);
+  row.appendChild(cell);
+}
+
+function appendActionsCell(row, actions) {
+  const cell = document.createElement('td');
+  const wrapper = document.createElement('div');
+  wrapper.className = 'tableActions';
+  for (const action of actions) {
+    const button = document.createElement('button');
+    button.className = action.danger ? 'tableButton dangerButton' : 'tableButton';
+    button.type = 'button';
+    button.textContent = action.label;
+    button.addEventListener('click', action.onClick);
+    wrapper.appendChild(button);
+  }
+
+  cell.appendChild(wrapper);
   row.appendChild(cell);
 }
 

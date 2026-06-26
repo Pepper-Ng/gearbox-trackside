@@ -126,6 +126,75 @@ public sealed class SqliteTracksideStoreTests
     }
 
     /// <summary>
+    /// Placeholder snapshots from a server waiting in garage with no known track or drivers are not historical sessions.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotPersistPlaceholderSnapshotsAsSessions()
+    {
+        using var temporaryDirectory = new TemporaryDirectory();
+        ITracksideStore store = CreateStore(temporaryDirectory);
+        var placeholder = new LiveSessionSnapshot
+        {
+            Source = "shared-memory",
+            Status = "waiting for rF2 scoring map",
+            TimestampUtc = DateTimeOffset.Parse("2026-06-25T12:15:30+00:00"),
+            Session = new LiveSessionInfo
+            {
+                TrackName = "Unknown track",
+                Kind = SessionKind.Practice,
+                Phase = SessionPhase.Garage,
+            },
+        };
+
+        await store.SaveLiveSessionSnapshotAsync(placeholder, countForHistory: true, CancellationToken.None);
+
+        Assert.Empty(await store.GetHistoricalSessionsAsync(new HistoricalSessionQuery(), CancellationToken.None));
+        Assert.Empty(await store.GetBestLapsAsync(new HistoricalBestLapQuery(), CancellationToken.None));
+    }
+
+    /// <summary>
+    /// Staff can delete a bad persisted session, including derived historical board rows.
+    /// </summary>
+    [Fact]
+    public async Task DeletesHistoricalSessionAndDerivedRows()
+    {
+        using var temporaryDirectory = new TemporaryDirectory();
+        ITracksideStore store = CreateStore(temporaryDirectory);
+        await store.SaveLiveSessionSnapshotAsync(BuildSnapshot(), countForHistory: true, CancellationToken.None);
+        var session = Assert.Single(await store.GetHistoricalSessionsAsync(new HistoricalSessionQuery(), CancellationToken.None));
+
+        Assert.True(await store.DeleteHistoricalSessionAsync(session.SessionId, CancellationToken.None));
+
+        Assert.Empty(await store.GetHistoricalSessionsAsync(new HistoricalSessionQuery(), CancellationToken.None));
+        Assert.Null(await store.GetHistoricalSessionAsync(session.SessionId, CancellationToken.None));
+        Assert.Empty(await store.GetBestLapsAsync(new HistoricalBestLapQuery
+        {
+            TrackName = "Loch Drummond - Short",
+        }, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// Staff can bulk-delete placeholder sessions without removing real sessions.
+    /// </summary>
+    [Fact]
+    public async Task BulkDeletesOnlyEmptyHistoricalSessions()
+    {
+        using var temporaryDirectory = new TemporaryDirectory();
+        ITracksideStore store = CreateStore(temporaryDirectory);
+        await store.SaveLiveSessionSnapshotAsync(BuildSnapshot(), countForHistory: true, CancellationToken.None);
+        await InsertPlaceholderSessionAsync(temporaryDirectory);
+
+        Assert.Equal(2, (await store.GetHistoricalSessionsAsync(new HistoricalSessionQuery(), CancellationToken.None)).Count);
+
+        var deleted = await store.DeleteEmptyHistoricalSessionsAsync(CancellationToken.None);
+        var sessions = await store.GetHistoricalSessionsAsync(new HistoricalSessionQuery(), CancellationToken.None);
+
+        Assert.Equal(1, deleted);
+        var session = Assert.Single(sessions);
+        Assert.Equal("Loch Drummond - Short", session.TrackName);
+    }
+
+    /// <summary>
     /// Participant corrections and lap invalidations flow through to historical best-lap boards.
     /// </summary>
     [Fact]
@@ -503,6 +572,24 @@ public sealed class SqliteTracksideStoreTests
         await using var command = connection.CreateCommand();
         command.CommandText = $"SELECT COUNT(*) FROM {tableName};";
         return (long)(await command.ExecuteScalarAsync() ?? 0L);
+    }
+
+    private static async Task InsertPlaceholderSessionAsync(TemporaryDirectory temporaryDirectory)
+    {
+        var databasePath = Path.Combine(temporaryDirectory.Path, "trackside-test.db");
+        await using var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = databasePath }.ToString());
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO sessions (
+                session_id, source, track_name, session_kind, session_phase, first_seen_utc, last_seen_utc,
+                vehicle_count, overall_flag, count_for_history)
+            VALUES (
+                'placeholder-session', 'shared-memory', 'Unknown track', 'Practice', 'Garage',
+                '2026-06-25T12:00:00.0000000+00:00', '2026-06-25T12:00:00.0000000+00:00',
+                0, 'Unknown', 1);
+            """;
+        await command.ExecuteNonQueryAsync();
     }
 
     private sealed class TemporaryDirectory : IDisposable

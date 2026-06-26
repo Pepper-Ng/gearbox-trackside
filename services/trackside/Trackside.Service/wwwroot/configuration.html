@@ -192,13 +192,13 @@
 
       <section id="sessionsTab" class="adminTab" hidden aria-label="Sessions">
         <section class="configurationPanel">
-          <h2 data-i18n="sessions.title">Sessions</h2>
-          <p id="sessionsStatus" class="wideField">No sessions loaded.</p>
+          <h2 data-i18n="sessions.title">Session History</h2>
+          <p id="sessionsStatus" class="wideField" data-i18n="sessions.description">Stored sessions used for historical boards. This is not the live-session monitor.</p>
           <div class="wideField tableFrame">
             <table class="sessionsTable">
               <thead>
                 <tr>
-                  <th data-i18n="sessions.include">Include</th>
+                  <th data-i18n="sessions.history">History</th>
                   <th data-i18n="sessions.track">Track</th>
                   <th data-i18n="sessions.kind">Session</th>
                   <th data-i18n="sessions.phase">Phase</th>
@@ -206,7 +206,7 @@
                   <th data-i18n="sessions.participants">Drivers</th>
                   <th data-i18n="sessions.laps">Laps</th>
                   <th data-i18n="sessions.best">Best</th>
-                  <th></th>
+                  <th data-i18n="sessions.actions">Actions</th>
                 </tr>
               </thead>
               <tbody id="sessionRows"></tbody>
@@ -214,6 +214,7 @@
           </div>
           <div class="buttonRow">
             <button id="refreshSessions" type="button" data-i18n="sessions.refresh">Refresh Sessions</button>
+            <button id="deleteEmptySessions" type="button" data-i18n="sessions.deleteEmpty">Delete Empty Sessions</button>
           </div>
         </section>
         <section class="configurationPanel">
