@@ -11,12 +11,19 @@
   <main class="shell configShell">
     <header class="topbar">
       <div>
-        <h1>Admin</h1>
-        <p id="configurationStatus">Checking admin session...</p>
+        <h1 data-i18n="admin.title">Admin</h1>
+        <p id="configurationStatus" data-i18n="status.checkingSession">Checking admin session...</p>
       </div>
       <div class="topbarActions">
-        <a href="/">Kiosk</a>
-        <button id="logoutButton" type="button" hidden>Logout</button>
+        <label class="languagePicker">
+          <span data-i18n="language.label">Language</span>
+          <select id="languageSelect">
+            <option value="en">English</option>
+            <option value="nl">Nederlands</option>
+          </select>
+        </label>
+        <a href="/" data-i18n="nav.kiosk">Kiosk</a>
+        <button id="logoutButton" type="button" hidden data-i18n="nav.logout">Logout</button>
       </div>
     </header>
 
@@ -56,9 +63,11 @@
 
     <section id="dashboardPanel" hidden>
       <nav class="adminTabs" aria-label="Admin sections">
-        <button class="active" data-tab="sourceTab" type="button">Source</button>
-        <button data-tab="usersTab" type="button">Admins</button>
-        <button data-tab="statusTab" type="button">Status</button>
+        <button class="active" data-tab="sourceTab" type="button" data-i18n="tabs.source">Source</button>
+        <button data-tab="sessionSetupTab" type="button" data-i18n="tabs.sessionSetup">Session Setup</button>
+        <button data-tab="leaderboardsTab" type="button" data-i18n="tabs.leaderboards">Leaderboards</button>
+        <button data-tab="usersTab" type="button" data-i18n="tabs.admins">Admins</button>
+        <button data-tab="statusTab" type="button" data-i18n="tabs.status">Status</button>
       </nav>
 
       <section id="sourceTab" class="adminTab active" aria-label="Source configuration">
@@ -134,6 +143,85 @@
               <h3>Ambiguous Maps</h3>
               <ul id="ambiguousMaps"></ul>
             </div>
+          </div>
+        </section>
+      </section>
+
+      <section id="sessionSetupTab" class="adminTab" hidden aria-label="Session setup">
+        <section class="configurationPanel">
+          <h2 data-i18n="setup.title">Prepare Session</h2>
+          <p class="wideField" data-i18n="setup.description">Prepared rig assignments stay active for future sessions until changed or cleared.</p>
+          <div class="wideField tableFrame">
+            <table class="sessionSetupTable">
+              <thead>
+                <tr>
+                  <th data-i18n="setup.rig">Rig</th>
+                  <th data-i18n="setup.screenName">Screen name</th>
+                  <th data-i18n="setup.driverProfile">Driver profile</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="sessionSetupRows"></tbody>
+            </table>
+          </div>
+          <div class="buttonRow">
+            <button id="addSetupRow" type="button" data-i18n="setup.addRig">Add Rig</button>
+            <button id="clearSessionSetup" type="button" data-i18n="setup.clear">Clear Setup</button>
+          </div>
+        </section>
+        <section class="configurationPanel">
+          <h2 data-i18n="profiles.title">Driver Profiles</h2>
+          <label>
+            <span data-i18n="profiles.displayName">Display name</span>
+            <input id="profileDisplayName" type="text" autocomplete="off">
+          </label>
+          <label>
+            <span data-i18n="profiles.email">Email</span>
+            <input id="profileEmail" type="email" autocomplete="off">
+          </label>
+          <label class="wideField">
+            <span data-i18n="profiles.notes">Notes</span>
+            <textarea id="profileNotes" rows="3"></textarea>
+          </label>
+          <div class="buttonRow">
+            <button id="createProfile" type="button" data-i18n="profiles.create">Create Profile</button>
+          </div>
+        </section>
+      </section>
+
+      <section id="leaderboardsTab" class="adminTab" hidden aria-label="Leaderboard controls">
+        <section class="configurationPanel">
+          <h2>Monthly Track</h2>
+          <p id="monthlyTrackStatus" class="wideField">No monthly track loaded.</p>
+          <label>
+            <span>Track name</span>
+            <input id="monthlyTrackName" type="text" spellcheck="false">
+          </label>
+          <label>
+            <span>Reason</span>
+            <input id="monthlyTrackReason" type="text" spellcheck="false" placeholder="Scheduled rotation">
+          </label>
+          <div class="buttonRow">
+            <button id="setMonthlyTrack" type="button">Set Track</button>
+            <button id="resetMonthlyTrack" type="button">Reset Current Track</button>
+          </div>
+        </section>
+        <section class="configurationPanel">
+          <h2>Monthly Bests</h2>
+          <div class="wideField tableFrame">
+            <table>
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Driver</th>
+                  <th>Rig</th>
+                  <th>Lap</th>
+                  <th>Time</th>
+                  <th>Set</th>
+                </tr>
+              </thead>
+              <tbody id="monthlyBestLaps"></tbody>
+            </table>
           </div>
         </section>
       </section>

@@ -21,6 +21,36 @@ public static class LiveSessionRoutes
     public const string ClientConfigurationPath = "/api/configuration/client";
 
     /// <summary>
+    /// REST endpoint for public best-lap leaderboards.
+    /// </summary>
+    public const string BestLapsPath = "/api/leaderboards/best-laps";
+
+    /// <summary>
+    /// REST endpoint for the active monthly track period.
+    /// </summary>
+    public const string MonthlyTrackPath = "/api/leaderboards/monthly-track";
+
+    /// <summary>
+    /// REST endpoint for the most recently finished session result.
+    /// </summary>
+    public const string LastFinishedSessionPath = "/api/leaderboards/last-session";
+
+    /// <summary>
+    /// Admin endpoint for changing or resetting the active monthly track period.
+    /// </summary>
+    public const string AdminMonthlyTrackPath = "/api/admin/leaderboards/monthly-track";
+
+    /// <summary>
+    /// Admin endpoint for prepared rig/name/profile setup.
+    /// </summary>
+    public const string AdminSessionSetupPath = "/api/admin/session-setup";
+
+    /// <summary>
+    /// Admin endpoint for optional recurring-customer driver profiles.
+    /// </summary>
+    public const string AdminDriverProfilesPath = "/api/admin/driver-profiles";
+
+    /// <summary>
     /// REST endpoint for editable source and shared-memory discovery configuration.
     /// </summary>
     public const string SourceConfigurationPath = "/api/configuration/source";

@@ -130,6 +130,11 @@ public sealed record LeaderboardDriverSource
     public int CompletedLaps { get; init; }
 
     /// <summary>
+    /// rFactor 2 valid-lap flag for the currently tracked lap: 0 does not count, 1 counts lap only, 2 counts lap and time.
+    /// </summary>
+    public int? ValidLapFlag { get; init; }
+
+    /// <summary>
     /// Best completed lap time in seconds.
     /// </summary>
     public double? BestLapSeconds { get; init; }

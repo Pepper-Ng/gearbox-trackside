@@ -29,6 +29,11 @@ public sealed class TracksideOptions
     public TracksideLiveSessionOptions LiveSession { get; init; } = new();
 
     /// <summary>
+    /// Durable persistence settings for Phase 2 staff workflows and historical boards.
+    /// </summary>
+    public TracksidePersistenceOptions Persistence { get; init; } = new();
+
+    /// <summary>
     /// Browser origins allowed to call the local API during frontend development.
     /// </summary>
     public TracksideCorsOptions Cors { get; init; } = new();

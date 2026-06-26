@@ -10,6 +10,7 @@ const setupDisplayNameElement = document.querySelector('#setupDisplayName');
 const setupPasswordElement = document.querySelector('#setupPassword');
 const loginUsernameElement = document.querySelector('#loginUsername');
 const loginPasswordElement = document.querySelector('#loginPassword');
+const languageSelectElement = document.querySelector('#languageSelect');
 const sourceModeElement = document.querySelector('#sourceMode');
 const fixturePathElement = document.querySelector('#fixturePath');
 const scoringMapNameElement = document.querySelector('#scoringMapName');
@@ -27,6 +28,19 @@ const candidateMapsElement = document.querySelector('#candidateMaps');
 const discoveredMapsElement = document.querySelector('#discoveredMaps');
 const ambiguousMapsElement = document.querySelector('#ambiguousMaps');
 const adminUsersElement = document.querySelector('#adminUsers');
+const sessionSetupRowsElement = document.querySelector('#sessionSetupRows');
+const addSetupRowButton = document.querySelector('#addSetupRow');
+const clearSessionSetupButton = document.querySelector('#clearSessionSetup');
+const profileDisplayNameElement = document.querySelector('#profileDisplayName');
+const profileEmailElement = document.querySelector('#profileEmail');
+const profileNotesElement = document.querySelector('#profileNotes');
+const createProfileButton = document.querySelector('#createProfile');
+const monthlyTrackStatusElement = document.querySelector('#monthlyTrackStatus');
+const monthlyTrackNameElement = document.querySelector('#monthlyTrackName');
+const monthlyTrackReasonElement = document.querySelector('#monthlyTrackReason');
+const setMonthlyTrackButton = document.querySelector('#setMonthlyTrack');
+const resetMonthlyTrackButton = document.querySelector('#resetMonthlyTrack');
+const monthlyBestLapsElement = document.querySelector('#monthlyBestLaps');
 const newAdminUsernameElement = document.querySelector('#newAdminUsername');
 const newAdminDisplayNameElement = document.querySelector('#newAdminDisplayName');
 const newAdminPasswordElement = document.querySelector('#newAdminPassword');
@@ -39,15 +53,104 @@ const refreshStatusButton = document.querySelector('#refreshStatus');
 let isPopulatingSourceForm = false;
 let autoSaveTimer = 0;
 let autoSaveSequence = 0;
+let sessionSetupSaveTimer = 0;
+let sessionSetupSaveSequence = 0;
+let isRenderingSessionSetup = false;
+let driverProfiles = [];
+
+const languageStorageKey = 'trackside.admin.language';
+const tabStorageKey = 'trackside.admin.tab';
+const translations = {
+  en: {
+    'admin.title': 'Admin',
+    'language.label': 'Language',
+    'nav.kiosk': 'Kiosk',
+    'nav.logout': 'Logout',
+    'tabs.source': 'Source',
+    'tabs.sessionSetup': 'Session Setup',
+    'tabs.leaderboards': 'Leaderboards',
+    'tabs.admins': 'Admins',
+    'tabs.status': 'Status',
+    'status.checkingSession': 'Checking admin session...',
+    'status.adminLoginRequired': 'Admin login required.',
+    'status.createFirstAdmin': 'Create the first admin account.',
+    'status.sourceChanged': 'Source configuration changed...',
+    'status.sourceSaving': 'Saving source configuration...',
+    'status.setupChanged': 'Prepared session setup changed...',
+    'status.setupSaving': 'Saving prepared session setup...',
+    'status.setupSaved': 'Prepared session setup saved.',
+    'status.setupCleared': 'Prepared session setup cleared.',
+    'status.profileCreated': 'Driver profile created.',
+    'setup.title': 'Prepare Session',
+    'setup.description': 'Prepared rig assignments stay active for future sessions until changed or cleared.',
+    'setup.rig': 'Rig',
+    'setup.screenName': 'Screen name',
+    'setup.driverProfile': 'Driver profile',
+    'setup.addRig': 'Add Rig',
+    'setup.clear': 'Clear Setup',
+    'setup.remove': 'Remove',
+    'setup.noProfile': 'No profile',
+    'profiles.title': 'Driver Profiles',
+    'profiles.displayName': 'Display name',
+    'profiles.email': 'Email',
+    'profiles.notes': 'Notes',
+    'profiles.create': 'Create Profile',
+  },
+  nl: {
+    'admin.title': 'Beheer',
+    'language.label': 'Taal',
+    'nav.kiosk': 'Kiosk',
+    'nav.logout': 'Uitloggen',
+    'tabs.source': 'Bron',
+    'tabs.sessionSetup': 'Sessie voorbereiden',
+    'tabs.leaderboards': 'Klassementen',
+    'tabs.admins': 'Beheerders',
+    'tabs.status': 'Status',
+    'status.checkingSession': 'Beheersessie controleren...',
+    'status.adminLoginRequired': 'Beheerlogin vereist.',
+    'status.createFirstAdmin': 'Maak het eerste beheeraccount aan.',
+    'status.sourceChanged': 'Bronconfiguratie gewijzigd...',
+    'status.sourceSaving': 'Bronconfiguratie opslaan...',
+    'status.setupChanged': 'Sessievoorbereiding gewijzigd...',
+    'status.setupSaving': 'Sessievoorbereiding opslaan...',
+    'status.setupSaved': 'Sessievoorbereiding opgeslagen.',
+    'status.setupCleared': 'Sessievoorbereiding gewist.',
+    'status.profileCreated': 'Bestuurdersprofiel aangemaakt.',
+    'setup.title': 'Sessie voorbereiden',
+    'setup.description': 'Voorbereide rig-toewijzingen blijven actief voor volgende sessies totdat ze worden aangepast of gewist.',
+    'setup.rig': 'Rig',
+    'setup.screenName': 'Schermnaam',
+    'setup.driverProfile': 'Bestuurdersprofiel',
+    'setup.addRig': 'Rig toevoegen',
+    'setup.clear': 'Setup wissen',
+    'setup.remove': 'Verwijderen',
+    'setup.noProfile': 'Geen profiel',
+    'profiles.title': 'Bestuurdersprofielen',
+    'profiles.displayName': 'Weergavenaam',
+    'profiles.email': 'E-mail',
+    'profiles.notes': 'Notities',
+    'profiles.create': 'Profiel aanmaken',
+  },
+};
 
 setupButton.addEventListener('click', () => createFirstAdmin().catch(showError));
 loginButton.addEventListener('click', () => login().catch(showError));
 logoutButton.addEventListener('click', () => logout().catch(showError));
+languageSelectElement.addEventListener('change', () => setLanguage(languageSelectElement.value));
 refreshElement.addEventListener('click', () => loadConfiguration().catch(showError));
+addSetupRowButton.addEventListener('click', () => {
+  appendSessionSetupRow({ rigName: nextRigName(), displayName: '', driverProfileId: null });
+  scheduleSessionSetupAutoSave(0);
+});
+clearSessionSetupButton.addEventListener('click', () => clearSessionSetup().catch(showError));
+createProfileButton.addEventListener('click', () => createDriverProfile().catch(showError));
+setMonthlyTrackButton.addEventListener('click', () => setMonthlyTrack().catch(showError));
+resetMonthlyTrackButton.addEventListener('click', () => resetMonthlyTrack().catch(showError));
 createAdminButton.addEventListener('click', () => createAdmin().catch(showError));
 changePasswordButton.addEventListener('click', () => changePassword().catch(showError));
 refreshStatusButton.addEventListener('click', () => loadAdvancedStatus().catch(showError));
 bindSourceAutoSave();
+setLanguage(localStorage.getItem(languageStorageKey) || 'en');
 
 document.querySelectorAll('[data-tab]').forEach(button => {
   button.addEventListener('click', () => showTab(button.dataset.tab));
@@ -68,7 +171,7 @@ async function loadSession() {
   }
 
   showDashboard(session);
-  await Promise.all([loadConfiguration(), loadUsers(), loadAdvancedStatus()]);
+  await Promise.all([loadConfiguration(), loadSessionSetup(), loadLeaderboards(), loadUsers(), loadAdvancedStatus()]);
 }
 
 async function createFirstAdmin() {
@@ -78,7 +181,7 @@ async function createFirstAdmin() {
     password: setupPasswordElement.value,
   });
   showDashboard(session);
-  await Promise.all([loadConfiguration(), loadUsers(), loadAdvancedStatus()]);
+  await Promise.all([loadConfiguration(), loadSessionSetup(), loadLeaderboards(), loadUsers(), loadAdvancedStatus()]);
 }
 
 async function login() {
@@ -87,7 +190,7 @@ async function login() {
     password: loginPasswordElement.value,
   });
   showDashboard(session);
-  await Promise.all([loadConfiguration(), loadUsers(), loadAdvancedStatus()]);
+  await Promise.all([loadConfiguration(), loadSessionSetup(), loadLeaderboards(), loadUsers(), loadAdvancedStatus()]);
 }
 
 async function logout() {
@@ -105,7 +208,7 @@ async function loadConfiguration() {
 async function saveConfiguration() {
   const sequence = ++autoSaveSequence;
   const payload = readSourceConfigurationForm();
-  setStatus('Saving source configuration...');
+  setStatus(t('status.sourceSaving'));
   const saved = await putJson('/api/configuration/source', payload);
   if (sequence !== autoSaveSequence) {
     return;
@@ -126,6 +229,204 @@ async function loadUsers() {
     appendCell(row, formatDate(user.createdUtc));
     appendCell(row, formatDate(user.updatedUtc));
     adminUsersElement.appendChild(row);
+  }
+}
+
+async function loadSessionSetup() {
+  const setup = await fetchJson('/api/admin/session-setup');
+  driverProfiles = setup.driverProfiles ?? [];
+  renderSessionSetup(setup);
+}
+
+async function saveSessionSetup(renderAfterSave = false) {
+  const sequence = ++sessionSetupSaveSequence;
+  const saved = await putJson('/api/admin/session-setup', { entries: readSessionSetupRows() });
+  if (sequence !== sessionSetupSaveSequence) {
+    return;
+  }
+
+  driverProfiles = saved.driverProfiles ?? [];
+  if (renderAfterSave) {
+    renderSessionSetup(saved);
+  }
+  setStatus(t('status.setupSaved'));
+}
+
+async function clearSessionSetup() {
+  const cleared = await deleteJson('/api/admin/session-setup');
+  driverProfiles = cleared.driverProfiles ?? [];
+  renderSessionSetup(cleared);
+  setStatus(t('status.setupCleared'));
+}
+
+async function createDriverProfile() {
+  await postJson('/api/admin/driver-profiles', {
+    displayName: profileDisplayNameElement.value.trim(),
+    email: nullIfEmpty(profileEmailElement.value),
+    notes: nullIfEmpty(profileNotesElement.value),
+  });
+  profileDisplayNameElement.value = '';
+  profileEmailElement.value = '';
+  profileNotesElement.value = '';
+  await loadSessionSetup();
+  setStatus(t('status.profileCreated'));
+}
+
+function renderSessionSetup(setup) {
+  isRenderingSessionSetup = true;
+  sessionSetupRowsElement.replaceChildren();
+  const entries = setup.entries ?? [];
+  const rows = entries.length === 0 ? defaultSetupRows() : entries;
+  const rowsToRender = entries.length === 0 && setup.isConfigured ? [] : rows;
+  for (const entry of rowsToRender) {
+    appendSessionSetupRow(entry);
+  }
+  isRenderingSessionSetup = false;
+}
+
+function appendSessionSetupRow(entry) {
+  const row = document.createElement('tr');
+  row.className = 'sessionSetupRow';
+  row.appendChild(inputCell('setupRigName', entry.rigName ?? ''));
+  row.appendChild(inputCell('setupDisplayName', entry.displayName ?? ''));
+  row.appendChild(profileSelectCell(entry.driverProfileId));
+  const actions = document.createElement('td');
+  const removeButton = document.createElement('button');
+  removeButton.type = 'button';
+  removeButton.textContent = t('setup.remove');
+  removeButton.addEventListener('click', () => {
+    row.remove();
+    scheduleSessionSetupAutoSave(0);
+  });
+  actions.appendChild(removeButton);
+  row.appendChild(actions);
+  sessionSetupRowsElement.appendChild(row);
+  row.querySelectorAll('input, select').forEach(element => {
+    element.addEventListener('input', () => scheduleSessionSetupAutoSave(700));
+    element.addEventListener('change', () => scheduleSessionSetupAutoSave(0));
+  });
+}
+
+function inputCell(className, value) {
+  const cell = document.createElement('td');
+  const input = document.createElement('input');
+  input.className = className;
+  input.type = 'text';
+  input.value = value;
+  input.spellcheck = false;
+  cell.appendChild(input);
+  return cell;
+}
+
+function profileSelectCell(selectedProfileId) {
+  const cell = document.createElement('td');
+  const select = document.createElement('select');
+  select.className = 'setupProfileId';
+  const empty = document.createElement('option');
+  empty.value = '';
+  empty.textContent = t('setup.noProfile');
+  select.appendChild(empty);
+  for (const profile of driverProfiles) {
+    const option = document.createElement('option');
+    option.value = profile.driverProfileId;
+    option.textContent = profile.displayName;
+    option.selected = profile.driverProfileId === selectedProfileId;
+    select.appendChild(option);
+  }
+  cell.appendChild(select);
+  return cell;
+}
+
+function readSessionSetupRows() {
+  return Array.from(sessionSetupRowsElement.querySelectorAll('.sessionSetupRow'))
+    .map(row => ({
+      rigName: row.querySelector('.setupRigName')?.value.trim() ?? '',
+      displayName: row.querySelector('.setupDisplayName')?.value.trim() ?? '',
+      driverProfileId: nullIfEmpty(row.querySelector('.setupProfileId')?.value ?? ''),
+    }))
+    .filter(entry => entry.rigName && entry.displayName);
+}
+
+function defaultSetupRows() {
+  return ['Setup1', 'Setup2', 'Setup3', 'Setup4', 'Setup5'].map(rigName => ({ rigName, displayName: '', driverProfileId: null }));
+}
+
+function nextRigName() {
+  return `Setup${sessionSetupRowsElement.querySelectorAll('.sessionSetupRow').length + 1}`;
+}
+
+function scheduleSessionSetupAutoSave(delayMilliseconds) {
+  if (isRenderingSessionSetup) {
+    return;
+  }
+
+  window.clearTimeout(sessionSetupSaveTimer);
+  setStatus(delayMilliseconds === 0 ? t('status.setupSaving') : t('status.setupChanged'));
+  sessionSetupSaveTimer = window.setTimeout(() => {
+    saveSessionSetup(false).catch(showError);
+  }, delayMilliseconds);
+}
+
+async function loadLeaderboards() {
+  const [monthlyTrack, monthlyBoard] = await Promise.all([
+    fetchJson('/api/leaderboards/monthly-track'),
+    fetchJson('/api/leaderboards/best-laps?window=monthly&mode=per-driver&limit=10'),
+  ]);
+  renderMonthlyTrack(monthlyTrack);
+  renderMonthlyBestLaps(monthlyBoard.rows ?? []);
+}
+
+async function setMonthlyTrack() {
+  const trackName = monthlyTrackNameElement.value.trim();
+  const reason = monthlyTrackReasonElement.value.trim();
+  const monthlyTrack = await putJson('/api/admin/leaderboards/monthly-track', { trackName, reason });
+  renderMonthlyTrack(monthlyTrack);
+  monthlyTrackReasonElement.value = '';
+  await loadLeaderboards();
+  statusElement.textContent = 'Monthly track started with fresh stats.';
+}
+
+async function resetMonthlyTrack() {
+  const reason = monthlyTrackReasonElement.value.trim() || 'Monthly track reset';
+  const monthlyTrack = await postJson('/api/admin/leaderboards/monthly-track/reset', { reason });
+  renderMonthlyTrack(monthlyTrack);
+  monthlyTrackReasonElement.value = '';
+  await loadLeaderboards();
+  statusElement.textContent = 'Monthly track stats reset.';
+}
+
+function renderMonthlyTrack(monthlyTrack) {
+  if (!monthlyTrack?.isActive) {
+    monthlyTrackStatusElement.textContent = 'No active monthly track.';
+    monthlyTrackNameElement.value = '';
+    return;
+  }
+
+  monthlyTrackStatusElement.textContent = `${monthlyTrack.trackName} since ${formatDate(monthlyTrack.startedUtc)}`;
+  monthlyTrackNameElement.value = monthlyTrack.trackName ?? '';
+}
+
+function renderMonthlyBestLaps(rows) {
+  monthlyBestLapsElement.replaceChildren();
+  if (rows.length === 0) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 6;
+    cell.textContent = 'No counted timed laps yet.';
+    row.appendChild(cell);
+    monthlyBestLapsElement.appendChild(row);
+    return;
+  }
+
+  for (const lap of rows) {
+    const row = document.createElement('tr');
+    appendCell(row, lap.rank);
+    appendCell(row, lap.displayName);
+    appendCell(row, lap.rigName);
+    appendCell(row, lap.lapNumber);
+    appendCell(row, formatSeconds(lap.lapSeconds));
+    appendCell(row, formatDate(lap.observedUtc));
+    monthlyBestLapsElement.appendChild(row);
   }
 }
 
@@ -230,7 +531,7 @@ function showSetup() {
   loginPanel.hidden = true;
   dashboardPanel.hidden = true;
   logoutButton.hidden = true;
-  statusElement.textContent = 'Create the first admin account.';
+  setStatus(t('status.createFirstAdmin'));
 }
 
 function showLogin() {
@@ -238,7 +539,7 @@ function showLogin() {
   loginPanel.hidden = false;
   dashboardPanel.hidden = true;
   logoutButton.hidden = true;
-  statusElement.textContent = 'Admin login required.';
+  setStatus(t('status.adminLoginRequired'));
 }
 
 function showDashboard(session) {
@@ -246,18 +547,43 @@ function showDashboard(session) {
   loginPanel.hidden = true;
   dashboardPanel.hidden = false;
   logoutButton.hidden = false;
-  statusElement.textContent = `Signed in as ${session.displayName ?? session.username}`;
+  setStatus(`Signed in as ${session.displayName ?? session.username}`);
   passwordUsernameElement.value = session.username ?? '';
+  showTab(localStorage.getItem(tabStorageKey) || 'sourceTab', false);
 }
 
-function showTab(tabId) {
+function showTab(tabId, persist = true) {
+  const target = document.getElementById(tabId) ? tabId : 'sourceTab';
+  if (persist) {
+    localStorage.setItem(tabStorageKey, target);
+  }
   document.querySelectorAll('[data-tab]').forEach(button => {
-    button.classList.toggle('active', button.dataset.tab === tabId);
+    button.classList.toggle('active', button.dataset.tab === target);
   });
   document.querySelectorAll('.adminTab').forEach(tab => {
-    tab.hidden = tab.id !== tabId;
-    tab.classList.toggle('active', tab.id === tabId);
+    tab.hidden = tab.id !== target;
+    tab.classList.toggle('active', tab.id === target);
   });
+}
+
+function setLanguage(language) {
+  const nextLanguage = translations[language] ? language : 'en';
+  localStorage.setItem(languageStorageKey, nextLanguage);
+  languageSelectElement.value = nextLanguage;
+  document.documentElement.lang = nextLanguage;
+  document.querySelectorAll('[data-i18n]').forEach(element => {
+    element.textContent = t(element.dataset.i18n);
+  });
+  sessionSetupRowsElement.querySelectorAll('.setupProfileId option[value=""]').forEach(option => {
+    option.textContent = t('setup.noProfile');
+  });
+  sessionSetupRowsElement.querySelectorAll('.sessionSetupRow button').forEach(button => {
+    button.textContent = t('setup.remove');
+  });
+}
+
+function t(key) {
+  return translations[languageSelectElement.value]?.[key] ?? translations.en[key] ?? key;
 }
 
 async function fetchJson(path) {
@@ -282,6 +608,11 @@ async function putJson(path, payload) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
+  return readJsonResponse(response);
+}
+
+async function deleteJson(path) {
+  const response = await fetch(path, { method: 'DELETE', credentials: 'same-origin' });
   return readJsonResponse(response);
 }
 
@@ -315,6 +646,13 @@ function formatDate(value) {
   return new Date(value).toLocaleString();
 }
 
+function formatSeconds(value) {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '-';
+  const minutes = Math.floor(value / 60);
+  const seconds = (value % 60).toFixed(3).padStart(6, '0');
+  return `${minutes}:${seconds}`;
+}
+
 function nullIfEmpty(value) {
   const trimmed = value.trim();
   return trimmed.length === 0 ? null : trimmed;
@@ -344,7 +682,7 @@ function scheduleSourceAutoSave(delayMilliseconds) {
   }
 
   window.clearTimeout(autoSaveTimer);
-  setStatus(delayMilliseconds === 0 ? 'Saving source configuration...' : 'Source configuration changed...');
+  setStatus(delayMilliseconds === 0 ? t('status.sourceSaving') : t('status.sourceChanged'));
   autoSaveTimer = window.setTimeout(() => {
     saveConfiguration().catch(showError);
   }, delayMilliseconds);

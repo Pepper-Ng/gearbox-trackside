@@ -43,6 +43,33 @@ a {
   color: LinkText;
 }
 
+.topbarActions,
+.viewTabs {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.viewTabs {
+  margin-top: 18px;
+  border-bottom: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
+}
+
+.viewTabs button {
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: CanvasText;
+  cursor: pointer;
+  font: inherit;
+  padding: 8px 10px;
+}
+
+.viewTabs button.active {
+  border-bottom-color: light-dark(#005bd1, #7fb6ff);
+  font-weight: 700;
+}
+
 .summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -97,6 +124,11 @@ th {
   min-width: 1060px;
 }
 
+.bestLapTable {
+  table-layout: fixed;
+  min-width: 900px;
+}
+
 .leaderboardTable th:nth-child(1),
 .leaderboardTable td:nth-child(1) {
   width: 54px;
@@ -109,6 +141,26 @@ th {
 
 .leaderboardTable th:nth-child(4),
 .leaderboardTable td:nth-child(4) {
+  width: 150px;
+}
+
+.bestLapTable th:nth-child(1),
+.bestLapTable td:nth-child(1) {
+  width: 58px;
+}
+
+.bestLapTable th:nth-child(2),
+.bestLapTable td:nth-child(2) {
+  width: 180px;
+}
+
+.bestLapTable th:nth-last-child(2),
+.bestLapTable td:nth-last-child(2) {
+  width: 100px;
+}
+
+.bestLapTable th:last-child,
+.bestLapTable td:last-child {
   width: 150px;
 }
 
@@ -150,4 +202,12 @@ th {
 
 .bestLapRow .rankCell {
   color: light-dark(#005bd1, #7fb6ff);
+}
+
+.emptyState {
+  border-top: 1px solid color-mix(in srgb, CanvasText 14%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, CanvasText 14%, transparent);
+  margin-top: 8px;
+  padding: 18px 0;
+  opacity: .72;
 }

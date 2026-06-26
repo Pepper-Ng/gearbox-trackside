@@ -1,6 +1,16 @@
 const statusElement = document.querySelector('#status');
 const summaryElement = document.querySelector('#summary');
+const bestSummaryElement = document.querySelector('#bestSummary');
+const bestSectionElement = document.querySelector('#bestSection');
+const bestTitleElement = document.querySelector('#bestTitle');
+const bestLapsElement = document.querySelector('#bestLaps');
 const driversElement = document.querySelector('#drivers');
+const liveSectionElement = document.querySelector('#liveSection');
+let currentView = 'monthly';
+
+document.querySelectorAll('[data-view]').forEach(button => {
+  button.addEventListener('click', () => setView(button.dataset.view));
+});
 
 function formatSeconds(value) {
   if (value === null || value === undefined) return '-';
@@ -21,23 +31,28 @@ function formatPercent(value) {
   return `${value.toFixed(1)}%`;
 }
 
-function setMetric(label, value) {
+function formatDate(value) {
+  if (!value) return '-';
+  return new Date(value).toLocaleString([], { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+function setMetric(container, label, value) {
   const item = document.createElement('div');
   item.className = 'metric';
   item.innerHTML = `<span>${label}</span><strong>${value ?? '-'}</strong>`;
-  summaryElement.appendChild(item);
+  container.appendChild(item);
 }
 
 function render(snapshot) {
   const session = snapshot.session ?? {};
   statusElement.textContent = `${snapshot.source} - ${snapshot.status}`;
   summaryElement.replaceChildren();
-  setMetric('Track', session.trackName);
-  setMetric('Session', session.kind);
-  setMetric('Phase', session.phase);
-  setMetric('Flag', session.overallFlag);
-  setMetric('Clock', formatSeconds(session.currentSessionSeconds));
-  setMetric('Air / Track', `${session.airTemperatureCelsius ?? '-'}C / ${session.trackTemperatureCelsius ?? '-'}C`);
+  setMetric(summaryElement, 'Track', session.trackName);
+  setMetric(summaryElement, 'Session', session.kind);
+  setMetric(summaryElement, 'Phase', session.phase);
+  setMetric(summaryElement, 'Flag', session.overallFlag);
+  setMetric(summaryElement, 'Clock', formatSeconds(session.currentSessionSeconds));
+  setMetric(summaryElement, 'Air / Track', `${session.airTemperatureCelsius ?? '-'}C / ${session.trackTemperatureCelsius ?? '-'}C`);
 
   driversElement.replaceChildren();
   for (const driver of snapshot.drivers ?? []) {
@@ -56,6 +71,105 @@ function render(snapshot) {
     appendCell(row, formatGap(driver.gapToLeaderSeconds, driver.lapsBehindLeader));
     driversElement.appendChild(row);
   }
+}
+
+function renderBestLaps(board) {
+  const title = board.window === 'monthly' ? 'Monthly Track' : `${board.window.charAt(0).toUpperCase()}${board.window.slice(1)} Bests`;
+  statusElement.textContent = `${board.rows?.length ?? 0} counted timed laps`;
+  bestTitleElement.textContent = title;
+  bestSummaryElement.replaceChildren();
+  setMetric(bestSummaryElement, 'Board', title);
+  setMetric(bestSummaryElement, 'Track', board.trackName ?? (board.window === 'monthly' ? 'Not set' : 'All tracks'));
+  setMetric(bestSummaryElement, 'Mode', board.mode === 'all-laps' ? 'All laps' : 'Per driver');
+  setMetric(bestSummaryElement, 'Since', formatDate(board.fromUtc));
+  setMetric(bestSummaryElement, 'Entries', board.rows?.length ?? 0);
+
+  bestLapsElement.replaceChildren();
+  if (!board.rows || board.rows.length === 0) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 7;
+    cell.textContent = 'No counted timed laps yet.';
+    row.appendChild(cell);
+    bestLapsElement.appendChild(row);
+    return;
+  }
+
+  for (const lap of board.rows) {
+    const row = document.createElement('tr');
+    if (lap.rank === 1) row.className = 'bestLapRow';
+    appendCell(row, lap.rank, 'rankCell');
+    appendCell(row, lap.displayName ?? '-');
+    appendCell(row, lap.rigName ?? '-');
+    appendCell(row, lap.vehicleName ?? '-');
+    appendCell(row, lap.lapNumber ?? '-');
+    appendCell(row, formatSeconds(lap.lapSeconds), lap.rank === 1 ? 'bestTime' : undefined);
+    appendCell(row, formatDate(lap.observedUtc));
+    bestLapsElement.appendChild(row);
+  }
+}
+
+function renderLastSession(result) {
+  statusElement.textContent = result.isAvailable ? `${result.rows?.length ?? 0} result rows` : 'No finished session yet';
+  bestTitleElement.textContent = 'Last Session';
+  bestSummaryElement.replaceChildren();
+  setMetric(bestSummaryElement, 'Board', 'Last Session');
+  setMetric(bestSummaryElement, 'Track', result.trackName ?? 'No finished session');
+  setMetric(bestSummaryElement, 'Session', result.sessionKind ?? '-');
+  setMetric(bestSummaryElement, 'Finished', formatDate(result.lastSeenUtc));
+  setMetric(bestSummaryElement, 'Entries', result.rows?.length ?? 0);
+
+  bestLapsElement.replaceChildren();
+  if (!result.rows || result.rows.length === 0) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 7;
+    cell.textContent = 'No finished session has been observed yet.';
+    row.appendChild(cell);
+    bestLapsElement.appendChild(row);
+    return;
+  }
+
+  for (const resultRow of result.rows) {
+    const row = document.createElement('tr');
+    appendCell(row, resultRow.rank, 'rankCell');
+    appendCell(row, resultRow.displayName ?? '-');
+    appendCell(row, resultRow.rigName ?? '-');
+    appendCell(row, resultRow.vehicleName ?? '-');
+    appendCell(row, resultRow.completedLaps ?? 0);
+    appendCell(row, formatSeconds(resultRow.bestLapSeconds));
+    appendCell(row, '');
+    bestLapsElement.appendChild(row);
+  }
+}
+
+function setView(view) {
+  currentView = view;
+  document.querySelectorAll('[data-view]').forEach(button => {
+    button.classList.toggle('active', button.dataset.view === view);
+  });
+  const isLive = view === 'live';
+  summaryElement.hidden = !isLive;
+  liveSectionElement.hidden = !isLive;
+  bestSummaryElement.hidden = isLive;
+  bestSectionElement.hidden = isLive;
+  if (isLive) {
+    loadSnapshot().catch(error => {
+      statusElement.textContent = `Unable to load live snapshot: ${error}`;
+    });
+    return;
+  }
+
+  if (view === 'last') {
+    loadLastSession().catch(error => {
+      statusElement.textContent = `Unable to load last session: ${error}`;
+    });
+    return;
+  }
+
+  loadBestLaps(view).catch(error => {
+    statusElement.textContent = `Unable to load best laps: ${error}`;
+  });
 }
 
 function appendCell(row, value, className) {
@@ -96,12 +210,36 @@ async function loadSnapshot() {
   render(await response.json());
 }
 
-loadSnapshot().catch(error => {
-  statusElement.textContent = `Unable to load fixture snapshot: ${error}`;
-});
+async function loadBestLaps(view) {
+  const response = await fetch(`/api/leaderboards/best-laps?window=${encodeURIComponent(view)}&mode=per-driver&limit=20`, { cache: 'no-store' });
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  renderBestLaps(await response.json());
+}
+
+async function loadLastSession() {
+  const response = await fetch('/api/leaderboards/last-session', { cache: 'no-store' });
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  renderLastSession(await response.json());
+}
+
+setView('monthly');
 
 window.setInterval(() => {
-  loadSnapshot().catch(error => {
-    statusElement.textContent = `Unable to refresh live snapshot: ${error}`;
+  if (currentView === 'live') {
+    loadSnapshot().catch(error => {
+      statusElement.textContent = `Unable to refresh live snapshot: ${error}`;
+    });
+    return;
+  }
+
+  if (currentView === 'last') {
+    loadLastSession().catch(error => {
+      statusElement.textContent = `Unable to refresh last session: ${error}`;
+    });
+    return;
+  }
+
+  loadBestLaps(currentView).catch(error => {
+    statusElement.textContent = `Unable to refresh best laps: ${error}`;
   });
 }, 1000);

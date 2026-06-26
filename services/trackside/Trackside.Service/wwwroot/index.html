@@ -16,10 +16,41 @@
         <h1>Trackside</h1>
         <p id="status">Connecting to local host...</p>
       </div>
-      <a href="/api/health">Health</a>
+      <div class="topbarActions">
+        <a href="/configuration.html">Admin</a>
+        <a href="/api/health">Health</a>
+      </div>
     </header>
-    <section class="summary" id="summary"></section>
-    <section class="drivers">
+
+    <nav class="viewTabs" aria-label="Trackside views">
+      <button class="active" data-view="monthly" type="button">Monthly</button>
+      <button data-view="weekly" type="button">Weekly</button>
+      <button data-view="daily" type="button">Daily</button>
+      <button data-view="last" type="button">Last Session</button>
+      <button data-view="live" type="button">Live</button>
+    </nav>
+
+    <section class="summary" id="bestSummary"></section>
+    <section class="drivers" id="bestSection">
+      <h2 id="bestTitle">Monthly Track</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Driver</th>
+            <th>Rig</th>
+            <th>Vehicle</th>
+            <th>Lap</th>
+            <th>Time</th>
+            <th>Set</th>
+          </tr>
+        </thead>
+        <tbody id="bestLaps"></tbody>
+      </table>
+    </section>
+
+    <section class="summary" id="summary" hidden></section>
+    <section class="drivers" id="liveSection" hidden>
       <h2>Live Board</h2>
       <table>
         <thead>

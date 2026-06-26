@@ -24,6 +24,17 @@ describe('startLiveSessionFeed', () => {
         calls.push(`current:${path}`);
         return currentSnapshot;
       },
+      async getBestLaps() {
+        return {
+          window: 'monthly',
+          mode: 'per-driver',
+          trackName: 'Loch Drummond - Short',
+          rows: [],
+        };
+      },
+      async getLastFinishedSession() {
+        return { isAvailable: false, rows: [] };
+      },
       async connectLiveSession(path, onSnapshot) {
         calls.push(`hub:${path}`);
         pushedSnapshots.push(onSnapshot);

@@ -3,7 +3,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Trackside.Application.Configuration;
 using Trackside.Application.LiveSession;
+using Trackside.Application.Persistence;
+using Trackside.Infrastructure.Persistence;
 using Trackside.Infrastructure.Rf2.SharedMemory;
+using Trackside.Service.Hosting;
 using Trackside.Service.Security;
 using Trackside.Service.Workers;
 
@@ -32,6 +35,8 @@ public static class TracksideServiceCollectionExtensions
                 "Trackside:Deployment:InstallMode is required.")
             .Validate(options => !string.IsNullOrWhiteSpace(options.Deployment.ServiceName),
                 "Trackside:Deployment:ServiceName is required.")
+            .Validate(options => !options.Persistence.Enabled || !string.IsNullOrWhiteSpace(options.Persistence.DatabaseFileName),
+                "Trackside:Persistence:DatabaseFileName is required when persistence is enabled.")
             .ValidateOnStart();
 
         services.AddOptions<TracksideSourceOptions>()
@@ -42,10 +47,16 @@ public static class TracksideServiceCollectionExtensions
             .Bind(configuration.GetSection($"{TracksideOptions.SectionName}:{nameof(TracksideOptions.LiveSession)}"))
             .ValidateOnStart();
 
+        services.AddOptions<TracksidePersistenceOptions>()
+            .Bind(configuration.GetSection($"{TracksideOptions.SectionName}:{nameof(TracksideOptions.Persistence)}"))
+            .ValidateOnStart();
+
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<LiveSessionState>();
         services.AddSingleton<TracksideSourceConfigurationStore>();
         services.AddSingleton<AdminUserStore>();
+        services.AddSingleton(ResolveSqliteStoreOptions);
+        services.AddSingleton<ITracksideStore, SqliteTracksideStore>();
         services.AddSingleton<ILeaderboardSnapshotBuilder, LeaderboardSnapshotBuilder>();
         services.AddSingleton<MappedBufferPayloadLocator>();
         services.AddSingleton<Rf2SharedMemoryMapReader>();
@@ -53,8 +64,28 @@ public static class TracksideServiceCollectionExtensions
         services.AddSingleton<Rf2ScoringMapResolver>();
         services.AddSingleton<IRf2ScoringPayloadParser, Rf2ScoringPayloadParser>();
         services.AddSingleton<ILiveSessionSource, ReloadingLiveSessionSource>();
+        services.AddHostedService<TracksidePersistenceInitializer>();
         services.AddHostedService<LiveSessionPublisher>();
 
         return services;
     }
+
+    private static SqliteTracksideStoreOptions ResolveSqliteStoreOptions(IServiceProvider serviceProvider)
+    {
+        var options = serviceProvider.GetRequiredService<IOptions<TracksideOptions>>().Value;
+        var runtimeContext = serviceProvider.GetRequiredService<TracksideRuntimeContext>();
+        var persistence = options.Persistence;
+        var dataRoot = ResolvePath(
+            options.Deployment.DataPath ?? Path.Combine(runtimeContext.ContentRootPath, "App_Data"),
+            runtimeContext.ContentRootPath);
+        var databasePath = !string.IsNullOrWhiteSpace(persistence.DatabasePath)
+            ? ResolvePath(persistence.DatabasePath, dataRoot)
+            : Path.Combine(dataRoot, persistence.DatabaseFileName);
+
+        return new SqliteTracksideStoreOptions(persistence.Enabled, databasePath);
+    }
+
+    private static string ResolvePath(string path, string basePath) => Path.IsPathRooted(path)
+        ? Path.GetFullPath(path)
+        : Path.GetFullPath(Path.Combine(basePath, path));
 }

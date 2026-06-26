@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Trackside.Application.Configuration;
 using Trackside.Application.LiveSession;
+using Trackside.Application.Persistence;
 using Trackside.Domain.LiveSession;
 using Trackside.Infrastructure.Rf2.SharedMemory;
 
@@ -17,6 +18,7 @@ public sealed class SharedMemoryLiveSessionSource : ILiveSessionSource, IDisposa
     private readonly IOptionsMonitor<TracksideSourceOptions> _sourceOptions;
     private readonly TimeProvider _timeProvider;
     private readonly ILeaderboardSnapshotBuilder _snapshotBuilder;
+    private readonly ITracksideStore _store;
     private readonly IRf2ScoringPayloadParser _parser;
     private readonly Rf2SharedMemoryMapReader _mapReader;
     private readonly IRf2SharedMemoryMapDiscovery _mapDiscovery;
@@ -32,6 +34,7 @@ public sealed class SharedMemoryLiveSessionSource : ILiveSessionSource, IDisposa
     /// <param name="sourceOptions">Source configuration.</param>
     /// <param name="timeProvider">Clock used for publication timestamps.</param>
     /// <param name="snapshotBuilder">Raw-to-normalized leaderboard builder.</param>
+    /// <param name="store">Durable Phase 2 store used for staff aliases when enabled.</param>
     /// <param name="parser">rF2 scoring payload parser.</param>
     /// <param name="mapReader">Shared-memory map reader.</param>
     /// <param name="mapDiscovery">Shared-memory map discovery service.</param>
@@ -42,6 +45,7 @@ public sealed class SharedMemoryLiveSessionSource : ILiveSessionSource, IDisposa
         IOptionsMonitor<TracksideSourceOptions> sourceOptions,
         TimeProvider timeProvider,
         ILeaderboardSnapshotBuilder snapshotBuilder,
+        ITracksideStore store,
         IRf2ScoringPayloadParser parser,
         Rf2SharedMemoryMapReader mapReader,
         IRf2SharedMemoryMapDiscovery mapDiscovery,
@@ -52,6 +56,7 @@ public sealed class SharedMemoryLiveSessionSource : ILiveSessionSource, IDisposa
         _sourceOptions = sourceOptions;
         _timeProvider = timeProvider;
         _snapshotBuilder = snapshotBuilder;
+        _store = store;
         _parser = parser;
         _mapReader = mapReader;
         _mapDiscovery = mapDiscovery;
@@ -75,14 +80,14 @@ public sealed class SharedMemoryLiveSessionSource : ILiveSessionSource, IDisposa
     }
 
     /// <inheritdoc />
-    public Task<LiveSessionSnapshot> GetCurrentAsync(CancellationToken cancellationToken)
+    public async Task<LiveSessionSnapshot> GetCurrentAsync(CancellationToken cancellationToken)
     {
         var sequence = Interlocked.Increment(ref _updateSequence);
         var timestampUtc = _timeProvider.GetUtcNow();
         var scoring = _scoringLoop.Latest;
         if (scoring is null)
         {
-            return Task.FromResult(new LiveSessionSnapshot
+            return new LiveSessionSnapshot
             {
                 Source = "shared-memory",
                 Status = "waiting for rF2 scoring map",
@@ -95,7 +100,7 @@ public sealed class SharedMemoryLiveSessionSource : ILiveSessionSource, IDisposa
                     Phase = SessionPhase.Unknown,
                     OverallFlag = "Unavailable",
                 },
-            });
+            };
         }
 
         var source = scoring.Source with
@@ -104,8 +109,17 @@ public sealed class SharedMemoryLiveSessionSource : ILiveSessionSource, IDisposa
             Status = "connected",
         };
 
-        var aliases = new DriverAliasMap(_sourceOptions.CurrentValue.DriverAliases);
-        return Task.FromResult(_snapshotBuilder.Build(source, aliases, timestampUtc, sequence));
+        return _snapshotBuilder.Build(source, await GetAliasMapAsync(cancellationToken), timestampUtc, sequence);
+    }
+
+    private async Task<DriverAliasMap> GetAliasMapAsync(CancellationToken cancellationToken)
+    {
+        if (_store.IsEnabled)
+        {
+            return new DriverAliasMap(await _store.GetDriverAliasesAsync(cancellationToken));
+        }
+
+        return new DriverAliasMap(_sourceOptions.CurrentValue.DriverAliases);
     }
 
     /// <inheritdoc />

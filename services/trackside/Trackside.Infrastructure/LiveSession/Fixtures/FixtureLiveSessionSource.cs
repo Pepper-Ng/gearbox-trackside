@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Trackside.Application.Configuration;
 using Trackside.Application.LiveSession;
+using Trackside.Application.Persistence;
 using Trackside.Application.Serialization;
 using Trackside.Domain.LiveSession;
 
@@ -17,6 +18,7 @@ public sealed class FixtureLiveSessionSource : ILiveSessionSource
     private readonly string _contentRootPath;
     private readonly TimeProvider _timeProvider;
     private readonly IOptionsMonitor<TracksideSourceOptions> _sourceOptions;
+    private readonly ITracksideStore _store;
     private readonly ILeaderboardSnapshotBuilder _snapshotBuilder;
     private readonly ILogger<FixtureLiveSessionSource> _logger;
     private readonly SemaphoreSlim _reloadLock = new(1, 1);
@@ -32,6 +34,7 @@ public sealed class FixtureLiveSessionSource : ILiveSessionSource
     /// <param name="contentRootPath">Host content root used to resolve relative fixture paths.</param>
     /// <param name="timeProvider">Clock used to stamp refreshed snapshots.</param>
     /// <param name="sourceOptions">Source options containing current alias mappings.</param>
+    /// <param name="store">Durable Phase 2 store used for staff aliases when enabled.</param>
     /// <param name="snapshotBuilder">Builder used to normalize raw scoring fixtures.</param>
     /// <param name="logger">Logger for reload and fixture parse events.</param>
     public FixtureLiveSessionSource(
@@ -39,6 +42,7 @@ public sealed class FixtureLiveSessionSource : ILiveSessionSource
         string contentRootPath,
         TimeProvider timeProvider,
         IOptionsMonitor<TracksideSourceOptions> sourceOptions,
+        ITracksideStore store,
         ILeaderboardSnapshotBuilder snapshotBuilder,
         ILogger<FixtureLiveSessionSource> logger)
     {
@@ -46,6 +50,7 @@ public sealed class FixtureLiveSessionSource : ILiveSessionSource
         _contentRootPath = contentRootPath;
         _timeProvider = timeProvider;
         _sourceOptions = sourceOptions;
+        _store = store;
         _snapshotBuilder = snapshotBuilder;
         _logger = logger;
     }
@@ -68,7 +73,7 @@ public sealed class FixtureLiveSessionSource : ILiveSessionSource
 
             return _snapshotBuilder.Build(
                 source,
-                new DriverAliasMap(_sourceOptions.CurrentValue.DriverAliases),
+                await GetAliasMapAsync(cancellationToken),
                 timestampUtc,
                 sequence);
         }
@@ -82,6 +87,16 @@ public sealed class FixtureLiveSessionSource : ILiveSessionSource
             TimestampUtc = timestampUtc,
             UpdateSequence = sequence,
         };
+    }
+
+    private async Task<DriverAliasMap> GetAliasMapAsync(CancellationToken cancellationToken)
+    {
+        if (_store.IsEnabled)
+        {
+            return new DriverAliasMap(await _store.GetDriverAliasesAsync(cancellationToken));
+        }
+
+        return new DriverAliasMap(_sourceOptions.CurrentValue.DriverAliases);
     }
 
     private async Task<LoadedFixture> LoadFixtureAsync(string fixturePath, CancellationToken cancellationToken)

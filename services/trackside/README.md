@@ -28,6 +28,9 @@ This solution is intentionally small but shaped like the final application: one 
 - `SharedMemory` mode has a guarded scoring map reader, parser, dedicated polling loop, auto-discovery for visible PID-suffixed scoring maps, explicit map/PID overrides, stale-read clearing, and scoring update-counter stability checks. It has been live-validated on the local PC for the current leaderboard fields.
 - `ReloadingLiveSessionSource` keeps the `ILiveSessionSource` boundary stable while recreating the concrete source when admin-edited source settings change.
 - The browser-facing live-session contract exposes the normalized leaderboard/scoring fields used in Phase 1, including session metadata, flag/weather fields, lap distance, driver timing, sectors, gaps, lap progress, and highlight flags. It intentionally does not expose raw map names, decode offsets, or other admin-only diagnostics.
+- Phase 2 persistence starts behind `ITracksideStore` in the Application layer. The current service registers a SQLite adapter in Infrastructure, but live publishing, source alias resolution, and admin endpoints depend on the provider-neutral store contract so a later MySQL/PostgreSQL/etc. adapter can replace SQLite without changing those callers.
+- Best-lap boards use stored lap records, not aggregate best-lap summaries. Trackside exposes rFactor 2's lap validity field as `ValidLapFlag`; it must be `2` before a lap is eligible for daily/weekly/monthly timing boards. Public boards default to one fastest lap per entered screen name so one driver cannot fill the whole display.
+- Prepared session setup lives in the durable store: staff assign screen names to rigs before sessions and may optionally link a recurring-customer driver profile. The setup remains active until staff saves changes or clears it.
 
 ## Commands
 
@@ -81,6 +84,10 @@ The `Trackside` section in `Trackside.Service/appsettings.json` controls:
 - `Source.SharedMemory.MultipleScoringMapPolicy` - defaults to `RequireExplicitSelection`, so multiple simultaneous PID-suffixed scoring maps are reported instead of silently chosen.
 - `Source.SharedMemory.Telemetry.Enabled` - disabled by default; the high-rate telemetry loop is scaffolded but not used for Phase 1 leaderboards.
 - `LiveSession.PublishIntervalSeconds` - background SignalR publish cadence.
+- `Persistence.Enabled` - enables the durable Phase 2 store.
+- `Persistence.DatabasePath` / `Persistence.DatabaseFileName` - optional database location override or file name under the resolved data directory.
+- `Persistence.CountSessionsByDefault` - default inclusion flag for newly persisted live-session summaries until the staff inclusion workflow is built.
+- `Persistence.Retention.*` - retention policy targets for detailed lap records, session summaries, long-lived track best records, monthly track periods, and future telemetry samples. Cleanup enforcement is deferred until derived long-term records are separated from short-lived raw details.
 - `Deployment.*` - install mode, service name, bundle version, install root, config/data/log/update paths, and manifest path. Detailed paths are surfaced through the authenticated admin status endpoint rather than public `/api/health`.
 - `Updates.*` - placeholder update status/channel/manifest fields for future dashboard-controlled updates.
 

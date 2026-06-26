@@ -18,6 +18,12 @@ export type SessionKind = 'Unknown' | 'Practice' | 'Qualifying' | 'Race';
 /** Coarse session phase used by the kiosk. */
 export type SessionPhase = 'Unknown' | 'Garage' | 'GreenFlag' | 'SessionOver';
 
+/** Supported best-lap board windows. */
+export type BestLapWindow = 'daily' | 'weekly' | 'monthly' | 'all';
+
+/** Supported best-lap ranking modes. */
+export type BestLapBoardMode = 'per-driver' | 'all-laps';
+
 /** Session-level metadata delivered by the backend. */
 export interface LiveSessionInfo {
   /** Human-readable track name. */
@@ -118,6 +124,88 @@ export interface LiveSessionSnapshot {
   drivers: DriverSnapshot[];
 }
 
+/** Active monthly track period returned by the backend. */
+export interface MonthlyTrackResponse {
+  /** True when a monthly track has been set. */
+  isActive: boolean;
+  /** Active monthly track name. */
+  trackName?: string | null;
+  /** UTC timestamp when the current monthly period started. */
+  startedUtc?: string | null;
+  /** Optional admin reason for the period. */
+  reason?: string | null;
+}
+
+/** One counted timed lap row for historical boards. */
+export interface BestLapRow {
+  /** One-based rank in the response. */
+  rank: number;
+  /** Track name associated with the lap. */
+  trackName: string;
+  /** Staff-facing display name captured with the lap. */
+  displayName: string;
+  /** Underlying fixed rig name. */
+  rigName: string;
+  /** Vehicle name captured with the lap. */
+  vehicleName: string;
+  /** Completed lap number in the session. */
+  lapNumber: number;
+  /** Lap time in seconds. */
+  lapSeconds: number;
+  /** UTC timestamp when Trackside observed the lap. */
+  observedUtc: string;
+}
+
+/** Public best-lap board response. */
+export interface BestLapBoardResponse {
+  /** Requested board window. */
+  window: BestLapWindow;
+  /** Ranking mode used by the board. */
+  mode: BestLapBoardMode;
+  /** Track filter used by the board. */
+  trackName?: string | null;
+  /** Inclusive lower UTC bound used by the query. */
+  fromUtc?: string | null;
+  /** Exclusive upper UTC bound used by the query. */
+  toUtc?: string | null;
+  /** Active monthly track period, when set. */
+  monthlyTrack?: MonthlyTrackResponse | null;
+  /** Counted timed laps ordered by lap time. */
+  rows: BestLapRow[];
+}
+
+/** Last finished session result response. */
+export interface LastFinishedSessionResponse {
+  /** True when a finished session is available. */
+  isAvailable: boolean;
+  /** Track name associated with the session. */
+  trackName?: string | null;
+  /** Session kind associated with the result. */
+  sessionKind?: SessionKind | null;
+  /** UTC timestamp when Trackside last observed the session. */
+  lastSeenUtc?: string | null;
+  /** Result rows. */
+  rows: LastFinishedSessionRow[];
+}
+
+/** One row in a last finished session result. */
+export interface LastFinishedSessionRow {
+  /** One-based rank. */
+  rank: number;
+  /** Screen name captured for the participant. */
+  displayName: string;
+  /** Underlying fixed rig name. */
+  rigName: string;
+  /** Optional linked driver profile id. */
+  driverProfileId?: string | null;
+  /** Vehicle name. */
+  vehicleName: string;
+  /** Completed laps. */
+  completedLaps: number;
+  /** Best lap in seconds. */
+  bestLapSeconds?: number | null;
+}
+
 /** Minimal connection handle used by React and tests. */
 export interface LiveSessionConnection {
   /** Stops receiving live-session updates. */
@@ -130,6 +218,10 @@ export interface LiveSessionFeedClient {
   getClientConfiguration(): Promise<ClientConfiguration>;
   /** Fetches the current snapshot through the REST recovery endpoint. */
   getCurrentSession(path?: string): Promise<LiveSessionSnapshot>;
+  /** Fetches a public best-lap board. */
+  getBestLaps(window: BestLapWindow, limit?: number, mode?: BestLapBoardMode): Promise<BestLapBoardResponse>;
+  /** Fetches the last finished session result. */
+  getLastFinishedSession(): Promise<LastFinishedSessionResponse>;
   /** Opens the live SignalR feed. */
   connectLiveSession(
     hubPath: string,
@@ -172,6 +264,21 @@ export class TracksideApiClient implements LiveSessionFeedClient {
   /** Fetches the current snapshot through the REST recovery endpoint. */
   public async getCurrentSession(path = '/api/live-session/current'): Promise<LiveSessionSnapshot> {
     return this.getJson<LiveSessionSnapshot>(path);
+  }
+
+  /** Fetches a public best-lap board. */
+  public async getBestLaps(window: BestLapWindow, limit = 20, mode: BestLapBoardMode = 'per-driver'): Promise<BestLapBoardResponse> {
+    return this.getJson<BestLapBoardResponse>(`/api/leaderboards/best-laps?window=${encodeURIComponent(window)}&mode=${encodeURIComponent(mode)}&limit=${limit}`);
+  }
+
+  /** Fetches the last finished session result. */
+  public async getLastFinishedSession(): Promise<LastFinishedSessionResponse> {
+    return this.getJson<LastFinishedSessionResponse>('/api/leaderboards/last-session');
+  }
+
+  /** Fetches the active monthly track. */
+  public async getMonthlyTrack(): Promise<MonthlyTrackResponse> {
+    return this.getJson<MonthlyTrackResponse>('/api/leaderboards/monthly-track');
   }
 
   /** Opens a SignalR connection and invokes the supplied callback for each pushed snapshot. */

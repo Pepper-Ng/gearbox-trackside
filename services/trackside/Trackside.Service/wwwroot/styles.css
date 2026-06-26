@@ -30,6 +30,45 @@ body {
   gap: 12px;
 }
 
+.languagePicker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.languagePicker select {
+  border: 1px solid color-mix(in srgb, CanvasText 25%, transparent);
+  border-radius: 6px;
+  background: Canvas;
+  color: CanvasText;
+  font: inherit;
+  padding: 5px 8px;
+}
+
+.viewTabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+  border-bottom: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
+}
+
+.viewTabs button {
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: CanvasText;
+  cursor: pointer;
+  font: inherit;
+  padding: 8px 10px;
+}
+
+.viewTabs button.active {
+  border-bottom-color: light-dark(#005bd1, #7fb6ff);
+  font-weight: 700;
+}
+
 h1,
 h2,
 p {
@@ -189,7 +228,11 @@ td:nth-child(4) {
 #setupPanel[hidden],
 #loginPanel[hidden],
 #dashboardPanel[hidden],
-#logoutButton[hidden] {
+#logoutButton[hidden],
+#summary[hidden],
+#liveSection[hidden],
+#bestSummary[hidden],
+#bestSection[hidden] {
   display: none;
 }
 
@@ -226,7 +269,10 @@ td:nth-child(4) {
 .configurationPanel input,
 .configurationPanel select,
 .configurationPanel textarea,
-.buttonRow button {
+.buttonRow button,
+.sessionSetupRow input,
+.sessionSetupRow select,
+.sessionSetupRow button {
   box-sizing: border-box;
   width: 100%;
   border: 1px solid color-mix(in srgb, CanvasText 25%, transparent);
@@ -260,6 +306,16 @@ td:nth-child(4) {
   width: auto;
   min-width: 120px;
   cursor: pointer;
+}
+
+.sessionSetupRow button {
+  width: auto;
+  cursor: pointer;
+}
+
+.sessionSetupTable th:first-child,
+.sessionSetupTable td:first-child {
+  width: 220px;
 }
 
 .candidateLists {

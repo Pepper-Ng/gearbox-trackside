@@ -35,8 +35,9 @@ public sealed class TracksideSourceConfigurationStore
     /// </summary>
     /// <param name="request">Source configuration values to write.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <param name="includeDriverAliases">True when aliases should remain in the source configuration file.</param>
     /// <returns>Task that completes after the file is written.</returns>
-    public async Task SaveAsync(SourceConfigurationRequest request, CancellationToken cancellationToken)
+    public async Task SaveAsync(SourceConfigurationRequest request, CancellationToken cancellationToken, bool includeDriverAliases = true)
     {
         ArgumentNullException.ThrowIfNull(request);
         Validate(request);
@@ -48,7 +49,7 @@ public sealed class TracksideSourceConfigurationStore
         {
             Mode = request.Mode,
             FixturePath = request.FixturePath,
-            DriverAliases = request.DriverAliases,
+            DriverAliases = includeDriverAliases ? request.DriverAliases : [],
             SharedMemory = request.SharedMemory,
         };
 

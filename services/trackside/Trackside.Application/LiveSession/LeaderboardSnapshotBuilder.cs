@@ -89,6 +89,7 @@ public sealed class LeaderboardSnapshotBuilder : ILeaderboardSnapshotBuilder
             VehicleName = source.VehicleName,
             Position = source.RacePosition,
             CompletedLaps = source.CompletedLaps,
+            ValidLapFlag = source.ValidLapFlag,
             BestLapSeconds = source.BestLapSeconds,
             LastLapSeconds = source.LastLapSeconds,
             CurrentLapSeconds = source.CurrentLapSeconds,

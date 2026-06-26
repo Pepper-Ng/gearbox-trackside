@@ -209,6 +209,7 @@ public sealed class Rf2ScoringPayloadParser : IRf2ScoringPayloadParser
             VehicleName = CString(vehicle.VehicleName),
             RacePosition = place,
             CompletedLaps = Math.Max(0, (int)vehicle.TotalLaps),
+            ValidLapFlag = vehicle.ValidLapFlag,
             BestLapSeconds = Timed(vehicle.BestLapTime),
             LastLapSeconds = Timed(vehicle.LastLapTime),
             CurrentLapSeconds = Timed(vehicle.TimeIntoLap),
@@ -484,7 +485,7 @@ internal struct Rf2VehicleScoringRaw
     public byte[] PitGroup;
     public byte Flag;
     public byte UnderYellow;
-    public byte CountLapFlag;
+    public byte ValidLapFlag;
     public byte InGarageStall;
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)]
     public byte[] UpgradePack;

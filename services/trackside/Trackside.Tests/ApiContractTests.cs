@@ -44,6 +44,60 @@ public sealed class ApiContractTests
     }
 
     /// <summary>
+    /// Keeps the public best-lap endpoint stable for kiosk screens.
+    /// </summary>
+    [Fact]
+    public void BestLapsPathIsStable()
+    {
+        Assert.Equal("/api/leaderboards/best-laps", LiveSessionRoutes.BestLapsPath);
+    }
+
+    /// <summary>
+    /// Keeps the public monthly-track endpoint stable for kiosk screens.
+    /// </summary>
+    [Fact]
+    public void MonthlyTrackPathIsStable()
+    {
+        Assert.Equal("/api/leaderboards/monthly-track", LiveSessionRoutes.MonthlyTrackPath);
+    }
+
+    /// <summary>
+    /// Keeps the admin monthly-track endpoint stable for the admin dashboard.
+    /// </summary>
+    [Fact]
+    public void AdminMonthlyTrackPathIsStable()
+    {
+        Assert.Equal("/api/admin/leaderboards/monthly-track", LiveSessionRoutes.AdminMonthlyTrackPath);
+    }
+
+    /// <summary>
+    /// Keeps the public last-session endpoint stable for kiosk screens.
+    /// </summary>
+    [Fact]
+    public void LastFinishedSessionPathIsStable()
+    {
+        Assert.Equal("/api/leaderboards/last-session", LiveSessionRoutes.LastFinishedSessionPath);
+    }
+
+    /// <summary>
+    /// Keeps prepared session setup endpoint stable for the admin dashboard.
+    /// </summary>
+    [Fact]
+    public void AdminSessionSetupPathIsStable()
+    {
+        Assert.Equal("/api/admin/session-setup", LiveSessionRoutes.AdminSessionSetupPath);
+    }
+
+    /// <summary>
+    /// Keeps driver profile endpoint stable for the admin dashboard.
+    /// </summary>
+    [Fact]
+    public void AdminDriverProfilesPathIsStable()
+    {
+        Assert.Equal("/api/admin/driver-profiles", LiveSessionRoutes.AdminDriverProfilesPath);
+    }
+
+    /// <summary>
     /// Keeps the admin session endpoint stable for the admin dashboard.
     /// </summary>
     [Fact]

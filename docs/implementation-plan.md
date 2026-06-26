@@ -411,6 +411,8 @@ Deferred from Phase 1, but still tracked:
 
 ### Phase 2 - Staff controls and historical boards
 
+Status: Phase 2 has started with the durable persistence foundation and the first historical board slice. A provider-neutral application store interface is in place, with a SQLite adapter registered by the service composition root. The current slice creates the Phase 2 schema for aliases/prepared rig setup, optional driver profiles, sessions, participants, valid lap records, sectors, summary results, and monthly track periods; seeds legacy config aliases once; routes current alias reads/writes through the store when persistence is enabled; persists live snapshots from the publisher; records completed laps when the completed-lap count advances; exposes public daily/weekly/monthly/all-time best-lap API responses; adds kiosk UI tabs for monthly, weekly, daily, last session, and live views; adds admin controls to prepare rig/name/profile assignments; and adds admin controls to start/reset the active monthly track period. Public boards default to one fastest valid timed lap per entered screen name, with an all-laps API mode available for diagnostics or alternate displays. Dedicated inclusion/exclusion/correction UX for individual mistakes remains to be built.
+
 Current admin/security baseline: the service has cookie-based admin login, local file-backed admin accounts with salted PBKDF2-HMAC-SHA256 password hashes, installer-first initial admin bootstrap, first-run web setup fallback when no admin users exist, protected source configuration, protected admin user management, and protected advanced status. The public kiosk and basic health endpoint remain unauthenticated; detailed paths, source diagnostics, discovery candidates, and admin user status are admin-only. Config and admin-store writes use temp-file replacement; packaged installs restrict the admin-store ACL to SYSTEM and Administrators.
 
 Human prerequisites:
@@ -419,16 +421,28 @@ Human prerequisites:
 
 Agent implementation tasks:
 
-* Add SQLite persistence for sessions, participants, laps, sectors, aliases, and summary results.
-* Add staff/admin UI for aliases, session inclusion/exclusion, and kiosk display mode.
+* Add SQLite persistence for sessions, participants, laps, sectors, aliases, and summary results. - Started: schema, store interface, SQLite adapter, prepared setup persistence, optional driver profiles, live snapshot persistence, valid-lap records, monthly track periods, last-session results, and best-lap queries are implemented behind `ITracksideStore`; follow-up work should add formal migrations beyond schema version 1 as fields evolve.
+* Add staff/admin UI for aliases, session inclusion/exclusion, and kiosk display mode. - Started for prepared rig/name/profile setup, alias persistence, and monthly track set/reset through the existing admin dashboard contract; dedicated session inclusion/exclusion, correction, and kiosk display-mode workflows are still pending.
 * Add correction/exclusion flows for bad sessions or incorrect driver mappings.
-* Add secondary daily/weekly/monthly best pages.
-* Group historical results by track, car/content, session type, assist preset if available, and date window.
+* Add secondary daily/weekly/monthly best pages. - Started: kiosk UI exposes monthly, weekly, and daily board tabs; monthly defaults to the active monthly track period so a venue can show one track's best times for that month. Daily and weekly advance automatically by local time windows. Monthly track periods never auto-reset; staff decides when to start or reset a monthly period.
+* Group historical results by track, car/content, session type, assist preset if available, and date window. - Started for track and date window; car/content is displayed per row, while session-type and assist-preset filters remain future work.
+
+Lap validity rule: best-lap boards must only use full timed laps that rFactor 2 marks valid for timing. Trackside exposes this as `ValidLapFlag`; rFactor 2's underlying values are `0 = do not count lap or time`, `1 = count lap but not time`, and `2 = count lap and time`. Only `2` is eligible for best-time boards. Each per-driver/session lap record stores the lap number, lap time, valid-lap flag, and whether it is valid for lap/timing.
+
+Board ranking rule: public daily/weekly/monthly boards default to `per-driver`, meaning each driver identity appears once with their fastest valid timed lap for the selected track/window. The API also supports `all-laps` for diagnostic/admin displays where repeated laps from the same driver may be useful.
+
+Driver identity rule: a `participant` is one rig/name/vehicle entry in one session. Trackside must not infer global customer identity from a screen name alone. Optional recurring-customer `driver_profiles` can be linked by staff during prepared session setup; casual customers can remain screen-name only. Public display boards deduplicate by entered screen name by default, not by driver profile, so recurring profiles are an add-on for future email/report/telemetry delivery rather than a requirement for normal venue boards.
+
+Prepared session setup rule: staff can prepare rig-to-screen-name assignments before a session and optionally attach a recurring driver profile. That setup carries forward to future sessions until staff changes it or presses clear setup. This matches normal venue operation where the same group may run several back-to-back sessions.
+
+Monthly track rule: staff can start a new active monthly track period. Starting or resetting the monthly track begins fresh displayed stats from that UTC start time without deleting older lap records.
+
+Retention policy direction: detailed lap records are small but operationally short-lived, while track best records and monthly track periods are business history. Current defaults are 35 days for detailed lap records, 730 days for session summaries, indefinite for track best/monthly period records, and 3 days for future high-volume telemetry samples. Cleanup enforcement should only be added after derived long-term track best records are separated from short-lived raw lap details, so an active monthly board cannot be pruned accidentally.
 
 Validation:
 
 * Staff can assign aliases, mark whether a session counts, correct/exclude results, and view current plus historical boards using fixture data.
-* Persistence survives backend restart.
+* Persistence survives backend restart. - Covered for aliases and best-lap summaries by store tests that reopen the same database through a fresh store instance.
 
 ### Phase 3 - Venue data-source and deployment validation
 
@@ -554,8 +568,8 @@ Venue validation:
 If an implementation agent starts from this document, begin with the post-PoC baseline:
 
 1. Optionally capture a small set of validated scoring snapshots for regression fixtures once convenient; this is useful hardening but no longer blocks Phase 1 behavior.
-2. Replace config-backed aliases with the first staff workflow when Phase 2 starts.
-3. Start Phase 2 storage design: SQLite-backed stores behind application-level interfaces for aliases, sessions, laps/sectors, and historical summaries.
+2. Continue replacing config-backed aliases with the first staff workflow: aliases now persist through `ITracksideStore`, but the dedicated staff UX and reset semantics still need product decisions.
+3. Extend the Phase 2 storage foundation: keep new persistence behavior behind `ITracksideStore`, add migrations beyond schema version 1 as needed, and build staff inclusion/exclusion plus historical-board queries on top of the existing sessions/participants/sectors/summary tables.
 4. Keep shaping the kiosk as a layout layer over the normalized snapshot, keeping data/feed logic outside presentation components.
 5. Carry forward the telemetry source requirements from `docs/telemetry-report-poc-plan.md` when report work begins; high-cadence shared-memory robustness belongs with telemetry/report work, not the current low-cadence live timing board.
 

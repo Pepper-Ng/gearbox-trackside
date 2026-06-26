@@ -4,6 +4,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Trackside.Application.Configuration;
 using Trackside.Application.LiveSession;
+using Trackside.Application.Persistence;
+using Trackside.Domain.LiveSession;
 using Trackside.Service.Hubs;
 
 namespace Trackside.Service.Workers;
@@ -15,8 +17,10 @@ public sealed class LiveSessionPublisher : BackgroundService
 {
     private readonly ILiveSessionSource _source;
     private readonly LiveSessionState _state;
+    private readonly ITracksideStore _store;
     private readonly IHubContext<LiveSessionHub, ILiveSessionClient> _hubContext;
     private readonly IOptionsMonitor<TracksideLiveSessionOptions> _options;
+    private readonly IOptionsMonitor<TracksidePersistenceOptions> _persistenceOptions;
     private readonly ILogger<LiveSessionPublisher> _logger;
 
     /// <summary>
@@ -24,20 +28,26 @@ public sealed class LiveSessionPublisher : BackgroundService
     /// </summary>
     /// <param name="source">Configured live-session source.</param>
     /// <param name="state">Shared current-snapshot cache.</param>
+    /// <param name="store">Durable Phase 2 store.</param>
     /// <param name="hubContext">SignalR hub context used for browser pushes.</param>
     /// <param name="options">Live application options used for publish cadence.</param>
+    /// <param name="persistenceOptions">Persistence options used for default session inclusion.</param>
     /// <param name="logger">Logger for source failures and lifecycle events.</param>
     public LiveSessionPublisher(
         ILiveSessionSource source,
         LiveSessionState state,
+        ITracksideStore store,
         IHubContext<LiveSessionHub, ILiveSessionClient> hubContext,
         IOptionsMonitor<TracksideLiveSessionOptions> options,
+        IOptionsMonitor<TracksidePersistenceOptions> persistenceOptions,
         ILogger<LiveSessionPublisher> logger)
     {
         _source = source;
         _state = state;
+        _store = store;
         _hubContext = hubContext;
         _options = options;
+        _persistenceOptions = persistenceOptions;
         _logger = logger;
     }
 
@@ -52,6 +62,7 @@ public sealed class LiveSessionPublisher : BackgroundService
             {
                 var snapshot = await _source.GetCurrentAsync(stoppingToken);
                 _state.Update(snapshot);
+                await PersistSnapshotAsync(snapshot, stoppingToken);
                 await _hubContext.Clients.All.SessionUpdated(snapshot);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -64,6 +75,25 @@ public sealed class LiveSessionPublisher : BackgroundService
             }
 
             await Task.Delay(GetPublishInterval(), stoppingToken);
+        }
+    }
+
+    private async Task PersistSnapshotAsync(LiveSessionSnapshot snapshot, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _store.SaveLiveSessionSnapshotAsync(
+                snapshot,
+                _persistenceOptions.CurrentValue.CountSessionsByDefault,
+                cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to persist live-session snapshot.");
         }
     }
 
