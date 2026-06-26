@@ -1,7 +1,7 @@
 # Documentation
 
 Developer-facing documentation lives here.\
-A separate non-technical runbook for the venue owner (Phase 7) should also land here once written.
+A separate non-technical runbook for the venue owner (Phase 9) should also land here once written.
 
 Current status: the Phase 0B scaffold is complete, the Phase 0A proof of concept is preserved under `tools/rf2-poc`, and the telemetry/source-direction decision is documented.
 

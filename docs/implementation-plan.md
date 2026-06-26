@@ -15,11 +15,11 @@ Trackside provides:
 
 * Live session leaderboards and kiosk displays.
 * Staff controls for driver aliases, session inclusion, and display modes.
-* Optional spectator camera direction for one venue screen.
-* Later per-driver telemetry web reports.
+* Optional later spectator camera direction for one venue screen.
+* Per-driver telemetry web reports after the UI foundation and local rFactor 2 validation.
 * Later PDF/printable telemetry reports.
 
-Current planning status: Phase 0A PoC is complete, the telemetry/source direction is decided, ADR-0001 has accepted .NET / ASP.NET Core for the production host, Phase 0B has produced the service/tray/rig-agent/kiosk scaffold, and Phase 0C adds the packaged runtime skeleton before the leaderboard vertical slice.
+Current planning status: Phase 0A PoC is complete, the telemetry/source direction is decided, ADR-0001 has accepted .NET / ASP.NET Core for the production host, Phase 0B produced the service/tray/rig-agent/kiosk scaffold, Phase 0C added the packaged runtime skeleton, Phase 1 delivered the live board, and Phase 2 delivered staff controls plus historical boards. The reordered roadmap now moves to Phase 3 UI foundation before local rFactor 2 integration validation, telemetry/report implementation, and venue validation.
 
 Confirmed venue facts:
 
@@ -405,8 +405,8 @@ Deferred from Phase 1, but still tracked:
 * Telemetry channels remain Phase 5; Phase 1 intentionally uses scoring/session channels only.
 * Historical persistence, SQLite/database storage, result summaries, and daily/weekly/monthly boards remain Phase 2.
 * The proper staff alias workflow, session inclusion/exclusion, corrections, and kiosk display-mode controls remain Phase 2. Phase 1 only has config-backed aliases.
-* Venue rollout hardening, runbooks, final host/install decisions, canary rollout, restart/recovery checks, update flow, and rollback validation remain Phases 3 and 7.
-* More polished kiosk layout/graphics remain a follow-up UI task after the live data contract is stable; the current Phase 1 board is functional.
+* Venue-preview kiosk/admin styling is Phase 3 now that the live data and Phase 2 staff workflows are stable enough to present.
+* Local rFactor 2 integration validation, venue validation, operational hardening, and runbook/handover now land in Phases 4, 6, 7, and 9 respectively.
 * Captured raw memory-map regression fixtures are useful hardening and should be added when convenient, but they no longer block Phase 1 because live validation has proven the current leaderboard path.
 
 ### Phase 2 - Staff controls and historical boards
@@ -444,136 +444,266 @@ Validation:
 * Staff can assign aliases, mark whether a session counts, review persisted session participants, correct/exclude results, invalidate laps, configure kiosk display mode, and view current plus historical boards using fixture data.
 * Persistence survives backend restart. - Covered for aliases and best-lap summaries by store tests that reopen the same database through a fresh store instance.
 
-### Phase 3 - Venue data-source and deployment validation
+### Phase 3 - UI foundation and venue-preview styling
+
+Direction: make Trackside look credible before the first venue-facing validation, without changing the stable Phase 2 backend contracts. This phase is a design-system and presentation layer pass over the existing kiosk/admin capabilities. It should not become a marketing site or final branding exercise; the goal is a polished, reusable operational UI foundation that can support telemetry/report pages later.
+
+Human prerequisites:
+
+* Provide any available Gearbox Race Café brand cues, logo files, colors, fonts, venue photos, or screen dimensions. If unavailable, proceed with a neutral motorsport timing-board style.
+* Confirm target kiosk screen aspect ratios and expected viewing distance when known. If unavailable, design for common 16:9 desktop/kiosk displays plus responsive browser fallbacks.
+
+Agent implementation tasks:
+
+* Create reusable visual tokens for color, spacing, typography, borders, focus states, table density, alerts, and buttons in the service-hosted static UI and React kiosk app.
+* Redesign the kiosk as a presentable race timing display: dark/high-contrast board, clear mode hierarchy, large readable driver names and lap times, strong best-lap/sector states, and intentional empty/error states.
+* Redesign the admin shell as a calm operational dashboard: consistent tabs, panels, forms, tables, correction controls, status messages, and safe destructive/invalidating actions.
+* Keep UI modular: data fetching, formatting, table rendering, correction controls, and layout/styling should remain separable so future React/admin routing or branding can replace the visual layer without rewriting backend logic.
+* Avoid adding new product behavior unless the styling pass reveals a small usability gap that is cheap and local.
+* Add fixture screenshots or browser smoke checks where practical so the kiosk/admin layouts do not regress into default tables or unreadable states.
+
+Dependencies:
+
+* Depends on Phase 2 data/API contracts being stable.
+* Does not require venue access or live rFactor 2.
+* Benefits from screenshots/videos of the actual venue screens, but should not block on them.
+
+Validation:
+
+* Fixture-backed kiosk looks presentable on desktop and common kiosk viewport sizes.
+* Admin correction/session/leaderboard controls remain usable after styling.
+* UI tests/builds pass, and any screenshot/smoke checks show non-default, readable layouts.
+* No backend contract changes are required for later telemetry pages to reuse the layout system.
+
+Exit criteria:
+
+* The kiosk is acceptable to show during local or venue demos without caveats about default browser styling.
+* The admin UI is clean enough for staff/operator validation, even if final branding and workflow polish remain later.
+
+### Phase 4 - Local rFactor 2 integration validation
+
+Direction: validate the shared-memory/scoring source against a local rFactor 2 Dedicated Server and client setup before venue access. The shared-memory plugin is widely used in the rFactor 2 ecosystem, and Trackside's source adapter boundaries are designed so field/offset/source quirks can be fixed in the data-source module without rewriting persistence, admin, kiosk, or report logic.
+
+Human prerequisites:
+
+* Provide or run a local Windows environment with rFactor 2 Dedicated Server, one rFactor 2 client, the shared-memory map plugin, and representative content.
+* Provide captured logs, screenshots, memory-map snapshots, or remote access if the agent cannot run the local environment directly.
+* Confirm plugin version and rFactor 2 build used for local testing.
+
+Agent implementation/support tasks:
+
+* Prepare a local rFactor 2 validation checklist covering server start, client join, session transitions, laps, valid-lap flags, track/vehicle names, driver ids, shared-memory map discovery, service restart, and kiosk reconnect.
+* Validate that scoring/driver ids stay stable for a rig within a session, with the current assumption that they do unless local testing proves otherwise.
+* Capture a small set of local shared-memory/scoring snapshots for regression fixtures where possible.
+* Harden `Trackside.Infrastructure/Rf2` parser/source code only when local validation reveals a concrete mismatch; keep all fixes behind `ILiveSessionSource`, parser, or resolver boundaries.
+* Confirm that Phase 2 persistence and correction workflows behave correctly with locally captured real scoring data.
+
+Dependencies:
+
+* Depends on the Phase 1 live source and Phase 2 persistence/correction contracts.
+* Requires local rFactor 2 access or captured local data.
+* Does not require venue hardware, venue LAN access, or final service host decisions.
+
+Validation:
+
+* Local live board updates from real rFactor 2 scoring data.
+* Session changes, track changes, lap validity, and completed-lap persistence behave as expected.
+* Service restart and browser reconnect recover without data corruption.
+* Any source/parser fixes are covered by fixture or parser tests.
+
+Exit criteria:
+
+* Written local validation notes identify the tested rFactor 2/plugin versions, fields confirmed, any gaps found, and whether the data-source module remains sufficient for venue testing.
+
+### Phase 5 - Telemetry collection and report MVP
+
+Direction: add high-cadence telemetry capture and browser-based report generation before venue validation, so the venue trip can test both live timing and telemetry/report flows together. The current telemetry-report proof-of-concept findings and final source decision live in `docs/telemetry-report-poc-plan.md`. `docs/core-poc.md` records the source-preservation evidence from the completed Phase 0A PoC.
+
+Human prerequisites:
+
+* Confirm the first report scope: channels, comparison baseline, retention expectations, and whether reports are staff-only or customer-visible.
+* Provide local or recorded telemetry snapshots if live local rFactor 2 telemetry access is not available.
+
+Agent implementation tasks:
+
+* Implement central server-side telemetry capture as the default mode, using the dedicated-server shared-memory telemetry path first.
+* Use a dedicated high-rate telemetry loop, defaulting near `100 Hz`, isolated from lower-rate scoring/session reads so leaderboard stability is not tied to telemetry cadence.
+* Add a normalized telemetry ingestion contract in the Application layer so future rig-local collectors can feed the same report pipeline.
+* Store short-lived raw telemetry samples with enough session, participant, lap, rig, vehicle, track, and driver-display metadata to associate them with Phase 2 sessions and corrections.
+* Add derived report records or summary projections for long-lived report data so raw high-volume telemetry can be pruned safely.
+* Build report generation services for per-driver/per-session pages with channels such as throttle, brake, steering, gear, speed, RPM, and lap/sector markers where available.
+* Add minimal report APIs: list reports/sessions, fetch one report, fetch channel series, and expose report generation/status.
+* Add a basic UI using the Phase 3 layout system: report list, driver/session selector, and simple telemetry graphs. Keep chart components modular so final visual polish can evolve later.
+* Suppress or annotate gear/shift analysis when assist settings make that data misleading. If assist preset data is still unavailable, make this explicit in the report payload/UI.
+
+Dependencies:
+
+* Depends on Phase 2 identity/session/lap persistence and Phase 3 UI foundation.
+* Benefits from Phase 4 local rFactor 2 validation, but can start from recorded telemetry fixtures.
+* Does not require venue access.
+
+Validation:
+
+* Recorded telemetry fixtures render a usable per-driver web report.
+* Local rFactor 2 laps, when available, produce telemetry records and a report without breaking live timing.
+* Telemetry retention can prune raw samples while keeping generated reports/summaries.
+* Telemetry source failure does not crash or block the live board.
+
+Exit criteria:
+
+* A local or fixture-backed user can complete a session, select a driver/session, and view a basic browser telemetry report.
+
+### Phase 6 - Venue validation
+
+Direction: treat venue validation as environment acceptance, not as the first proof that the product works. By this phase, the app should already have presentable UI, local rFactor 2 validation, staff controls, historical boards, and basic telemetry/report flows. The venue trip should identify venue-specific installation, topology, permission, display, and workflow issues.
 
 Human prerequisites:
 
 * Provide physical or remote access during an agreed venue validation window.
 * Confirm admin rights and acceptable install locations.
-* Provide machine specs for the server PC and display PC.
+* Provide machine specs for the dedicated server PC, display/kiosk PC, and any candidate service host.
+* Confirm existing plugin inventory, especially motion/input plugins on rigs and server-side plugins.
 
 Agent support tasks:
 
 * Prepare an install checklist for the shared-memory bridge and Trackside service.
-* Prepare a rollback checklist.
-* Prepare a validation checklist for field coverage, service startup, kiosk connectivity, and restart behavior.
+* Prepare a rollback checklist and canary rollout plan.
+* Prepare a venue validation checklist covering scoring fields, telemetry fields, service startup, kiosk connectivity, admin workflows, report generation, restarts, screen readability, and recovery.
+* Prepare a venue data-source decision template: dedicated server, spectator client, selected rig, all rigs, or separate host.
 
 Venue validation:
 
-* Confirm whether the shared-memory/scoring bridge works on the dedicated server PC and exposes all required live board fields.
-* If server-side data is insufficient, test fallback sources: spectator client, one rig, or all rigs.
-* Confirm a suitable service host: dedicated server PC preferred, display PC or separate mini PC as fallback.
+* Confirm whether the shared-memory/scoring/telemetry bridge works on the dedicated server PC and exposes all required live board and telemetry fields.
+* If server-side data is insufficient, test fallback sources: spectator client, one selected rig, or all rigs only if needed.
+* Confirm a suitable service host: dedicated server PC preferred if headroom/permissions are acceptable; display PC or separate mini PC as fallback.
+* Validate kiosk readability and admin usability on actual venue screens and browser hardware.
+* Validate telemetry report generation from at least one real or canary venue session.
 * Validate coexistence with existing motion/input plugins on one canary rig before broad installation.
 
 Exit criteria:
 
-* Written decision for venue data source, service host, install path, rollback path, and canary rollout order.
+* Written decisions for venue data source, service host, install path, rollback path, canary rollout order, and any venue-specific source/parser/deployment fixes.
 
-### Phase 4 - Spectator camera feasibility and v1
+### Phase 7 - Operational hardening and deployment automation
 
-Human prerequisites:
-
-* Confirm whether a game-capable spectator PC/license/content is available or must be purchased.
-* Run or support the test for spectator-only DLC requirements.
-
-Agent implementation tasks:
-
-* Only after hardware/licensing is viable, scaffold the C++ camera plugin project.
-* Read the Studio 397 Internals Plugin SDK and document the minimum callbacks needed for camera control.
-* Implement one simple camera mode first: rotate all drivers or follow leader.
-* Add optional staff override through a simple external control file or existing admin UI.
-* Keep all plugin logic defensive and narrow; no storage, PDF generation, or web server inside the plugin.
-
-Validation:
-
-* One spectator camera feed can run without disturbing the live board or simulator clients.
-
-### Phase 5 - Telemetry web report MVP
-
-The current telemetry-report proof-of-concept findings and final source decision live in `docs/telemetry-report-poc-plan.md`. `docs/core-poc.md` records the source-preservation evidence from the completed Phase 0A PoC.
+Direction: turn the locally and venue-validated application into something that can survive normal venue operation, restarts, updates, and support handoff. This phase should emphasize reliability, diagnostics, update safety, and rollback over adding new product features.
 
 Human prerequisites:
 
-* Confirm telemetry report priority before this phase starts.
-* Provide local or recorded telemetry snapshots if live rFactor 2 access is not available.
-
-Agent implementation tasks:
-
-* Implement central server-side telemetry capture as default mode.
-* Use a dedicated high-rate telemetry loop that polls at `100 Hz` by default, with lower-rate scoring/session reads.
-* Keep report generation and driver-statistics pipelines source-agnostic through a normalized telemetry ingestion interface.
-* Add configuration-driven telemetry source selection so rig-local collectors can be enabled later without redesigning downstream report/analysis code.
-* Capture or parse per-driver/per-lap channels such as throttle, brake, steering, and gear.
-* Store telemetry with enough identity/session metadata to associate it with aliases and historical laps.
-* Build a browser-based per-driver report page.
-* Add comparison against session best or personal best once identity and storage are reliable.
-* Suppress or adapt gear display when auto-shift/assist configuration says gear analysis is not meaningful.
-
-Validation:
-
-* Recorded telemetry fixtures render a usable per-driver web report.
-* Local rFactor 2 laps, when provided, produce a usable per-driver telemetry page without PDF or printer dependency.
-
-### Phase 6 - Late nice-to-haves: PDF, printing, incident replay
-
-Human prerequisites:
-
-* Choose or install a venue printer before implementing print-specific behavior.
-* Confirm whether staff actually want automatic printing or only manual print/download.
-* Confirm whether incident replay is operationally desirable after camera v1 is proven.
-
-Agent implementation tasks:
-
-* Add branded PDF generation after the web report is stable.
-* Add manual print/download first; auto-print only after staff approves the workflow.
-* Add manual replay trigger before automatic incident detection.
-* For automatic incident replay, confirm exact telemetry/rules fields for impact/off-track/spin detection and tune against local sessions.
-
-Validation:
-
-* Print path works on the real venue printer.
-* Replay features can be triggered deliberately and disabled quickly if disruptive.
-
-### Phase 7 - Venue rollout, hardening, training, handover
-
-Human prerequisites:
-
-* Approve rollout window and canary machine/screen.
-* Confirm who will operate the system during opening hours.
+* Approve target install topology from Phase 6.
+* Approve rollout window, update policy, and canary machine/screen.
+* Confirm who can administer the service during opening hours.
 
 Agent implementation/support tasks:
 
-* Use the Phase 0C bundle/install skeleton for canary releases and rollback.
+* Extend the Phase 0C bundle/install skeleton into a production-ready service/tray install flow for the chosen host.
 * Configure final service auto-start/restart settings for the chosen venue service host.
 * Package the tray companion/status surface so it auto-starts for the venue user account when appropriate and can reopen dashboards after reboot.
-* Add rotating log files for backend services and any plugin control surface.
-* Add manual disable/override switches for every automated feature.
+* Add rotating log files for backend services, telemetry capture, update attempts, and any plugin/control surfaces.
+* Add dashboard-visible diagnostics for source status, telemetry status, database status, retention cleanup status, and recent errors.
+* Add backup/restore guidance or tooling for SQLite data and writable configuration.
 * Implement dashboard-visible update checks against a signed/versioned manifest hosted on an operator-controlled server.
-* Extend the Phase 0C updater boundary into a staff-approved update flow: download bundle, verify version/signature/checksum, stop affected services, swap files with rollback, restart services, and report success/failure.
+* Extend the updater boundary into a staff-approved update flow: download bundle, verify version/signature/checksum, stop affected services, swap files with rollback, restart services, and report success/failure.
 * Prevent silent updates during active sessions; require an idle/safe restart window.
-* Write a short non-technical runbook for venue staff.
+* Add manual disable/override switches for every automated feature that can affect venue operations.
+
+Validation:
+
+* Reboot the service host and confirm service recovery, tray/status availability, and dashboards reopening without developer help.
+* Test update installation and rollback with a harmless canary build.
+* Simulate source outage, telemetry outage, database unavailable/locked cases, and confirm errors are visible without crashing rFactor 2.
+
+Exit criteria:
+
+* A canary install can be installed, restarted, diagnosed, updated, and rolled back with documented commands and visible status.
+
+### Phase 8 - Final polish and workflow refinement
+
+Direction: use feedback from local validation, telemetry work, and venue validation to refine workflows and presentation. This is where the product becomes comfortable for staff and credible for customers, after the technical foundations are stable.
+
+Human prerequisites:
+
+* Provide feedback from staff/operator use, venue screenshots, and any customer-facing display preferences.
+* Confirm any final brand/style requirements beyond the Phase 3 venue-preview UI.
+
+Agent implementation tasks:
+
+* Refine kiosk visuals with real venue display constraints: spacing, contrast, animation restraint, empty states, multi-screen display modes, and branding.
+* Refine admin workflows based on actual staff use: fewer clicks for common setup, safer correction confirmation, better success/error messaging, and clearer session/report navigation.
+* Refine telemetry report UX: graph readability, channel selection, lap comparison, export/download affordances, and customer-safe report sharing if desired.
+* Add lightweight automation for repetitive venue tasks, such as preparing default rigs, rotating monthly challenge state, or archiving report links.
+* Address edge cases discovered during Phase 6 and Phase 7 that are product-level rather than deployment-level.
+
+Validation:
+
+* Staff can perform normal session prep, correction, board management, and report lookup without developer assistance.
+* Kiosk and report pages look intentional on the real target displays.
+* No workflow polish breaks existing API contracts or backend invariants.
+
+Exit criteria:
+
+* The application is ready for owner/staff handover documentation and routine operation.
+
+### Phase 9 - Owner runbook and handover
+
+Direction: make the system operable by non-developers. This phase should produce concise owner/staff documentation and any final support artifacts needed for daily operation.
+
+Human prerequisites:
+
+* Confirm who receives the handover and what technical level they have.
+* Confirm preferred documentation format and language expectations.
+
+Agent implementation/support tasks:
+
+* Write a short non-technical runbook for venue staff covering daily startup/checks, session prep, aliases, correction/exclusion, kiosk display modes, monthly challenge reset, telemetry reports, and shutdown.
+* Document troubleshooting: no live data, no telemetry, wrong driver names, invalid laps, kiosk disconnected, service not running, database/config backup, and failed update.
 * Document rFactor 2/Steam update control and re-test procedure.
+* Document backup/restore and rollback procedures.
+* Add a quick reference checklist for opening, during-session monitoring, closing, and escalation.
 
-Venue validation:
+Validation:
 
-* Roll out as a canary first: one service host, one display screen, one rig/client path if applicable.
-* Run a real venue session end-to-end with live board, aliases, staff controls, and agreed optional features.
-* Reboot the service host and confirm the service recovers, the tray/status surface appears for the venue user, and dashboards can be reopened without developer help.
-* Test update installation and rollback with a harmless canary build before allowing venue-facing updates.
+* A non-developer can follow the runbook to open dashboards, verify status, correct a common mistake, restart services, and know when to escalate.
+
+Exit criteria:
+
+* Owner/staff handover package is complete and matches the deployed venue topology.
+
+### Phase 10 - Optional later enhancements: camera, PDF, printing, incident replay
+
+Direction: keep these features behind the core live timing, staff controls, telemetry, validation, and operational handover path. Implement them only when the user explicitly prioritizes them and the needed hardware/business prerequisites exist.
+
+Human prerequisites:
+
+* For camera work: confirm whether a game-capable spectator PC/license/content is available or must be purchased, and run or support the spectator-only DLC requirement test.
+* For printing: choose or install a venue printer and confirm whether staff want automatic printing or manual print/download.
+* For incident replay: confirm whether replay is operationally desirable after camera/feed behavior is proven.
+
+Agent implementation tasks:
+
+* Camera: scaffold the C++ camera plugin only after hardware/licensing is viable; read the Studio 397 Internals Plugin SDK; implement one simple mode first, such as rotate all drivers or follow leader; keep plugin logic defensive and narrow.
+* PDF/print: add branded PDF generation after the browser report is stable; add manual download/print first; add auto-print only after staff approves the workflow.
+* Incident replay: add manual replay trigger before automatic detection; tune impact/off-track/spin rules against local sessions and make every automated behavior easy to disable.
+
+Validation:
+
+* Optional features can run without disturbing live timing, telemetry collection, staff controls, or rFactor 2 clients.
+* Print path works on the real venue printer before any automatic printing is enabled.
+* Camera/replay features can be deliberately triggered and quickly disabled if disruptive.
 
 ---
 
 ## 9. Agent-Ready Next Work Package
 
-If an implementation agent starts from this document, begin with the post-PoC baseline:
+If an implementation agent starts from this document after Phase 2, begin with Phase 3:
 
-1. Optionally capture a small set of validated scoring snapshots for regression fixtures once convenient; this is useful hardening but no longer blocks Phase 1 behavior.
-2. Continue replacing config-backed aliases with the first staff workflow: aliases now persist through `ITracksideStore`, but the dedicated staff UX and reset semantics still need product decisions.
-3. Extend the Phase 2 storage foundation: keep new persistence behavior behind `ITracksideStore`, add migrations beyond schema version 1 as needed, and build staff inclusion/exclusion plus historical-board queries on top of the existing sessions/participants/sectors/summary tables.
-4. Keep shaping the kiosk as a layout layer over the normalized snapshot, keeping data/feed logic outside presentation components.
-5. Carry forward the telemetry source requirements from `docs/telemetry-report-poc-plan.md` when report work begins; high-cadence shared-memory robustness belongs with telemetry/report work, not the current low-cadence live timing board.
+1. Build the reusable UI foundation and venue-preview styling for the service-hosted kiosk/admin pages and the React kiosk app.
+2. Keep UI work modular: do not mix data fetching, business rules, and layout styling in ways that would make later telemetry/report pages expensive to add.
+3. Use fixture data first and add screenshot/browser smoke checks where practical so the design can be validated locally.
+4. After the UI foundation is in place, move to Phase 4 local rFactor 2 integration validation using the modular shared-memory source boundary.
+5. Carry forward telemetry source requirements from `docs/telemetry-report-poc-plan.md` for Phase 5; high-cadence shared-memory robustness belongs with telemetry/report work, not the low-cadence live timing board.
 
-Do not restart Phase 0A, Steam setup, venue setup, printer setup, or camera plugin work unless the user explicitly provides those prerequisites and asks for that phase.
+Do not restart Phase 0A, Steam setup, venue setup, printer setup, or camera plugin work unless the user explicitly provides those prerequisites and asks for that phase. Venue-specific host/install decisions belong in Phase 6, and optional camera/printing/replay work belongs in Phase 10.
 
 ---
 
