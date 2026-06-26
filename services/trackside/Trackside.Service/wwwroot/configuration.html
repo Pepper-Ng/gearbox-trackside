@@ -65,6 +65,7 @@
       <nav class="adminTabs" aria-label="Admin sections">
         <button class="active" data-tab="sourceTab" type="button" data-i18n="tabs.source">Source</button>
         <button data-tab="sessionSetupTab" type="button" data-i18n="tabs.sessionSetup">Session Setup</button>
+        <button data-tab="sessionsTab" type="button" data-i18n="tabs.sessions">Sessions</button>
         <button data-tab="leaderboardsTab" type="button" data-i18n="tabs.leaderboards">Leaderboards</button>
         <button data-tab="usersTab" type="button" data-i18n="tabs.admins">Admins</button>
         <button data-tab="statusTab" type="button" data-i18n="tabs.status">Status</button>
@@ -185,6 +186,54 @@
           </label>
           <div class="buttonRow">
             <button id="createProfile" type="button" data-i18n="profiles.create">Create Profile</button>
+          </div>
+        </section>
+      </section>
+
+      <section id="sessionsTab" class="adminTab" hidden aria-label="Sessions">
+        <section class="configurationPanel">
+          <h2 data-i18n="sessions.title">Sessions</h2>
+          <p id="sessionsStatus" class="wideField">No sessions loaded.</p>
+          <div class="wideField tableFrame">
+            <table class="sessionsTable">
+              <thead>
+                <tr>
+                  <th data-i18n="sessions.include">Include</th>
+                  <th data-i18n="sessions.track">Track</th>
+                  <th data-i18n="sessions.kind">Session</th>
+                  <th data-i18n="sessions.phase">Phase</th>
+                  <th data-i18n="sessions.lastSeen">Last seen</th>
+                  <th data-i18n="sessions.participants">Drivers</th>
+                  <th data-i18n="sessions.laps">Laps</th>
+                  <th data-i18n="sessions.best">Best</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="sessionRows"></tbody>
+            </table>
+          </div>
+          <div class="buttonRow">
+            <button id="refreshSessions" type="button" data-i18n="sessions.refresh">Refresh Sessions</button>
+          </div>
+        </section>
+        <section class="configurationPanel">
+          <h2 id="selectedSessionTitle" data-i18n="sessions.detailTitle">Session Detail</h2>
+          <div class="wideField tableFrame">
+            <table class="sessionParticipantsTable">
+              <thead>
+                <tr>
+                  <th data-i18n="sessions.rank">Rank</th>
+                  <th data-i18n="sessions.driver">Driver</th>
+                  <th data-i18n="sessions.rig">Rig</th>
+                  <th data-i18n="sessions.vehicle">Vehicle</th>
+                  <th data-i18n="sessions.laps">Laps</th>
+                  <th data-i18n="sessions.best">Best</th>
+                  <th data-i18n="sessions.lastLap">Last</th>
+                  <th data-i18n="sessions.timed">Timed</th>
+                </tr>
+              </thead>
+              <tbody id="sessionParticipantRows"></tbody>
+            </table>
           </div>
         </section>
       </section>

@@ -98,6 +98,15 @@ public sealed class ApiContractTests
     }
 
     /// <summary>
+    /// Keeps persisted session browser endpoint stable for the admin dashboard.
+    /// </summary>
+    [Fact]
+    public void AdminSessionsPathIsStable()
+    {
+        Assert.Equal("/api/admin/sessions", LiveSessionRoutes.AdminSessionsPath);
+    }
+
+    /// <summary>
     /// Keeps the admin session endpoint stable for the admin dashboard.
     /// </summary>
     [Fact]

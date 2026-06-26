@@ -272,7 +272,8 @@ td:nth-child(4) {
 .buttonRow button,
 .sessionSetupRow input,
 .sessionSetupRow select,
-.sessionSetupRow button {
+.sessionSetupRow button,
+.tableButton {
   box-sizing: border-box;
   width: 100%;
   border: 1px solid color-mix(in srgb, CanvasText 25%, transparent);
@@ -316,6 +317,37 @@ td:nth-child(4) {
 .sessionSetupTable th:first-child,
 .sessionSetupTable td:first-child {
   width: 220px;
+}
+
+.configurationPanel .tableCheckbox {
+  width: auto;
+  min-width: 18px;
+  min-height: 18px;
+}
+
+.tableButton {
+  width: auto;
+  cursor: pointer;
+  padding: 6px 10px;
+}
+
+.selectedRow {
+  background: color-mix(in srgb, AccentColor 14%, transparent);
+}
+
+.sessionsTable th:first-child,
+.sessionsTable td:first-child {
+  width: 74px;
+}
+
+.sessionsTable th:last-child,
+.sessionsTable td:last-child {
+  width: 88px;
+}
+
+.sessionParticipantsTable th:first-child,
+.sessionParticipantsTable td:first-child {
+  width: 64px;
 }
 
 .candidateLists {

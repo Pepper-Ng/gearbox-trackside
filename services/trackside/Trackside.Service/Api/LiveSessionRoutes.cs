@@ -51,6 +51,11 @@ public static class LiveSessionRoutes
     public const string AdminDriverProfilesPath = "/api/admin/driver-profiles";
 
     /// <summary>
+    /// Admin endpoint for persisted sessions and participants.
+    /// </summary>
+    public const string AdminSessionsPath = "/api/admin/sessions";
+
+    /// <summary>
     /// REST endpoint for editable source and shared-memory discovery configuration.
     /// </summary>
     public const string SourceConfigurationPath = "/api/configuration/source";

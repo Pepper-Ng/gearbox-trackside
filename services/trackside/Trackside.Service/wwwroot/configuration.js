@@ -28,6 +28,11 @@ const candidateMapsElement = document.querySelector('#candidateMaps');
 const discoveredMapsElement = document.querySelector('#discoveredMaps');
 const ambiguousMapsElement = document.querySelector('#ambiguousMaps');
 const adminUsersElement = document.querySelector('#adminUsers');
+const sessionsStatusElement = document.querySelector('#sessionsStatus');
+const sessionRowsElement = document.querySelector('#sessionRows');
+const selectedSessionTitleElement = document.querySelector('#selectedSessionTitle');
+const sessionParticipantRowsElement = document.querySelector('#sessionParticipantRows');
+const refreshSessionsButton = document.querySelector('#refreshSessions');
 const sessionSetupRowsElement = document.querySelector('#sessionSetupRows');
 const addSetupRowButton = document.querySelector('#addSetupRow');
 const clearSessionSetupButton = document.querySelector('#clearSessionSetup');
@@ -57,6 +62,7 @@ let sessionSetupSaveTimer = 0;
 let sessionSetupSaveSequence = 0;
 let isRenderingSessionSetup = false;
 let driverProfiles = [];
+let selectedSessionId = null;
 
 const languageStorageKey = 'trackside.admin.language';
 const tabStorageKey = 'trackside.admin.tab';
@@ -68,6 +74,7 @@ const translations = {
     'nav.logout': 'Logout',
     'tabs.source': 'Source',
     'tabs.sessionSetup': 'Session Setup',
+    'tabs.sessions': 'Sessions',
     'tabs.leaderboards': 'Leaderboards',
     'tabs.admins': 'Admins',
     'tabs.status': 'Status',
@@ -81,6 +88,7 @@ const translations = {
     'status.setupSaved': 'Prepared session setup saved.',
     'status.setupCleared': 'Prepared session setup cleared.',
     'status.profileCreated': 'Driver profile created.',
+    'status.sessionIncluded': 'Session inclusion updated.',
     'setup.title': 'Prepare Session',
     'setup.description': 'Prepared rig assignments stay active for future sessions until changed or cleared.',
     'setup.rig': 'Rig',
@@ -95,6 +103,26 @@ const translations = {
     'profiles.email': 'Email',
     'profiles.notes': 'Notes',
     'profiles.create': 'Create Profile',
+    'sessions.title': 'Sessions',
+    'sessions.detailTitle': 'Session Detail',
+    'sessions.include': 'Include',
+    'sessions.track': 'Track',
+    'sessions.kind': 'Session',
+    'sessions.phase': 'Phase',
+    'sessions.lastSeen': 'Last seen',
+    'sessions.participants': 'Drivers',
+    'sessions.laps': 'Laps',
+    'sessions.best': 'Best',
+    'sessions.refresh': 'Refresh Sessions',
+    'sessions.view': 'View',
+    'sessions.rank': 'Rank',
+    'sessions.driver': 'Driver',
+    'sessions.rig': 'Rig',
+    'sessions.vehicle': 'Vehicle',
+    'sessions.lastLap': 'Last',
+    'sessions.timed': 'Timed',
+    'sessions.empty': 'No persisted sessions yet.',
+    'sessions.noParticipants': 'No participants persisted for this session.',
   },
   nl: {
     'admin.title': 'Beheer',
@@ -103,6 +131,7 @@ const translations = {
     'nav.logout': 'Uitloggen',
     'tabs.source': 'Bron',
     'tabs.sessionSetup': 'Sessie voorbereiden',
+    'tabs.sessions': 'Sessies',
     'tabs.leaderboards': 'Klassementen',
     'tabs.admins': 'Beheerders',
     'tabs.status': 'Status',
@@ -116,6 +145,7 @@ const translations = {
     'status.setupSaved': 'Sessievoorbereiding opgeslagen.',
     'status.setupCleared': 'Sessievoorbereiding gewist.',
     'status.profileCreated': 'Bestuurdersprofiel aangemaakt.',
+    'status.sessionIncluded': 'Sessie-inclusie bijgewerkt.',
     'setup.title': 'Sessie voorbereiden',
     'setup.description': 'Voorbereide rig-toewijzingen blijven actief voor volgende sessies totdat ze worden aangepast of gewist.',
     'setup.rig': 'Rig',
@@ -130,6 +160,26 @@ const translations = {
     'profiles.email': 'E-mail',
     'profiles.notes': 'Notities',
     'profiles.create': 'Profiel aanmaken',
+    'sessions.title': 'Sessies',
+    'sessions.detailTitle': 'Sessiedetail',
+    'sessions.include': 'Meetellen',
+    'sessions.track': 'Circuit',
+    'sessions.kind': 'Sessie',
+    'sessions.phase': 'Fase',
+    'sessions.lastSeen': 'Laatst gezien',
+    'sessions.participants': 'Rijders',
+    'sessions.laps': 'Ronden',
+    'sessions.best': 'Beste',
+    'sessions.refresh': 'Sessies vernieuwen',
+    'sessions.view': 'Bekijken',
+    'sessions.rank': 'Positie',
+    'sessions.driver': 'Rijder',
+    'sessions.rig': 'Rig',
+    'sessions.vehicle': 'Auto',
+    'sessions.lastLap': 'Laatste',
+    'sessions.timed': 'Tijd',
+    'sessions.empty': 'Nog geen opgeslagen sessies.',
+    'sessions.noParticipants': 'Geen rijders opgeslagen voor deze sessie.',
   },
 };
 
@@ -138,6 +188,7 @@ loginButton.addEventListener('click', () => login().catch(showError));
 logoutButton.addEventListener('click', () => logout().catch(showError));
 languageSelectElement.addEventListener('change', () => setLanguage(languageSelectElement.value));
 refreshElement.addEventListener('click', () => loadConfiguration().catch(showError));
+refreshSessionsButton.addEventListener('click', () => loadSessions().catch(showError));
 addSetupRowButton.addEventListener('click', () => {
   appendSessionSetupRow({ rigName: nextRigName(), displayName: '', driverProfileId: null });
   scheduleSessionSetupAutoSave(0);
@@ -171,7 +222,7 @@ async function loadSession() {
   }
 
   showDashboard(session);
-  await Promise.all([loadConfiguration(), loadSessionSetup(), loadLeaderboards(), loadUsers(), loadAdvancedStatus()]);
+  await Promise.all([loadConfiguration(), loadSessionSetup(), loadSessions(), loadLeaderboards(), loadUsers(), loadAdvancedStatus()]);
 }
 
 async function createFirstAdmin() {
@@ -181,7 +232,7 @@ async function createFirstAdmin() {
     password: setupPasswordElement.value,
   });
   showDashboard(session);
-  await Promise.all([loadConfiguration(), loadSessionSetup(), loadLeaderboards(), loadUsers(), loadAdvancedStatus()]);
+  await Promise.all([loadConfiguration(), loadSessionSetup(), loadSessions(), loadLeaderboards(), loadUsers(), loadAdvancedStatus()]);
 }
 
 async function login() {
@@ -190,7 +241,7 @@ async function login() {
     password: loginPasswordElement.value,
   });
   showDashboard(session);
-  await Promise.all([loadConfiguration(), loadSessionSetup(), loadLeaderboards(), loadUsers(), loadAdvancedStatus()]);
+  await Promise.all([loadConfiguration(), loadSessionSetup(), loadSessions(), loadLeaderboards(), loadUsers(), loadAdvancedStatus()]);
 }
 
 async function logout() {
@@ -230,6 +281,101 @@ async function loadUsers() {
     appendCell(row, formatDate(user.updatedUtc));
     adminUsersElement.appendChild(row);
   }
+}
+
+async function loadSessions() {
+  const sessions = await fetchJson('/api/admin/sessions?limit=50');
+  renderSessions(sessions);
+  if (sessions.length === 0) {
+    selectedSessionId = null;
+    selectedSessionTitleElement.textContent = t('sessions.detailTitle');
+    renderSessionParticipants([]);
+    sessionsStatusElement.textContent = t('sessions.empty');
+    return;
+  }
+
+  const selectedStillExists = sessions.some(session => session.sessionId === selectedSessionId);
+  const nextSessionId = selectedStillExists ? selectedSessionId : sessions[0].sessionId;
+  await loadSessionDetail(nextSessionId);
+  sessionsStatusElement.textContent = `${sessions.length} sessions loaded.`;
+}
+
+async function loadSessionDetail(sessionId) {
+  const session = await fetchJson(`/api/admin/sessions/${encodeURIComponent(sessionId)}`);
+  selectedSessionId = session.sessionId;
+  selectedSessionTitleElement.textContent = `${session.trackName} - ${session.sessionKind} - ${formatDate(session.lastSeenUtc)}`;
+  renderSessionParticipants(session.participants ?? []);
+  highlightSelectedSessionRow();
+}
+
+async function setSessionCountForHistory(sessionId, countForHistory) {
+  const session = await putJson(`/api/admin/sessions/${encodeURIComponent(sessionId)}/history`, { countForHistory });
+  selectedSessionId = session.sessionId;
+  setStatus(t('status.sessionIncluded'));
+  await loadSessions();
+  await loadLeaderboards();
+}
+
+function renderSessions(sessions) {
+  sessionRowsElement.replaceChildren();
+  if (sessions.length === 0) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 9;
+    cell.textContent = t('sessions.empty');
+    row.appendChild(cell);
+    sessionRowsElement.appendChild(row);
+    return;
+  }
+
+  for (const session of sessions) {
+    const row = document.createElement('tr');
+    row.dataset.sessionId = session.sessionId;
+    appendCheckboxCell(row, session.countForHistory, checked => setSessionCountForHistory(session.sessionId, checked));
+    appendCell(row, session.trackName);
+    appendCell(row, session.sessionKind);
+    appendCell(row, session.sessionPhase);
+    appendCell(row, formatDate(session.lastSeenUtc));
+    appendCell(row, session.participantCount);
+    appendCell(row, `${session.validTimedLapCount}/${session.lapCount}`);
+    appendCell(row, formatSeconds(session.bestLapSeconds));
+    appendButtonCell(row, t('sessions.view'), () => loadSessionDetail(session.sessionId).catch(showError));
+    sessionRowsElement.appendChild(row);
+  }
+
+  highlightSelectedSessionRow();
+}
+
+function renderSessionParticipants(participants) {
+  sessionParticipantRowsElement.replaceChildren();
+  if (participants.length === 0) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 8;
+    cell.textContent = t('sessions.noParticipants');
+    row.appendChild(cell);
+    sessionParticipantRowsElement.appendChild(row);
+    return;
+  }
+
+  for (const participant of participants) {
+    const row = document.createElement('tr');
+    appendCell(row, participant.rank);
+    appendCell(row, participant.displayName);
+    appendCell(row, participant.rigName);
+    appendCell(row, participant.vehicleName);
+    appendCell(row, participant.completedLaps);
+    appendCell(row, formatSeconds(participant.bestLapSeconds));
+    appendCell(row, formatSeconds(participant.lastLapSeconds));
+    appendCell(row, `${participant.validTimedLapCount}/${participant.lapCount}`);
+    sessionParticipantRowsElement.appendChild(row);
+  }
+}
+
+function highlightSelectedSessionRow() {
+  sessionRowsElement.querySelectorAll('tr').forEach(row => {
+    row.classList.toggle('selectedRow', row.dataset.sessionId === selectedSessionId);
+  });
 }
 
 async function loadSessionSetup() {
@@ -638,6 +784,39 @@ async function readJsonResponse(response) {
 function appendCell(row, value) {
   const cell = document.createElement('td');
   cell.textContent = value ?? '-';
+  row.appendChild(cell);
+}
+
+function appendCheckboxCell(row, checked, onChange) {
+  const cell = document.createElement('td');
+  const checkbox = document.createElement('input');
+  checkbox.className = 'tableCheckbox';
+  checkbox.type = 'checkbox';
+  checkbox.checked = Boolean(checked);
+  checkbox.addEventListener('change', async () => {
+    const nextChecked = checkbox.checked;
+    checkbox.disabled = true;
+    try {
+      await onChange(nextChecked);
+    } catch (error) {
+      checkbox.checked = !nextChecked;
+      showError(error);
+    } finally {
+      checkbox.disabled = false;
+    }
+  });
+  cell.appendChild(checkbox);
+  row.appendChild(cell);
+}
+
+function appendButtonCell(row, label, onClick) {
+  const cell = document.createElement('td');
+  const button = document.createElement('button');
+  button.className = 'tableButton';
+  button.type = 'button';
+  button.textContent = label;
+  button.addEventListener('click', onClick);
+  cell.appendChild(button);
   row.appendChild(cell);
 }
 

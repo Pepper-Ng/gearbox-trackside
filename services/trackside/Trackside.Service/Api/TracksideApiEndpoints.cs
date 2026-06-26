@@ -90,6 +90,21 @@ public static class TracksideApiEndpoints
             .WithName("GetAdminStatus")
             .WithSummary("Returns admin-only status and path details.");
 
+        endpoints.MapGet(LiveSessionRoutes.AdminSessionsPath, GetHistoricalSessionsAsync)
+            .RequireAuthorization()
+            .WithName("GetHistoricalSessions")
+            .WithSummary("Returns persisted sessions for staff review.");
+
+        endpoints.MapGet($"{LiveSessionRoutes.AdminSessionsPath}/{{sessionId}}", GetHistoricalSessionAsync)
+            .RequireAuthorization()
+            .WithName("GetHistoricalSession")
+            .WithSummary("Returns one persisted session with participant rows.");
+
+        endpoints.MapPut($"{LiveSessionRoutes.AdminSessionsPath}/{{sessionId}}/history", SetSessionHistoryInclusionAsync)
+            .RequireAuthorization()
+            .WithName("SetSessionHistoryInclusion")
+            .WithSummary("Updates whether a session counts for historical boards.");
+
         endpoints.MapGet(LiveSessionRoutes.AdminSessionSetupPath, GetSessionSetupAsync)
             .RequireAuthorization()
             .WithName("GetSessionSetup")
@@ -213,6 +228,44 @@ public static class TracksideApiEndpoints
     {
         var result = await store.GetLastFinishedSessionResultAsync(cancellationToken);
         return Results.Ok(result is null ? LastFinishedSessionResponse.Empty : LastFinishedSessionResponse.From(result));
+    }
+
+    private static async Task<IResult> GetHistoricalSessionsAsync(
+        int? limit,
+        ITracksideStore store,
+        CancellationToken cancellationToken)
+    {
+        var sessions = await store.GetHistoricalSessionsAsync(new HistoricalSessionQuery
+        {
+            Limit = limit ?? 50,
+        }, cancellationToken);
+        return Results.Ok(sessions.Select(HistoricalSessionSummaryResponse.From).ToList());
+    }
+
+    private static async Task<IResult> GetHistoricalSessionAsync(
+        string sessionId,
+        ITracksideStore store,
+        CancellationToken cancellationToken)
+    {
+        var session = await store.GetHistoricalSessionAsync(sessionId, cancellationToken);
+        return session is null
+            ? Results.NotFound(new { error = "Session not found." })
+            : Results.Ok(HistoricalSessionDetailResponse.From(session));
+    }
+
+    private static async Task<IResult> SetSessionHistoryInclusionAsync(
+        string sessionId,
+        SessionHistoryRequest request,
+        ITracksideStore store,
+        CancellationToken cancellationToken)
+    {
+        var updated = await store.SetSessionCountForHistoryAsync(sessionId, request.CountForHistory, cancellationToken);
+        if (!updated)
+        {
+            return Results.NotFound(new { error = "Session not found." });
+        }
+
+        return await GetHistoricalSessionAsync(sessionId, store, cancellationToken);
     }
 
     private static async Task<IResult> GetSessionSetupAsync(ITracksideStore store, CancellationToken cancellationToken)
@@ -860,6 +913,237 @@ public sealed record AdminBootstrapResponse(bool BootstrapRequired);
 /// <param name="DisplayName">Authenticated admin display name.</param>
 /// <param name="BootstrapRequired">True when no admin user exists yet.</param>
 public sealed record AdminSessionResponse(bool IsAuthenticated, string? Username, string? DisplayName, bool BootstrapRequired);
+
+/// <summary>
+/// Request to include or exclude a persisted session from historical boards.
+/// </summary>
+public sealed record SessionHistoryRequest
+{
+    /// <summary>
+    /// True when the session should count for historical boards.
+    /// </summary>
+    public bool CountForHistory { get; init; }
+}
+
+/// <summary>
+/// Persisted session summary for the admin session browser.
+/// </summary>
+public record HistoricalSessionSummaryResponse
+{
+    /// <summary>
+    /// Durable session identifier.
+    /// </summary>
+    public string SessionId { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Source that produced the session.
+    /// </summary>
+    public string Source { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Track name associated with the session.
+    /// </summary>
+    public string TrackName { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Session kind associated with the session.
+    /// </summary>
+    public SessionKind SessionKind { get; init; }
+
+    /// <summary>
+    /// Latest observed session phase.
+    /// </summary>
+    public SessionPhase SessionPhase { get; init; }
+
+    /// <summary>
+    /// First time Trackside observed this session.
+    /// </summary>
+    public DateTimeOffset FirstSeenUtc { get; init; }
+
+    /// <summary>
+    /// Most recent time Trackside observed this session.
+    /// </summary>
+    public DateTimeOffset LastSeenUtc { get; init; }
+
+    /// <summary>
+    /// Latest observed vehicle count.
+    /// </summary>
+    public int VehicleCount { get; init; }
+
+    /// <summary>
+    /// True when this session contributes to historical boards.
+    /// </summary>
+    public bool CountForHistory { get; init; }
+
+    /// <summary>
+    /// Number of persisted participants in this session.
+    /// </summary>
+    public int ParticipantCount { get; init; }
+
+    /// <summary>
+    /// Number of persisted completed laps in this session.
+    /// </summary>
+    public int LapCount { get; init; }
+
+    /// <summary>
+    /// Number of persisted laps that count for timing boards.
+    /// </summary>
+    public int ValidTimedLapCount { get; init; }
+
+    /// <summary>
+    /// Fastest valid timed lap in the session, when any.
+    /// </summary>
+    public double? BestLapSeconds { get; init; }
+
+    /// <summary>
+    /// Maps a store session summary to an API response.
+    /// </summary>
+    /// <param name="session">Store session summary.</param>
+    /// <returns>API response.</returns>
+    public static HistoricalSessionSummaryResponse From(HistoricalSessionSummary session) => new()
+    {
+        SessionId = session.SessionId,
+        Source = session.Source,
+        TrackName = session.TrackName,
+        SessionKind = session.SessionKind,
+        SessionPhase = session.SessionPhase,
+        FirstSeenUtc = session.FirstSeenUtc,
+        LastSeenUtc = session.LastSeenUtc,
+        VehicleCount = session.VehicleCount,
+        CountForHistory = session.CountForHistory,
+        ParticipantCount = session.ParticipantCount,
+        LapCount = session.LapCount,
+        ValidTimedLapCount = session.ValidTimedLapCount,
+        BestLapSeconds = session.BestLapSeconds,
+    };
+}
+
+/// <summary>
+/// Persisted session detail for the admin session browser.
+/// </summary>
+public sealed record HistoricalSessionDetailResponse : HistoricalSessionSummaryResponse
+{
+    /// <summary>
+    /// Participants observed in this session.
+    /// </summary>
+    public IReadOnlyList<HistoricalSessionParticipantResponse> Participants { get; init; } = [];
+
+    /// <summary>
+    /// Maps a store session detail to an API response.
+    /// </summary>
+    /// <param name="session">Store session detail.</param>
+    /// <returns>API response.</returns>
+    public static HistoricalSessionDetailResponse From(HistoricalSessionDetail session) => new()
+    {
+        SessionId = session.SessionId,
+        Source = session.Source,
+        TrackName = session.TrackName,
+        SessionKind = session.SessionKind,
+        SessionPhase = session.SessionPhase,
+        FirstSeenUtc = session.FirstSeenUtc,
+        LastSeenUtc = session.LastSeenUtc,
+        VehicleCount = session.VehicleCount,
+        CountForHistory = session.CountForHistory,
+        ParticipantCount = session.ParticipantCount,
+        LapCount = session.LapCount,
+        ValidTimedLapCount = session.ValidTimedLapCount,
+        BestLapSeconds = session.BestLapSeconds,
+        Participants = session.Participants.Select(HistoricalSessionParticipantResponse.From).ToList(),
+    };
+}
+
+/// <summary>
+/// Persisted participant row for a session detail response.
+/// </summary>
+public sealed record HistoricalSessionParticipantResponse
+{
+    /// <summary>
+    /// Durable participant row identifier.
+    /// </summary>
+    public long ParticipantId { get; init; }
+
+    /// <summary>
+    /// Latest display rank for the participant.
+    /// </summary>
+    public int Rank { get; init; }
+
+    /// <summary>
+    /// Fixed rig or rFactor 2 name.
+    /// </summary>
+    public string RigName { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Screen name captured for this participant.
+    /// </summary>
+    public string DisplayName { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Optional linked driver profile id.
+    /// </summary>
+    public string? DriverProfileId { get; init; }
+
+    /// <summary>
+    /// Vehicle name captured for this participant.
+    /// </summary>
+    public string VehicleName { get; init; } = string.Empty;
+
+    /// <summary>
+    /// First time Trackside observed this participant in the session.
+    /// </summary>
+    public DateTimeOffset FirstSeenUtc { get; init; }
+
+    /// <summary>
+    /// Most recent time Trackside observed this participant in the session.
+    /// </summary>
+    public DateTimeOffset LastSeenUtc { get; init; }
+
+    /// <summary>
+    /// Latest completed lap count.
+    /// </summary>
+    public int CompletedLaps { get; init; }
+
+    /// <summary>
+    /// Best valid timed lap in seconds when available.
+    /// </summary>
+    public double? BestLapSeconds { get; init; }
+
+    /// <summary>
+    /// Most recently completed lap time in seconds when available.
+    /// </summary>
+    public double? LastLapSeconds { get; init; }
+
+    /// <summary>
+    /// Number of persisted completed laps for this participant.
+    /// </summary>
+    public int LapCount { get; init; }
+
+    /// <summary>
+    /// Number of persisted completed laps that count for timing boards.
+    /// </summary>
+    public int ValidTimedLapCount { get; init; }
+
+    /// <summary>
+    /// Maps a store participant row to an API response.
+    /// </summary>
+    /// <param name="participant">Store participant row.</param>
+    /// <returns>API response.</returns>
+    public static HistoricalSessionParticipantResponse From(HistoricalSessionParticipant participant) => new()
+    {
+        ParticipantId = participant.ParticipantId,
+        Rank = participant.Rank,
+        RigName = participant.RigName,
+        DisplayName = participant.DisplayName,
+        DriverProfileId = participant.DriverProfileId,
+        VehicleName = participant.VehicleName,
+        FirstSeenUtc = participant.FirstSeenUtc,
+        LastSeenUtc = participant.LastSeenUtc,
+        CompletedLaps = participant.CompletedLaps,
+        BestLapSeconds = participant.BestLapSeconds,
+        LastLapSeconds = participant.LastLapSeconds,
+        LapCount = participant.LapCount,
+        ValidTimedLapCount = participant.ValidTimedLapCount,
+    };
+}
 
 /// <summary>
 /// Prepared session setup response.

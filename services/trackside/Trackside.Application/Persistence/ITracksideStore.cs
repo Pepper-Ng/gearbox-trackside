@@ -116,6 +116,31 @@ public interface ITracksideStore
     Task<FinishedSessionResult?> GetLastFinishedSessionResultAsync(CancellationToken cancellationToken);
 
     /// <summary>
+    /// Returns recent persisted sessions for the staff browser.
+    /// </summary>
+    /// <param name="query">Session list filters.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Recent sessions ordered from newest to oldest.</returns>
+    Task<IReadOnlyList<HistoricalSessionSummary>> GetHistoricalSessionsAsync(HistoricalSessionQuery query, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Returns one persisted session with participant rows.
+    /// </summary>
+    /// <param name="sessionId">Durable session identifier.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Session detail or null when no matching session exists.</returns>
+    Task<HistoricalSessionDetail?> GetHistoricalSessionAsync(string sessionId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Updates whether a persisted session counts for historical boards.
+    /// </summary>
+    /// <param name="sessionId">Durable session identifier.</param>
+    /// <param name="countForHistory">True when the session should be included in historical boards.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>True when a session was updated.</returns>
+    Task<bool> SetSessionCountForHistoryAsync(string sessionId, bool countForHistory, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Returns the active monthly track period, if one has been started by staff.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -248,6 +273,170 @@ public sealed record HistoricalBestLap
     /// Timestamp when this lap record was observed.
     /// </summary>
     public DateTimeOffset ObservedUtc { get; init; }
+}
+
+/// <summary>
+/// Filter values for the staff session browser.
+/// </summary>
+public sealed record HistoricalSessionQuery
+{
+    /// <summary>
+    /// Maximum number of recent sessions to return.
+    /// </summary>
+    public int Limit { get; init; } = 50;
+}
+
+/// <summary>
+/// Persisted session summary used by the staff session browser.
+/// </summary>
+public record HistoricalSessionSummary
+{
+    /// <summary>
+    /// Durable session identifier.
+    /// </summary>
+    public string SessionId { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Source that produced the session.
+    /// </summary>
+    public string Source { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Track name associated with the session.
+    /// </summary>
+    public string TrackName { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Session kind associated with the result.
+    /// </summary>
+    public SessionKind SessionKind { get; init; }
+
+    /// <summary>
+    /// Latest observed session phase.
+    /// </summary>
+    public SessionPhase SessionPhase { get; init; }
+
+    /// <summary>
+    /// First time Trackside observed this session.
+    /// </summary>
+    public DateTimeOffset FirstSeenUtc { get; init; }
+
+    /// <summary>
+    /// Most recent time Trackside observed this session.
+    /// </summary>
+    public DateTimeOffset LastSeenUtc { get; init; }
+
+    /// <summary>
+    /// Latest observed vehicle count.
+    /// </summary>
+    public int VehicleCount { get; init; }
+
+    /// <summary>
+    /// True when this session contributes to historical boards.
+    /// </summary>
+    public bool CountForHistory { get; init; }
+
+    /// <summary>
+    /// Number of persisted participants in this session.
+    /// </summary>
+    public int ParticipantCount { get; init; }
+
+    /// <summary>
+    /// Number of persisted completed laps in this session.
+    /// </summary>
+    public int LapCount { get; init; }
+
+    /// <summary>
+    /// Number of persisted laps that count for timing boards.
+    /// </summary>
+    public int ValidTimedLapCount { get; init; }
+
+    /// <summary>
+    /// Fastest valid timed lap in the session, when any.
+    /// </summary>
+    public double? BestLapSeconds { get; init; }
+}
+
+/// <summary>
+/// Persisted session detail with participant rows for staff review.
+/// </summary>
+public sealed record HistoricalSessionDetail : HistoricalSessionSummary
+{
+    /// <summary>
+    /// Participants observed in this session.
+    /// </summary>
+    public IReadOnlyList<HistoricalSessionParticipant> Participants { get; init; } = [];
+}
+
+/// <summary>
+/// Participant row in a persisted session detail.
+/// </summary>
+public sealed record HistoricalSessionParticipant
+{
+    /// <summary>
+    /// Durable participant row identifier.
+    /// </summary>
+    public long ParticipantId { get; init; }
+
+    /// <summary>
+    /// Latest display rank for the participant.
+    /// </summary>
+    public int Rank { get; init; }
+
+    /// <summary>
+    /// Fixed rig or rFactor 2 name.
+    /// </summary>
+    public string RigName { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Screen name captured for this participant.
+    /// </summary>
+    public string DisplayName { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Optional linked driver profile id.
+    /// </summary>
+    public string? DriverProfileId { get; init; }
+
+    /// <summary>
+    /// Vehicle name captured for this participant.
+    /// </summary>
+    public string VehicleName { get; init; } = string.Empty;
+
+    /// <summary>
+    /// First time Trackside observed this participant in the session.
+    /// </summary>
+    public DateTimeOffset FirstSeenUtc { get; init; }
+
+    /// <summary>
+    /// Most recent time Trackside observed this participant in the session.
+    /// </summary>
+    public DateTimeOffset LastSeenUtc { get; init; }
+
+    /// <summary>
+    /// Latest completed lap count.
+    /// </summary>
+    public int CompletedLaps { get; init; }
+
+    /// <summary>
+    /// Best valid timed lap in seconds when available.
+    /// </summary>
+    public double? BestLapSeconds { get; init; }
+
+    /// <summary>
+    /// Most recently completed lap time in seconds when available.
+    /// </summary>
+    public double? LastLapSeconds { get; init; }
+
+    /// <summary>
+    /// Number of persisted completed laps for this participant.
+    /// </summary>
+    public int LapCount { get; init; }
+
+    /// <summary>
+    /// Number of persisted completed laps that count for timing boards.
+    /// </summary>
+    public int ValidTimedLapCount { get; init; }
 }
 
 /// <summary>

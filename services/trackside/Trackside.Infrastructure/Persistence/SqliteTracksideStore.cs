@@ -522,6 +522,130 @@ public sealed class SqliteTracksideStore : ITracksideStore
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<HistoricalSessionSummary>> GetHistoricalSessionsAsync(HistoricalSessionQuery query, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        if (!IsEnabled)
+        {
+            return [];
+        }
+
+        await InitializeAsync(cancellationToken);
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            {HistoricalSessionSelectSql}
+            ORDER BY sessions.last_seen_utc DESC, sessions.first_seen_utc DESC
+            LIMIT $limit;
+            """;
+        command.Parameters.AddWithValue("$limit", Math.Clamp(query.Limit, 1, 200));
+
+        var sessions = new List<HistoricalSessionSummary>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            sessions.Add(ReadHistoricalSessionSummary(reader));
+        }
+
+        return sessions;
+    }
+
+    /// <inheritdoc />
+    public async Task<HistoricalSessionDetail?> GetHistoricalSessionAsync(string sessionId, CancellationToken cancellationToken)
+    {
+        if (!IsEnabled || string.IsNullOrWhiteSpace(sessionId))
+        {
+            return null;
+        }
+
+        await InitializeAsync(cancellationToken);
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var sessionCommand = connection.CreateCommand();
+        sessionCommand.CommandText = $"""
+            {HistoricalSessionSelectSql}
+            WHERE sessions.session_id = $sessionId
+            LIMIT 1;
+            """;
+        sessionCommand.Parameters.AddWithValue("$sessionId", sessionId.Trim());
+
+        await using var sessionReader = await sessionCommand.ExecuteReaderAsync(cancellationToken);
+        if (!await sessionReader.ReadAsync(cancellationToken))
+        {
+            return null;
+        }
+
+        var summary = ReadHistoricalSessionSummary(sessionReader);
+        await sessionReader.DisposeAsync();
+
+        await using var participantsCommand = connection.CreateCommand();
+        participantsCommand.CommandText = """
+            SELECT participants.participant_id,
+                   participants.latest_rank,
+                   participants.rig_name,
+                   participants.display_name,
+                   participants.driver_profile_id,
+                   participants.vehicle_name,
+                   participants.first_seen_utc,
+                   participants.last_seen_utc,
+                   participants.completed_laps,
+                   participants.best_lap_seconds,
+                   participants.last_lap_seconds,
+                   (SELECT COUNT(*) FROM laps WHERE laps.participant_id = participants.participant_id) AS lap_count,
+                   (SELECT COUNT(*) FROM laps WHERE laps.participant_id = participants.participant_id AND laps.is_valid_timed_lap = 1) AS valid_timed_lap_count
+            FROM participants
+            WHERE participants.session_id = $sessionId
+            ORDER BY participants.latest_rank ASC, participants.latest_position ASC, participants.display_name ASC;
+            """;
+        participantsCommand.Parameters.AddWithValue("$sessionId", summary.SessionId);
+
+        var participants = new List<HistoricalSessionParticipant>();
+        await using var participantsReader = await participantsCommand.ExecuteReaderAsync(cancellationToken);
+        while (await participantsReader.ReadAsync(cancellationToken))
+        {
+            participants.Add(ReadHistoricalSessionParticipant(participantsReader));
+        }
+
+        return new HistoricalSessionDetail
+        {
+            SessionId = summary.SessionId,
+            Source = summary.Source,
+            TrackName = summary.TrackName,
+            SessionKind = summary.SessionKind,
+            SessionPhase = summary.SessionPhase,
+            FirstSeenUtc = summary.FirstSeenUtc,
+            LastSeenUtc = summary.LastSeenUtc,
+            VehicleCount = summary.VehicleCount,
+            CountForHistory = summary.CountForHistory,
+            ParticipantCount = summary.ParticipantCount,
+            LapCount = summary.LapCount,
+            ValidTimedLapCount = summary.ValidTimedLapCount,
+            BestLapSeconds = summary.BestLapSeconds,
+            Participants = participants,
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> SetSessionCountForHistoryAsync(string sessionId, bool countForHistory, CancellationToken cancellationToken)
+    {
+        if (!IsEnabled || string.IsNullOrWhiteSpace(sessionId))
+        {
+            return false;
+        }
+
+        await InitializeAsync(cancellationToken);
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE sessions
+            SET count_for_history = $countForHistory
+            WHERE session_id = $sessionId;
+            """;
+        command.Parameters.AddWithValue("$countForHistory", countForHistory ? 1 : 0);
+        command.Parameters.AddWithValue("$sessionId", sessionId.Trim());
+        return await command.ExecuteNonQueryAsync(cancellationToken) > 0;
+    }
+
+    /// <inheritdoc />
     public async Task<MonthlyTrackPeriod?> GetActiveMonthlyTrackAsync(CancellationToken cancellationToken)
     {
         if (!IsEnabled)
@@ -1086,6 +1210,40 @@ public sealed class SqliteTracksideStore : ITracksideStore
         return normalized.Values.OrderBy(entry => entry.RigName, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
+    private static HistoricalSessionSummary ReadHistoricalSessionSummary(SqliteDataReader reader) => new()
+    {
+        SessionId = reader.GetString(0),
+        Source = reader.GetString(1),
+        TrackName = reader.GetString(2),
+        SessionKind = ParseSessionKind(reader.GetString(3)),
+        SessionPhase = ParseSessionPhase(reader.GetString(4)),
+        FirstSeenUtc = ParseDateTime(reader.GetString(5)),
+        LastSeenUtc = ParseDateTime(reader.GetString(6)),
+        VehicleCount = reader.GetInt32(7),
+        CountForHistory = reader.GetInt32(8) == 1,
+        ParticipantCount = ReadInt32(reader, 9),
+        LapCount = ReadInt32(reader, 10),
+        ValidTimedLapCount = ReadInt32(reader, 11),
+        BestLapSeconds = reader.IsDBNull(12) ? null : reader.GetDouble(12),
+    };
+
+    private static HistoricalSessionParticipant ReadHistoricalSessionParticipant(SqliteDataReader reader) => new()
+    {
+        ParticipantId = reader.GetInt64(0),
+        Rank = reader.GetInt32(1),
+        RigName = reader.GetString(2),
+        DisplayName = reader.GetString(3),
+        DriverProfileId = reader.IsDBNull(4) ? null : reader.GetString(4),
+        VehicleName = reader.GetString(5),
+        FirstSeenUtc = ParseDateTime(reader.GetString(6)),
+        LastSeenUtc = ParseDateTime(reader.GetString(7)),
+        CompletedLaps = reader.GetInt32(8),
+        BestLapSeconds = reader.IsDBNull(9) ? null : reader.GetDouble(9),
+        LastLapSeconds = reader.IsDBNull(10) ? null : reader.GetDouble(10),
+        LapCount = ReadInt32(reader, 11),
+        ValidTimedLapCount = ReadInt32(reader, 12),
+    };
+
     private static DriverProfile ReadDriverProfile(SqliteDataReader reader) => new()
     {
         DriverProfileId = reader.GetString(0),
@@ -1134,6 +1292,10 @@ public sealed class SqliteTracksideStore : ITracksideStore
 
     private static SessionKind ParseSessionKind(string value) => Enum.TryParse<SessionKind>(value, ignoreCase: true, out var kind) ? kind : SessionKind.Unknown;
 
+    private static SessionPhase ParseSessionPhase(string value) => Enum.TryParse<SessionPhase>(value, ignoreCase: true, out var phase) ? phase : SessionPhase.Unknown;
+
+    private static int ReadInt32(SqliteDataReader reader, int ordinal) => Convert.ToInt32(reader.GetValue(ordinal), CultureInfo.InvariantCulture);
+
     private static bool IsSameTime(double? left, double? right) => left is not null && right is not null && Math.Abs(left.Value - right.Value) < 0.0005;
 
     private static MonthlyTrackPeriod ReadMonthlyTrackPeriod(SqliteDataReader reader) => new()
@@ -1150,6 +1312,34 @@ public sealed class SqliteTracksideStore : ITracksideStore
         var rawKey = string.Join('|', trackName.Trim().ToUpperInvariant(), FormatDateTime(startedUtc));
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawKey))).ToLowerInvariant();
     }
+
+    private const string HistoricalSessionSelectSql = """
+        SELECT sessions.session_id,
+               sessions.source,
+               sessions.track_name,
+               sessions.session_kind,
+               sessions.session_phase,
+               sessions.first_seen_utc,
+               sessions.last_seen_utc,
+               sessions.vehicle_count,
+               sessions.count_for_history,
+               (SELECT COUNT(*)
+                FROM participants
+                WHERE participants.session_id = sessions.session_id) AS participant_count,
+               (SELECT COUNT(*)
+                FROM laps
+                INNER JOIN participants lap_participants ON lap_participants.participant_id = laps.participant_id
+                WHERE lap_participants.session_id = sessions.session_id) AS lap_count,
+               (SELECT COUNT(*)
+                FROM laps
+                INNER JOIN participants timed_lap_participants ON timed_lap_participants.participant_id = laps.participant_id
+                WHERE timed_lap_participants.session_id = sessions.session_id AND laps.is_valid_timed_lap = 1) AS valid_timed_lap_count,
+               (SELECT MIN(laps.lap_time_seconds)
+                FROM laps
+                INNER JOIN participants best_lap_participants ON best_lap_participants.participant_id = laps.participant_id
+                WHERE best_lap_participants.session_id = sessions.session_id AND laps.is_valid_timed_lap = 1) AS best_lap_seconds
+        FROM sessions
+        """;
 
     private const string SchemaSql = """
         PRAGMA journal_mode = WAL;

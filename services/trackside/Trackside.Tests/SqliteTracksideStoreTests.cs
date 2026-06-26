@@ -70,6 +70,61 @@ public sealed class SqliteTracksideStoreTests
     }
 
     /// <summary>
+    /// Staff can browse persisted sessions with participant rows and exclude a session from historical boards.
+    /// </summary>
+    [Fact]
+    public async Task ListsSessionsWithParticipantsAndCanExcludeFromHistory()
+    {
+        using var temporaryDirectory = new TemporaryDirectory();
+        ITracksideStore store = CreateStore(temporaryDirectory);
+        var snapshot = BuildSnapshot();
+
+        await store.SaveLiveSessionSnapshotAsync(snapshot, countForHistory: true, CancellationToken.None);
+
+        var sessions = await store.GetHistoricalSessionsAsync(new HistoricalSessionQuery(), CancellationToken.None);
+
+        var session = Assert.Single(sessions);
+        Assert.True(session.CountForHistory);
+        Assert.Equal("Loch Drummond - Short", session.TrackName);
+        Assert.Equal(SessionKind.Practice, session.SessionKind);
+        Assert.Equal(2, session.ParticipantCount);
+        Assert.Equal(2, session.LapCount);
+        Assert.Equal(2, session.ValidTimedLapCount);
+        Assert.NotNull(session.BestLapSeconds);
+        Assert.Equal(82.8, session.BestLapSeconds.Value, precision: 3);
+
+        var detail = await store.GetHistoricalSessionAsync(session.SessionId, CancellationToken.None);
+
+        Assert.NotNull(detail);
+        Assert.Equal(2, detail.Participants.Count);
+        Assert.Contains(detail.Participants, participant => participant.DisplayName == "Maya" && participant.ValidTimedLapCount == 1);
+        Assert.Contains(detail.Participants, participant => participant.DisplayName == "Noah" && participant.CompletedLaps == 5);
+
+        Assert.True(await store.SetSessionCountForHistoryAsync(session.SessionId, countForHistory: false, CancellationToken.None));
+        var excludedDetail = await store.GetHistoricalSessionAsync(session.SessionId, CancellationToken.None);
+        var bestLaps = await store.GetBestLapsAsync(new HistoricalBestLapQuery
+        {
+            TrackName = "Loch Drummond - Short",
+        }, CancellationToken.None);
+
+        Assert.NotNull(excludedDetail);
+        Assert.False(excludedDetail.CountForHistory);
+        Assert.Empty(bestLaps);
+
+        var laterSnapshot = snapshot with
+        {
+            TimestampUtc = snapshot.TimestampUtc.AddMinutes(1),
+            Session = snapshot.Session with { CurrentSessionSeconds = snapshot.Session.CurrentSessionSeconds + 60.0 },
+        };
+        await store.SaveLiveSessionSnapshotAsync(laterSnapshot, countForHistory: true, CancellationToken.None);
+
+        var stillExcludedDetail = await store.GetHistoricalSessionAsync(session.SessionId, CancellationToken.None);
+
+        Assert.NotNull(stillExcludedDetail);
+        Assert.False(stillExcludedDetail.CountForHistory);
+    }
+
+    /// <summary>
     /// Laps that rFactor 2 marks as not counting for time are stored but excluded from best-lap boards.
     /// </summary>
     [Fact]
