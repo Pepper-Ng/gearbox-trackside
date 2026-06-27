@@ -31,4 +31,9 @@ public sealed record ClientConfigurationResponse
     /// Default display mode a kiosk screen should open with.
     /// </summary>
     public KioskDisplayMode DefaultDisplayMode { get; init; } = KioskDisplayMode.Monthly;
+
+    /// <summary>
+    /// Default frontend language for kiosk and admin screens.
+    /// </summary>
+    public string DefaultLanguage { get; init; } = "en";
 }

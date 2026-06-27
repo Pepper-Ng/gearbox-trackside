@@ -51,6 +51,12 @@ public static class TracksideServiceCollectionExtensions
             .Bind(configuration.GetSection($"{TracksideOptions.SectionName}:{nameof(TracksideOptions.Persistence)}"))
             .ValidateOnStart();
 
+        services.AddOptions<TracksideLocalizationOptions>()
+            .Bind(configuration.GetSection($"{TracksideOptions.SectionName}:{nameof(TracksideOptions.Localization)}"))
+            .Validate(options => options.DefaultLanguage == "en" || options.DefaultLanguage == "nl",
+                "Trackside:Localization:DefaultLanguage must be either 'en' or 'nl'.")
+            .ValidateOnStart();
+
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<LiveSessionState>();
         services.AddSingleton<TracksideSourceConfigurationStore>();

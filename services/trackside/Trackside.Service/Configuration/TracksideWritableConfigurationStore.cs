@@ -51,6 +51,29 @@ public sealed class TracksideWritableConfigurationStore
         await WriteAllTextAtomicallyAsync(path, root.ToJsonString(writeOptions), cancellationToken);
     }
 
+    /// <summary>
+    /// Persists frontend localization settings.
+    /// </summary>
+    /// <param name="localization">Localization options to persist.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Task that completes after the file is written.</returns>
+    public async Task SaveLocalizationAsync(TracksideLocalizationOptions localization, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(localization);
+        var path = WritableConfigurationPath;
+        Directory.CreateDirectory(Path.GetDirectoryName(path) ?? _runtimeContext.ContentRootPath);
+
+        var root = await LoadConfigurationRootAsync(path, cancellationToken);
+        var trackside = GetOrCreateObject(root, "Trackside");
+        trackside["Localization"] = JsonSerializer.SerializeToNode(localization, TracksideJson.SerializerOptions);
+
+        var writeOptions = new JsonSerializerOptions(TracksideJson.SerializerOptions)
+        {
+            WriteIndented = true,
+        };
+        await WriteAllTextAtomicallyAsync(path, root.ToJsonString(writeOptions), cancellationToken);
+    }
+
     private static async Task<JsonObject> LoadConfigurationRootAsync(string path, CancellationToken cancellationToken)
     {
         if (!File.Exists(path))

@@ -27,37 +27,37 @@
       </div>
     </header>
 
-    <section id="setupPanel" class="configurationPanel authPanel" hidden aria-label="Create first admin">
-      <h2>First Admin</h2>
+    <section id="setupPanel" class="configurationPanel authPanel" hidden data-i18n-aria="aria.firstAdmin">
+      <h2 data-i18n="firstAdmin.title">First Admin</h2>
       <label>
-        <span>Username</span>
-        <input id="setupUsername" type="text" autocomplete="username">
+        <span data-i18n="firstAdmin.username">Username</span>
+        <input id="setupUsername" type="text" autocomplete="username" placeholder="" data-i18n-placeholder="firstAdmin.usernamePlaceholder">
       </label>
       <label>
-        <span>Display name</span>
-        <input id="setupDisplayName" type="text" autocomplete="name">
+        <span data-i18n="firstAdmin.displayName">Display name</span>
+        <input id="setupDisplayName" type="text" autocomplete="name" placeholder="" data-i18n-placeholder="firstAdmin.displayNamePlaceholder">
       </label>
       <label>
-        <span>Password</span>
-        <input id="setupPassword" type="password" autocomplete="new-password">
+        <span data-i18n="firstAdmin.password">Password</span>
+        <input id="setupPassword" type="password" autocomplete="new-password" placeholder="" data-i18n-placeholder="firstAdmin.passwordPlaceholder">
       </label>
       <div class="buttonRow">
-        <button id="setupButton" type="button">Create Admin</button>
+        <button id="setupButton" type="button" data-i18n="firstAdmin.createButton">Create Admin</button>
       </div>
     </section>
 
-    <section id="loginPanel" class="configurationPanel authPanel" hidden aria-label="Admin login">
-      <h2>Login</h2>
+    <section id="loginPanel" class="configurationPanel authPanel" hidden data-i18n-aria="aria.login">
+      <h2 data-i18n="login.title">Login</h2>
       <label>
-        <span>Username</span>
-        <input id="loginUsername" type="text" autocomplete="username">
+        <span data-i18n="login.username">Username</span>
+        <input id="loginUsername" type="text" autocomplete="username" placeholder="" data-i18n-placeholder="login.usernamePlaceholder">
       </label>
       <label>
-        <span>Password</span>
-        <input id="loginPassword" type="password" autocomplete="current-password">
+        <span data-i18n="login.password">Password</span>
+        <input id="loginPassword" type="password" autocomplete="current-password" placeholder="" data-i18n-placeholder="login.passwordPlaceholder">
       </label>
       <div class="buttonRow">
-        <button id="loginButton" type="button">Login</button>
+        <button id="loginButton" type="button" data-i18n="login.submit">Login</button>
       </div>
     </section>
 
@@ -71,77 +71,77 @@
         <button data-tab="statusTab" type="button" data-i18n="tabs.status">Status</button>
       </nav>
 
-      <section id="sourceTab" class="adminTab active" aria-label="Source configuration">
+      <section id="sourceTab" class="adminTab active" data-i18n-aria="aria.sourceConfiguration" aria-label="Source configuration">
         <section class="configurationPanel">
           <label>
-            <span>Source mode</span>
+            <span data-i18n="source.mode">Source mode</span>
             <select id="sourceMode">
-              <option value="Fixture">Fixture</option>
-              <option value="SharedMemory">SharedMemory</option>
+              <option value="Fixture" data-i18n="source.fixture">Fixture</option>
+              <option value="SharedMemory" data-i18n="source.sharedMemory">SharedMemory</option>
             </select>
           </label>
           <label>
-            <span>Fixture path</span>
-            <input id="fixturePath" type="text" spellcheck="false">
+            <span data-i18n="source.fixturePath">Fixture path</span>
+            <input id="fixturePath" type="text" spellcheck="false" placeholder="" data-i18n-placeholder="source.fixturePathPlaceholder">
           </label>
           <label>
-            <span>Exact scoring map</span>
-            <input id="scoringMapName" type="text" spellcheck="false" placeholder="$rFactor2SMMP_Scoring$12345">
+            <span data-i18n="source.scoringMapName">Exact scoring map</span>
+            <input id="scoringMapName" type="text" spellcheck="false" placeholder="$rFactor2SMMP_Scoring$12345" data-i18n-placeholder="source.scoringMapNamePlaceholder">
           </label>
           <label>
-            <span>Dedicated server PID</span>
+            <span data-i18n="source.processId">Dedicated server PID</span>
             <input id="processId" type="number" min="0" step="1">
           </label>
           <label class="checkboxLabel">
             <input id="autoDiscover" type="checkbox">
-            <span>Auto-discover memory maps</span>
+            <span data-i18n="source.autoDiscover">Auto-discover memory maps</span>
           </label>
           <label>
-            <span>Dedicated server process names</span>
-            <input id="processNames" type="text" spellcheck="false">
+            <span data-i18n="source.processNames">Dedicated server process names</span>
+            <input id="processNames" type="text" spellcheck="false" placeholder="" data-i18n-placeholder="source.processNamesPlaceholder">
           </label>
           <label>
-            <span>Multiple map policy</span>
+            <span data-i18n="source.multipleMapPolicy">Multiple map policy</span>
             <select id="multipleMapPolicy">
-              <option value="RequireExplicitSelection">RequireExplicitSelection</option>
-              <option value="UseFirstDiscovered">UseFirstDiscovered</option>
+              <option value="RequireExplicitSelection" data-i18n="source.requireExplicitSelection">RequireExplicitSelection</option>
+              <option value="UseFirstDiscovered" data-i18n="source.useFirstDiscovered">UseFirstDiscovered</option>
             </select>
           </label>
           <label>
-            <span>Scoring poll Hz</span>
+            <span data-i18n="source.scoringPollHz">Scoring poll Hz</span>
             <input id="scoringPollHz" type="number" min="0.25" max="60" step="0.25">
           </label>
           <label class="checkboxLabel">
             <input id="telemetryEnabled" type="checkbox">
-            <span>Enable telemetry loop scaffold</span>
+            <span data-i18n="source.telemetryEnabled">Enable telemetry loop scaffold</span>
           </label>
           <label>
-            <span>Telemetry poll Hz</span>
+            <span data-i18n="source.telemetryPollHz">Telemetry poll Hz</span>
             <input id="telemetryPollHz" type="number" min="1" max="200" step="1">
           </label>
           <label class="wideField">
-            <span>Driver aliases JSON</span>
+            <span data-i18n="source.driverAliasesJson">Driver aliases JSON</span>
             <textarea id="driverAliases" spellcheck="false" rows="6"></textarea>
           </label>
           <div class="buttonRow">
-            <button id="refreshDiscovery" type="button">Refresh</button>
+            <button id="refreshDiscovery" type="button" data-i18n="source.refresh">Refresh</button>
           </div>
         </section>
 
-        <section class="configurationPanel" aria-label="Shared-memory discovery">
-          <h2>Shared Memory Discovery</h2>
-          <p id="discoveryStatus">No discovery result yet.</p>
+        <section class="configurationPanel" data-i18n-aria="aria.sharedMemoryDiscovery" aria-label="Shared-memory discovery">
+          <h2 data-i18n="discovery.title">Shared Memory Discovery</h2>
+          <p id="discoveryStatus" data-i18n="discovery.noResult">No discovery result yet.</p>
           <div class="candidateLists">
             <div>
-              <h3>Candidate Order</h3>
+              <h3 data-i18n="discovery.candidateOrder">Candidate Order</h3>
               <ul id="candidateMaps"></ul>
             </div>
             <div>
-              <h3>Discovered Maps</h3>
+              <h3 data-i18n="discovery.discoveredMaps">Discovered Maps</h3>
               <ul id="discoveredMaps"></ul>
             </div>
             <div>
-              <h3>Ambiguous Maps</h3>
+              <h3 data-i18n="discovery.ambiguousMaps">Ambiguous Maps</h3>
               <ul id="ambiguousMaps"></ul>
             </div>
           </div>
@@ -231,8 +231,8 @@
                   <th data-i18n="sessions.best">Best</th>
                   <th data-i18n="sessions.lastLap">Last</th>
                   <th data-i18n="sessions.timed">Timed</th>
-                  <th>Correction</th>
-                  <th>Exclude</th>
+                  <th data-i18n="sessions.correction">Correction</th>
+                  <th data-i18n="sessions.exclude">Exclude</th>
                   <th></th>
                 </tr>
               </thead>
@@ -244,49 +244,49 @@
 
       <section id="leaderboardsTab" class="adminTab" hidden aria-label="Leaderboard controls">
         <section class="configurationPanel">
-          <h2>Kiosk Display</h2>
+          <h2 data-i18n="kioskDisplay.title">Kiosk Display</h2>
           <label>
-            <span>Default display mode</span>
+            <span data-i18n="kioskDisplay.defaultMode">Default display mode</span>
             <select id="kioskDisplayMode">
-              <option value="Monthly">Monthly</option>
-              <option value="Weekly">Weekly</option>
-              <option value="Daily">Daily</option>
-              <option value="LastSession">Last Session</option>
-              <option value="Live">Live</option>
+              <option value="Monthly" data-i18n="kioskDisplay.monthly">Monthly</option>
+              <option value="Weekly" data-i18n="kioskDisplay.weekly">Weekly</option>
+              <option value="Daily" data-i18n="kioskDisplay.daily">Daily</option>
+              <option value="LastSession" data-i18n="kioskDisplay.lastSession">Last Session</option>
+              <option value="Live" data-i18n="kioskDisplay.live">Live</option>
             </select>
           </label>
           <div class="buttonRow">
-            <button id="saveKioskDisplayMode" type="button">Save Display Mode</button>
+            <button id="saveKioskDisplayMode" type="button" data-i18n="kioskDisplay.saveButton">Save Display Mode</button>
           </div>
         </section>
         <section class="configurationPanel">
-          <h2>Monthly Track</h2>
-          <p id="monthlyTrackStatus" class="wideField">No monthly track loaded.</p>
+          <h2 data-i18n="monthlyTrack.title">Monthly Track</h2>
+          <p id="monthlyTrackStatus" class="wideField" data-i18n="monthlyTrack.noActive">No monthly track loaded.</p>
           <label>
-            <span>Track name</span>
+            <span data-i18n="monthlyTrack.trackName">Track name</span>
             <input id="monthlyTrackName" type="text" spellcheck="false">
           </label>
           <label>
-            <span>Reason</span>
-            <input id="monthlyTrackReason" type="text" spellcheck="false" placeholder="Scheduled rotation">
+            <span data-i18n="monthlyTrack.reason">Reason</span>
+            <input id="monthlyTrackReason" type="text" spellcheck="false" placeholder="" data-i18n-placeholder="monthlyTrack.reasonPlaceholder">
           </label>
           <div class="buttonRow">
-            <button id="setMonthlyTrack" type="button">Set Track</button>
-            <button id="resetMonthlyTrack" type="button">Reset Current Track</button>
+            <button id="setMonthlyTrack" type="button" data-i18n="monthlyTrack.setButton">Set Track</button>
+            <button id="resetMonthlyTrack" type="button" data-i18n="monthlyTrack.resetButton">Reset Current Track</button>
           </div>
         </section>
         <section class="configurationPanel">
-          <h2>Monthly Bests</h2>
+          <h2 data-i18n="monthlyBests.title">Monthly Bests</h2>
           <div class="wideField tableFrame">
             <table>
               <thead>
                 <tr>
-                  <th>Rank</th>
-                  <th>Driver</th>
-                  <th>Rig</th>
-                  <th>Lap</th>
-                  <th>Time</th>
-                  <th>Set</th>
+                  <th data-i18n="bestLap.rank">Rank</th>
+                  <th data-i18n="bestLap.driver">Driver</th>
+                  <th data-i18n="bestLap.rig">Rig</th>
+                  <th data-i18n="bestLap.lap">Lap</th>
+                  <th data-i18n="bestLap.time">Time</th>
+                  <th data-i18n="bestLap.set">Set</th>
                 </tr>
               </thead>
               <tbody id="monthlyBestLaps"></tbody>
@@ -294,25 +294,25 @@
           </div>
         </section>
         <section class="configurationPanel">
-          <h2>Retention Cleanup</h2>
-          <p id="retentionCleanupStatus" class="wideField">Cleanup has not run from this page.</p>
+          <h2 data-i18n="retention.title">Retention Cleanup</h2>
+          <p id="retentionCleanupStatus" class="wideField" data-i18n="retention.noRun">Cleanup has not run from this page.</p>
           <div class="buttonRow">
-            <button id="runRetentionCleanup" type="button">Run Cleanup</button>
+            <button id="runRetentionCleanup" type="button" data-i18n="retention.runButton">Run Cleanup</button>
           </div>
         </section>
       </section>
 
       <section id="usersTab" class="adminTab" hidden aria-label="Admin users">
         <section class="configurationPanel">
-          <h2>Admin Users</h2>
+          <h2 data-i18n="adminUsers.title">Admin Users</h2>
           <div class="wideField tableFrame">
             <table>
               <thead>
                 <tr>
-                  <th>Username</th>
-                  <th>Display name</th>
-                  <th>Created</th>
-                  <th>Updated</th>
+                  <th data-i18n="adminUsers.username">Username</th>
+                  <th data-i18n="adminUsers.displayName">Display name</th>
+                  <th data-i18n="adminUsers.created">Created</th>
+                  <th data-i18n="adminUsers.updated">Updated</th>
                 </tr>
               </thead>
               <tbody id="adminUsers"></tbody>
@@ -320,45 +320,45 @@
           </div>
         </section>
         <section class="configurationPanel">
-          <h2>Create Admin</h2>
+          <h2 data-i18n="adminUsers.createTitle">Create Admin</h2>
           <label>
-            <span>Username</span>
+            <span data-i18n="adminUsers.createUsername">Username</span>
             <input id="newAdminUsername" type="text" autocomplete="off">
           </label>
           <label>
-            <span>Display name</span>
+            <span data-i18n="adminUsers.createDisplayName">Display name</span>
             <input id="newAdminDisplayName" type="text" autocomplete="off">
           </label>
           <label>
-            <span>Password</span>
+            <span data-i18n="adminUsers.createPassword">Password</span>
             <input id="newAdminPassword" type="password" autocomplete="new-password">
           </label>
           <div class="buttonRow">
-            <button id="createAdminButton" type="button">Create</button>
+            <button id="createAdminButton" type="button" data-i18n="adminUsers.createButton">Create</button>
           </div>
         </section>
         <section class="configurationPanel">
-          <h2>Change Password</h2>
+          <h2 data-i18n="changePassword.title">Change Password</h2>
           <label>
-            <span>Username</span>
+            <span data-i18n="changePassword.username">Username</span>
             <input id="passwordUsername" type="text" autocomplete="username">
           </label>
           <label>
-            <span>New password</span>
+            <span data-i18n="changePassword.newPassword">New password</span>
             <input id="newPassword" type="password" autocomplete="new-password">
           </label>
           <div class="buttonRow">
-            <button id="changePasswordButton" type="button">Change Password</button>
+            <button id="changePasswordButton" type="button" data-i18n="changePassword.button">Change Password</button>
           </div>
         </section>
       </section>
 
       <section id="statusTab" class="adminTab" hidden aria-label="Advanced status">
         <section class="configurationPanel">
-          <h2>Advanced Status</h2>
+          <h2 data-i18n="advancedStatus.title">Advanced Status</h2>
           <pre id="advancedStatus" class="statusBlock">No status loaded.</pre>
           <div class="buttonRow">
-            <button id="refreshStatus" type="button">Refresh Status</button>
+            <button id="refreshStatus" type="button" data-i18n="advancedStatus.refreshButton">Refresh Status</button>
           </div>
         </section>
       </section>

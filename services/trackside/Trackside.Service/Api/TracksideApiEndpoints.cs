@@ -135,6 +135,16 @@ public static class TracksideApiEndpoints
             .WithName("SaveKioskSettings")
             .WithSummary("Persists kiosk display defaults.");
 
+        endpoints.MapGet(LiveSessionRoutes.AdminLocalizationPath, GetLocalization)
+            .RequireAuthorization()
+            .WithName("GetLocalization")
+            .WithSummary("Returns frontend localization defaults.");
+
+        endpoints.MapPut(LiveSessionRoutes.AdminLocalizationPath, SaveLocalizationAsync)
+            .RequireAuthorization()
+            .WithName("SaveLocalization")
+            .WithSummary("Persists frontend localization defaults.");
+
         endpoints.MapPost($"{LiveSessionRoutes.AdminPersistencePath}/retention/cleanup", EnforceRetentionAsync)
             .RequireAuthorization()
             .WithName("EnforceRetention")
@@ -210,7 +220,31 @@ public static class TracksideApiEndpoints
     private static IResult GetClientConfiguration(IOptionsMonitor<TracksideOptions> options) => Results.Ok(new ClientConfigurationResponse
     {
         DefaultDisplayMode = options.CurrentValue.Kiosk.DefaultDisplayMode,
+        DefaultLanguage = options.CurrentValue.Localization.DefaultLanguage,
     });
+
+    private static async Task<IResult> GetLocalization(IOptionsMonitor<TracksideOptions> options) => Results.Ok(LocalizationResponse.From(options.CurrentValue.Localization));
+
+    private static async Task<IResult> SaveLocalizationAsync(
+        LocalizationRequest request,
+        TracksideWritableConfigurationStore configurationStore,
+        IConfiguration configuration,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.DefaultLanguage) || (request.DefaultLanguage != "en" && request.DefaultLanguage != "nl"))
+        {
+            return Results.BadRequest(new { error = "DefaultLanguage must be 'en' or 'nl'." });
+        }
+
+        var options = new TracksideLocalizationOptions { DefaultLanguage = request.DefaultLanguage };
+        await configurationStore.SaveLocalizationAsync(options, cancellationToken);
+        if (configuration is IConfigurationRoot configurationRoot)
+        {
+            configurationRoot.Reload();
+        }
+
+        return Results.Ok(LocalizationResponse.From(options));
+    }
 
     private static async Task<IResult> GetBestLapsAsync(
         string? window,
@@ -1102,6 +1136,36 @@ public sealed record KioskSettingsRequest
     /// Default display mode for newly opened kiosk screens.
     /// </summary>
     public KioskDisplayMode DefaultDisplayMode { get; init; } = KioskDisplayMode.Monthly;
+}
+
+/// <summary>
+/// Frontend localization settings response.
+/// </summary>
+public sealed record LocalizationResponse
+{
+    /// <summary>
+    /// Default language for frontend UI strings.
+    /// </summary>
+    public string DefaultLanguage { get; init; } = "en";
+
+    /// <summary>
+    /// Maps localization options to an API response.
+    /// </summary>
+    public static LocalizationResponse From(TracksideLocalizationOptions options) => new()
+    {
+        DefaultLanguage = options.DefaultLanguage,
+    };
+}
+
+/// <summary>
+/// Frontend localization settings save request.
+/// </summary>
+public sealed record LocalizationRequest
+{
+    /// <summary>
+    /// Default language for frontend UI strings.
+    /// </summary>
+    public string DefaultLanguage { get; init; } = "en";
 }
 
 /// <summary>

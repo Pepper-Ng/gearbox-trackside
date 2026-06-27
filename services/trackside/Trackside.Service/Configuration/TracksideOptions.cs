@@ -34,6 +34,11 @@ public sealed class TracksideOptions
     public TracksidePersistenceOptions Persistence { get; init; } = new();
 
     /// <summary>
+    /// Global localization settings for frontends.
+    /// </summary>
+    public TracksideLocalizationOptions Localization { get; init; } = new();
+
+    /// <summary>
     /// Kiosk display defaults for venue screens.
     /// </summary>
     public TracksideKioskOptions Kiosk { get; init; } = new();
@@ -52,6 +57,27 @@ public sealed class TracksideOptions
     /// Update-check placeholders used by health and the future admin dashboard.
     /// </summary>
     public TracksideUpdateOptions Updates { get; init; } = new();
+}
+
+/// <summary>
+/// Display defaults for kiosk screens.
+/// </summary>
+public sealed class TracksideHttpOptions
+{
+    /// <summary>
+    /// Default listen URL used when no Trackside:Http:ListenUrl configuration is set.
+    /// </summary>
+    public const string DefaultListenUrl = "http://127.0.0.1:8877";
+
+    /// <summary>
+    /// URL used to bind the local HTTP server.
+    /// </summary>
+    public string ListenUrl { get; init; } = DefaultListenUrl;
+
+    /// <summary>
+    /// Public URL advertised to clients and used by external dashboards.
+    /// </summary>
+    public string PublicBaseUrl { get; init; } = DefaultListenUrl;
 }
 
 /// <summary>
@@ -97,26 +123,14 @@ public enum KioskDisplayMode
 }
 
 /// <summary>
-/// HTTP binding options for the Trackside local web server.
+/// Localization settings for the Trackside frontends.
 /// </summary>
-public sealed class TracksideHttpOptions
+public sealed class TracksideLocalizationOptions
 {
     /// <summary>
-    /// Default loopback address used by development and venue-local packaged runs.
+    /// Default language used by admin and kiosk frontends.
     /// </summary>
-    public const string DefaultListenUrl = "http://127.0.0.1:8877";
-
-    /// <summary>
-    /// URL prefix Kestrel listens on. Keep this loopback-only unless LAN access is intentional.
-    /// </summary>
-    [Required]
-    public string ListenUrl { get; init; } = DefaultListenUrl;
-
-    /// <summary>
-    /// Base URL opened from tray menu items and returned to browser clients.
-    /// </summary>
-    [Required]
-    public string PublicBaseUrl { get; init; } = DefaultListenUrl;
+    public string DefaultLanguage { get; init; } = "en";
 }
 
 /// <summary>

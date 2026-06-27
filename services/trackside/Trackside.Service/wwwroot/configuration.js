@@ -86,6 +86,7 @@ const translations = {
     'status.checkingSession': 'Checking admin session...',
     'status.adminLoginRequired': 'Admin login required.',
     'status.createFirstAdmin': 'Create the first admin account.',
+    'status.signedIn': 'Signed in as {name}',
     'status.sourceChanged': 'Source configuration changed...',
     'status.sourceSaving': 'Saving source configuration...',
     'status.setupChanged': 'Prepared session setup changed...',
@@ -94,6 +95,75 @@ const translations = {
     'status.setupCleared': 'Prepared session setup cleared.',
     'status.profileCreated': 'Driver profile created.',
     'status.sessionIncluded': 'Session inclusion updated.',
+    'status.kioskSaved': 'Kiosk display mode saved.',
+    'status.monthlyTrackStarted': 'Monthly track started with fresh stats.',
+    'status.monthlyTrackReset': 'Monthly track stats reset.',
+    'firstAdmin.title': 'First Admin',
+    'firstAdmin.username': 'Username',
+    'firstAdmin.displayName': 'Display name',
+    'firstAdmin.password': 'Password',
+    'firstAdmin.createButton': 'Create Admin',
+    'firstAdmin.usernamePlaceholder': 'Enter username',
+    'firstAdmin.displayNamePlaceholder': 'Enter display name',
+    'firstAdmin.passwordPlaceholder': 'Enter password',
+    'login.title': 'Login',
+    'login.username': 'Username',
+    'login.password': 'Password',
+    'login.submit': 'Login',
+    'source.mode': 'Source mode',
+    'source.fixturePath': 'Fixture path',
+    'source.scoringMapName': 'Exact scoring map',
+    'source.processId': 'Dedicated server PID',
+    'source.autoDiscover': 'Auto-discover memory maps',
+    'source.processNames': 'Dedicated server process names',
+    'source.multipleMapPolicy': 'Multiple map policy',
+    'source.requireExplicitSelection': 'Require explicit selection',
+    'source.useFirstDiscovered': 'Use first discovered',
+    'source.scoringPollHz': 'Scoring poll Hz',
+    'source.telemetryEnabled': 'Enable telemetry loop scaffold',
+    'source.telemetryPollHz': 'Telemetry poll Hz',
+    'source.driverAliasesJson': 'Driver aliases JSON',
+    'source.refresh': 'Refresh',
+    'discovery.title': 'Shared Memory Discovery',
+    'discovery.noResult': 'No discovery result yet.',
+    'discovery.noPid': 'no PID',
+    'kioskDisplay.title': 'Kiosk Display',
+    'kioskDisplay.defaultMode': 'Default display mode',
+    'kioskDisplay.saveButton': 'Save Display Mode',
+    'kioskDisplay.monthly': 'Monthly',
+    'kioskDisplay.weekly': 'Weekly',
+    'kioskDisplay.daily': 'Daily',
+    'kioskDisplay.lastSession': 'Last Session',
+    'kioskDisplay.live': 'Live',
+    'monthlyTrack.title': 'Monthly Track',
+    'monthlyTrack.noActive': 'No active monthly track.',
+    'monthlyTrack.trackName': 'Track name',
+    'monthlyTrack.reason': 'Reason',
+    'monthlyTrack.reasonPlaceholder': 'Scheduled rotation',
+    'monthlyTrack.setButton': 'Set Track',
+    'monthlyTrack.resetButton': 'Reset Current Track',
+    'monthlyBests.title': 'Monthly Bests',
+    'monthlyBests.empty': 'No counted timed laps yet.',
+    'bestLap.rank': 'Rank',
+    'bestLap.driver': 'Driver',
+    'bestLap.rig': 'Rig',
+    'bestLap.lap': 'Lap',
+    'bestLap.time': 'Time',
+    'bestLap.set': 'Set',
+    'retention.title': 'Retention Cleanup',
+    'retention.noRun': 'Cleanup has not run from this page.',
+    'retention.runButton': 'Run Cleanup',
+    'retention.cleanupResult': 'Deleted {detailedLapRecordsDeleted} raw laps, {sessionSummariesDeleted} sessions, {trackBestRecordsDeleted} track bests, and {monthlyTrackPeriodsDeleted} monthly periods.',
+    'adminUsers.title': 'Admin Users',
+    'adminUsers.username': 'Username',
+    'adminUsers.displayName': 'Display name',
+    'adminUsers.created': 'Created',
+    'adminUsers.updated': 'Updated',
+    'adminUsers.createTitle': 'Create Admin',
+    'adminUsers.createUsername': 'Username',
+    'adminUsers.createDisplayName': 'Display name',
+    'adminUsers.createPassword': 'Password',
+    'adminUsers.createButton': 'Create',
     'setup.title': 'Prepare Session',
     'setup.description': 'Prepared rig assignments stay active for future sessions until changed or cleared.',
     'setup.rig': 'Rig',
@@ -101,8 +171,8 @@ const translations = {
     'setup.driverProfile': 'Driver profile',
     'setup.addRig': 'Add Rig',
     'setup.clear': 'Clear Setup',
-    'setup.remove': 'Remove',
     'setup.noProfile': 'No profile',
+    'setup.remove': 'Remove',
     'profiles.title': 'Driver Profiles',
     'profiles.displayName': 'Display name',
     'profiles.email': 'Email',
@@ -110,32 +180,46 @@ const translations = {
     'profiles.create': 'Create Profile',
     'sessions.title': 'Session History',
     'sessions.description': 'Stored sessions used for historical boards. This is not the live-session monitor.',
-    'sessions.detailTitle': 'Session Detail',
     'sessions.boards': 'Boards',
-    'sessions.included': 'Included',
-    'sessions.excluded': 'Excluded',
-    'sessions.include': 'Include',
-    'sessions.exclude': 'Exclude',
     'sessions.track': 'Track',
     'sessions.kind': 'Session',
     'sessions.phase': 'Phase',
     'sessions.lastSeen': 'Last seen',
     'sessions.participants': 'Drivers',
-    'sessions.laps': 'Laps',
-    'sessions.best': 'Best',
+    'sessions.actions': 'Actions',
     'sessions.refresh': 'Refresh Sessions',
     'sessions.deleteEmpty': 'Delete Empty Sessions',
     'sessions.view': 'View',
+    'sessions.include': 'Include',
+    'sessions.exclude': 'Exclude',
     'sessions.delete': 'Delete',
-    'sessions.actions': 'Actions',
-    'sessions.rank': 'Rank',
-    'sessions.driver': 'Driver',
-    'sessions.rig': 'Rig',
-    'sessions.vehicle': 'Vehicle',
-    'sessions.lastLap': 'Last',
-    'sessions.timed': 'Timed',
+    'sessions.included': 'Included',
+    'sessions.excluded': 'Excluded',
+    'sessions.detailTitle': 'Session Detail',
+    'sessions.includedMessage': 'Session included in historical boards.',
+    'sessions.excludedMessage': 'Session excluded from historical boards.',
+    'sessions.correction': 'Correction',
+    'sessions.exclude': 'Exclude',
+    'status.adminCreated': 'Admin user created.',
+    'status.passwordChanged': 'Admin password changed.',
+    'monthlyBests.empty': 'No counted timed laps yet.',
+    'login.usernamePlaceholder': 'Enter username',
+    'login.passwordPlaceholder': 'Enter password',
+    'source.fixturePathPlaceholder': 'Enter fixture path',
+    'source.scoringMapNamePlaceholder': 'Enter exact scoring map',
+    'source.processNamesPlaceholder': 'Enter process names',
+    'discovery.candidateOrder': 'Candidate Order',
+    'discovery.discoveredMaps': 'Discovered Maps',
+    'discovery.ambiguousMaps': 'Ambiguous Maps',
+    'aria.firstAdmin': 'First admin setup',
+    'aria.login': 'Admin login',
+    'aria.sourceConfiguration': 'Source configuration',
+    'aria.sharedMemoryDiscovery': 'Shared-memory discovery',
+    'changePassword.title': 'Change Password',
+    'advancedStatus.refreshButton': 'Refresh Status',
     'sessions.empty': 'No persisted sessions yet.',
     'sessions.noParticipants': 'No participants persisted for this session.',
+    'participants.noCompletedLaps': 'No completed laps persisted for this participant.',
     'sessions.deleted': 'Stored session deleted.',
     'sessions.emptyDeleted': 'Deleted {count} empty stored sessions.',
     'sessions.confirmDelete': 'Delete this stored session from history?',
@@ -155,6 +239,7 @@ const translations = {
     'status.checkingSession': 'Beheersessie controleren...',
     'status.adminLoginRequired': 'Beheerlogin vereist.',
     'status.createFirstAdmin': 'Maak het eerste beheeraccount aan.',
+    'status.signedIn': 'Ingelogd als {name}',
     'status.sourceChanged': 'Bronconfiguratie gewijzigd...',
     'status.sourceSaving': 'Bronconfiguratie opslaan...',
     'status.setupChanged': 'Sessievoorbereiding gewijzigd...',
@@ -163,59 +248,174 @@ const translations = {
     'status.setupCleared': 'Sessievoorbereiding gewist.',
     'status.profileCreated': 'Bestuurdersprofiel aangemaakt.',
     'status.sessionIncluded': 'Sessie-inclusie bijgewerkt.',
+    'status.kioskSaved': 'Kiosk-weergavemodus opgeslagen.',
+    'status.monthlyTrackStarted': 'Maandelijk klassement gestart met frisse statistieken.',
+    'status.monthlyTrackReset': 'Maandelijkse klassementstatistieken gereset.',
+    'firstAdmin.title': 'Eerste beheerder',
+    'firstAdmin.username': 'Gebruikersnaam',
+    'firstAdmin.displayName': 'Weergavenaam',
+    'firstAdmin.password': 'Wachtwoord',
+    'firstAdmin.createButton': 'Beheerder aanmaken',
+    'firstAdmin.usernamePlaceholder': 'Voer gebruikersnaam in',
+    'firstAdmin.displayNamePlaceholder': 'Voer weergavenaam in',
+    'firstAdmin.passwordPlaceholder': 'Voer wachtwoord in',
+    'login.title': 'Inloggen',
+    'login.username': 'Gebruikersnaam',
+    'login.password': 'Wachtwoord',
+    'login.submit': 'Inloggen',
+    'source.mode': 'Bronmodus',
+    'source.fixturePath': 'Fixture-pad',
+    'source.scoringMapName': 'Exacte scorekaart',
+    'source.processId': 'PID van dedicated server',
+    'source.autoDiscover': 'Memory-kaarten automatisch ontdekken',
+    'source.processNames': 'Procesnamen dedicated server',
+    'source.multipleMapPolicy': 'Meerdere kaartbeleid',
+    'source.requireExplicitSelection': 'Vereis expliciete selectie',
+    'source.useFirstDiscovered': 'Gebruik eerste ontdekte',
+    'source.scoringPollHz': 'Scoring poll Hz',
+    'source.telemetryEnabled': 'Telemetry loop inschakelen',
+    'source.telemetryPollHz': 'Telemetry poll Hz',
+    'source.driverAliasesJson': 'Driver-aliases JSON',
+    'source.refresh': 'Vernieuwen',
+    'discovery.title': 'Shared-memory ontdekking',
+    'discovery.noResult': 'Nog geen ontdekresultaat.',
+    'discovery.noPid': 'geen PID',
+    'kioskDisplay.title': 'Kioskweergave',
+    'kioskDisplay.defaultMode': 'Standaard weergavemodus',
+    'kioskDisplay.saveButton': 'Weergavemodus opslaan',
+    'kioskDisplay.monthly': 'Maandelijks',
+    'kioskDisplay.weekly': 'Wekelijks',
+    'kioskDisplay.daily': 'Dagelijks',
+    'kioskDisplay.lastSession': 'Laatste sessie',
+    'kioskDisplay.live': 'Live',
+    'monthlyTrack.title': 'Maandelijkse baan',
+    'monthlyTrack.noActive': 'Geen actieve maandelijkse baan.',
+    'monthlyTrack.trackName': 'Baannaam',
+    'monthlyTrack.reason': 'Reden',
+    'monthlyTrack.reasonPlaceholder': 'Geplande rotatie',
+    'monthlyTrack.setButton': 'Baan instellen',
+    'monthlyTrack.resetButton': 'Huidige baan resetten',
+    'monthlyBests.title': 'Maandelijkse bests',
+    'monthlyBests.empty': 'Nog geen getelde tijdige ronden.',
+    'bestLap.rank': 'Rank',
+    'bestLap.driver': 'Driver',
+    'bestLap.rig': 'Rig',
+    'bestLap.lap': 'Lap',
+    'bestLap.time': 'Time',
+    'bestLap.set': 'Set',
+    'retention.title': 'Retentie opschonen',
+    'retention.noRun': 'Opschoning is nog niet uitgevoerd vanaf deze pagina.',
+    'retention.runButton': 'Opschoning uitvoeren',
+    'retention.cleanupResult': 'Verwijderd {detailedLapRecordsDeleted} ruwe ronden, {sessionSummariesDeleted} sessies, {trackBestRecordsDeleted} circuitrecords en {monthlyTrackPeriodsDeleted} maandperioden.',
+    'adminUsers.title': 'Beheeraccounts',
+    'adminUsers.username': 'Gebruikersnaam',
+    'adminUsers.displayName': 'Weergavenaam',
+    'adminUsers.created': 'Aangemaakt',
+    'adminUsers.updated': 'Bijgewerkt',
+    'adminUsers.createTitle': 'Beheerder aanmaken',
+    'adminUsers.createUsername': 'Gebruikersnaam',
+    'adminUsers.createDisplayName': 'Weergavenaam',
+    'adminUsers.createPassword': 'Wachtwoord',
+    'adminUsers.createButton': 'Aanmaken',
     'setup.title': 'Sessie voorbereiden',
-    'setup.description': 'Voorbereide rig-toewijzingen blijven actief voor volgende sessies totdat ze worden aangepast of gewist.',
+    'setup.description': 'Voorbereide rigtoewijzingen blijven actief voor toekomstige sessies totdat ze worden gewijzigd of gewist.',
     'setup.rig': 'Rig',
     'setup.screenName': 'Schermnaam',
     'setup.driverProfile': 'Bestuurdersprofiel',
     'setup.addRig': 'Rig toevoegen',
     'setup.clear': 'Setup wissen',
-    'setup.remove': 'Verwijderen',
     'setup.noProfile': 'Geen profiel',
+    'setup.remove': 'Verwijderen',
     'profiles.title': 'Bestuurdersprofielen',
     'profiles.displayName': 'Weergavenaam',
     'profiles.email': 'E-mail',
     'profiles.notes': 'Notities',
     'profiles.create': 'Profiel aanmaken',
-    'sessions.title': 'Sessiehistorie',
-    'sessions.description': 'Opgeslagen sessies voor historische klassementen. Dit is niet de live-sessiemonitor.',
-    'sessions.detailTitle': 'Sessiedetail',
-    'sessions.boards': 'Borden',
-    'sessions.included': 'Telt mee',
-    'sessions.excluded': 'Uitgesloten',
-    'sessions.include': 'Meetellen',
-    'sessions.exclude': 'Uitsluiten',
+    'sessions.title': 'Sessiegeschiedenis',
+    'sessions.description': 'Opgeslagen sessies worden gebruikt voor historische klassementen. Dit is niet de live-sessie monitor.',
+    'sessions.boards': 'Klassementen',
     'sessions.track': 'Circuit',
     'sessions.kind': 'Sessie',
     'sessions.phase': 'Fase',
     'sessions.lastSeen': 'Laatst gezien',
-    'sessions.participants': 'Rijders',
-    'sessions.laps': 'Ronden',
-    'sessions.best': 'Beste',
+    'sessions.participants': 'Bestuurders',
+    'sessions.actions': 'Acties',
     'sessions.refresh': 'Sessies vernieuwen',
     'sessions.deleteEmpty': 'Lege sessies verwijderen',
     'sessions.view': 'Bekijken',
+    'sessions.include': 'Inclusief',
+    'sessions.exclude': 'Uitsluiten',
     'sessions.delete': 'Verwijderen',
-    'sessions.actions': 'Acties',
-    'sessions.rank': 'Positie',
-    'sessions.driver': 'Rijder',
-    'sessions.rig': 'Rig',
-    'sessions.vehicle': 'Auto',
-    'sessions.lastLap': 'Laatste',
-    'sessions.timed': 'Tijd',
+    'sessions.included': 'Inbegrepen',
+    'sessions.excluded': 'Uitgesloten',
+    'sessions.detailTitle': 'Sessie detail',
+    'sessions.includedMessage': 'Sessie opgenomen in historische klassementen.',
+    'sessions.excludedMessage': 'Sessie uitgesloten van historische klassementen.',
+    'sessions.correction': 'Correctie',
+    'sessions.exclude': 'Uitsluiten',
+    'status.adminCreated': 'Beheerder aangemaakt.',
+    'status.passwordChanged': 'Wachtwoord gewijzigd.',
+    'monthlyBests.empty': 'Nog geen getelde tijdige ronden.',
+    'login.usernamePlaceholder': 'Voer gebruikersnaam in',
+    'login.passwordPlaceholder': 'Voer wachtwoord in',
+    'source.fixturePathPlaceholder': 'Voer fixture-pad in',
+    'source.scoringMapNamePlaceholder': 'Voer exacte scorekaart in',
+    'source.processNamesPlaceholder': 'Voer processnamen in',
+    'discovery.candidateOrder': 'Kandidaat volgorde',
+    'discovery.discoveredMaps': 'Ontdekte kaarten',
+    'discovery.ambiguousMaps': 'Ambigue kaarten',
+    'aria.firstAdmin': 'Eerste beheerder instellen',
+    'aria.login': 'Beheer login',
+    'aria.sourceConfiguration': 'Bronconfiguratie',
+    'aria.sharedMemoryDiscovery': 'Shared-memory ontdekking',
+    'changePassword.title': 'Wachtwoord wijzigen',
+    'advancedStatus.refreshButton': 'Status verversen',
     'sessions.empty': 'Nog geen opgeslagen sessies.',
-    'sessions.noParticipants': 'Geen rijders opgeslagen voor deze sessie.',
+    'sessions.noParticipants': 'Geen deelnemers opgeslagen voor deze sessie.',
+    'participants.noCompletedLaps': 'Geen voltooide ronden opgeslagen voor deze deelnemer.',
     'sessions.deleted': 'Opgeslagen sessie verwijderd.',
     'sessions.emptyDeleted': '{count} lege opgeslagen sessies verwijderd.',
     'sessions.confirmDelete': 'Deze opgeslagen sessie uit de historie verwijderen?',
-    'sessions.confirmDeleteEmpty': 'Opgeslagen sessies zonder rijders, zonder voltooide ronden of zonder bekend circuit verwijderen?',
+    'sessions.confirmDeleteEmpty': 'Opgeslagen sessies zonder deelnemers, zonder voltooide ronden of zonder bekend circuit verwijderen?',
   },
 };
+
+function translateMessage(template, params) {
+  if (!template) return '';
+  return Object.keys(params).reduce((result, key) => result.replace(`{${key}}`, params[key]), template);
+}
+
+function t(key, params = {}) {
+  const translation = translations[languageSelectElement.value]?.[key] ?? translations.en[key] ?? key;
+  return Object.keys(params).length > 0 ? translateMessage(translation, params) : translation;
+}
+
+function setLanguage(language) {
+  const nextLanguage = translations[language] ? language : 'en';
+  localStorage.setItem(languageStorageKey, nextLanguage);
+  languageSelectElement.value = nextLanguage;
+  document.documentElement.lang = nextLanguage;
+  document.querySelectorAll('[data-i18n]').forEach(element => {
+    element.textContent = t(element.dataset.i18n);
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(element => {
+    element.placeholder = t(element.dataset.i18nPlaceholder);
+  });
+  document.querySelectorAll('[data-i18n-aria]').forEach(element => {
+    element.setAttribute('aria-label', t(element.dataset.i18nAria));
+  });
+  sessionSetupRowsElement.querySelectorAll('.setupProfileId option[value=""]').forEach(option => {
+    option.textContent = t('setup.noProfile');
+  });
+  sessionSetupRowsElement.querySelectorAll('.sessionSetupRow button').forEach(button => {
+    button.textContent = t('setup.remove');
+  });
+}
 
 setupButton.addEventListener('click', () => createFirstAdmin().catch(showError));
 loginButton.addEventListener('click', () => login().catch(showError));
 logoutButton.addEventListener('click', () => logout().catch(showError));
-languageSelectElement.addEventListener('change', () => setLanguage(languageSelectElement.value));
+languageSelectElement.addEventListener('change', () => saveLocalizationChoice(languageSelectElement.value).catch(showError));
 refreshElement.addEventListener('click', () => loadConfiguration().catch(showError));
 refreshSessionsButton.addEventListener('click', () => loadSessions().catch(showError));
 deleteEmptySessionsButton.addEventListener('click', () => deleteEmptyHistoricalSessions().catch(showError));
@@ -233,7 +433,7 @@ createAdminButton.addEventListener('click', () => createAdmin().catch(showError)
 changePasswordButton.addEventListener('click', () => changePassword().catch(showError));
 refreshStatusButton.addEventListener('click', () => loadAdvancedStatus().catch(showError));
 bindSourceAutoSave();
-setLanguage(localStorage.getItem(languageStorageKey) || 'en');
+loadLanguageChoice().catch(showError);
 
 document.querySelectorAll('[data-tab]').forEach(button => {
   button.addEventListener('click', () => showTab(button.dataset.tab));
@@ -344,7 +544,7 @@ async function loadSessionDetail(sessionId) {
 async function setSessionCountForHistory(sessionId, countForHistory) {
   const session = await putJson(`/api/admin/sessions/${encodeURIComponent(sessionId)}/history`, { countForHistory });
   selectedSessionId = session.sessionId;
-  setStatus(countForHistory ? 'Session included in historical boards.' : 'Session excluded from historical boards.');
+  setStatus(countForHistory ? t('sessions.includedMessage') : t('sessions.excludedMessage'));
   await loadSessions();
   await loadLeaderboards();
 }
@@ -688,15 +888,45 @@ async function loadKioskSettings() {
   kioskDisplayModeElement.value = settings.defaultDisplayMode ?? 'Monthly';
 }
 
+async function saveLocalizationChoice(language) {
+  setLanguage(language);
+  await putJson('/api/admin/localization', { defaultLanguage: language });
+}
+
+async function loadLanguageChoice() {
+  const language = localStorage.getItem(languageStorageKey);
+  if (language && translations[language]) {
+    setLanguage(language);
+    return;
+  }
+
+  try {
+    const localization = await fetchJson('/api/admin/localization');
+    if (localization?.defaultLanguage) {
+      setLanguage(localization.defaultLanguage);
+      return;
+    }
+  } catch {
+    // fallback to local storage or default language silently
+  }
+
+  setLanguage('en');
+}
+
 async function saveKioskSettings() {
   const settings = await putJson('/api/admin/kiosk', { defaultDisplayMode: kioskDisplayModeElement.value });
   kioskDisplayModeElement.value = settings.defaultDisplayMode ?? 'Monthly';
-  setStatus('Kiosk display mode saved.');
+  setStatus(t('status.kioskSaved'));
 }
 
 async function runRetentionCleanup() {
   const result = await postJson('/api/admin/persistence/retention/cleanup', {});
-  retentionCleanupStatusElement.textContent = `Deleted ${result.detailedLapRecordsDeleted} raw laps, ${result.sessionSummariesDeleted} sessions, ${result.trackBestRecordsDeleted} track bests, and ${result.monthlyTrackPeriodsDeleted} monthly periods.`;
+  retentionCleanupStatusElement.textContent = t('retention.cleanupResult', {
+    detailedLapRecordsDeleted: result.detailedLapRecordsDeleted ?? 0,
+    sessionSummariesDeleted: result.sessionSummariesDeleted ?? 0,
+    trackBestRecordsDeleted: result.trackBestRecordsDeleted ?? 0,
+    monthlyTrackPeriodsDeleted: result.monthlyTrackPeriodsDeleted ?? 0,
+  });
   await loadSessions();
   await loadLeaderboards();
 }
@@ -708,7 +938,7 @@ async function setMonthlyTrack() {
   renderMonthlyTrack(monthlyTrack);
   monthlyTrackReasonElement.value = '';
   await loadLeaderboards();
-  statusElement.textContent = 'Monthly track started with fresh stats.';
+  setStatus(t('status.monthlyTrackStarted'));
 }
 
 async function resetMonthlyTrack() {
@@ -717,12 +947,12 @@ async function resetMonthlyTrack() {
   renderMonthlyTrack(monthlyTrack);
   monthlyTrackReasonElement.value = '';
   await loadLeaderboards();
-  statusElement.textContent = 'Monthly track stats reset.';
+  setStatus(t('status.monthlyTrackReset'));
 }
 
 function renderMonthlyTrack(monthlyTrack) {
   if (!monthlyTrack?.isActive) {
-    monthlyTrackStatusElement.textContent = 'No active monthly track.';
+    monthlyTrackStatusElement.textContent = t('monthlyTrack.noActive');
     monthlyTrackNameElement.value = '';
     return;
   }
@@ -737,7 +967,7 @@ function renderMonthlyBestLaps(rows) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
     cell.colSpan = 6;
-    cell.textContent = 'No counted timed laps yet.';
+    cell.textContent = t('monthlyBests.empty');
     row.appendChild(cell);
     monthlyBestLapsElement.appendChild(row);
     return;
@@ -763,7 +993,7 @@ async function createAdmin() {
   });
   newAdminPasswordElement.value = '';
   await loadUsers();
-  statusElement.textContent = 'Admin user created.';
+  setStatus(t('status.adminCreated'));
 }
 
 async function changePassword() {
@@ -771,7 +1001,7 @@ async function changePassword() {
   await putJson(`/api/admin/users/${username}/password`, { newPassword: newPasswordElement.value });
   newPasswordElement.value = '';
   await loadUsers();
-  statusElement.textContent = 'Admin password changed.';
+  setStatus(t('status.passwordChanged'));
 }
 
 async function loadAdvancedStatus() {
@@ -822,7 +1052,7 @@ function readSourceConfigurationForm() {
 }
 
 function renderDiscovery(discovery) {
-  discoveryStatusElement.textContent = discovery?.status ?? 'No discovery result.';
+  discoveryStatusElement.textContent = discovery?.status ?? t('discovery.noResult');
   discoveryStatusElement.className = discovery?.isAmbiguous ? 'warningText' : '';
   renderList(candidateMapsElement, discovery?.candidateMapNames ?? [], value => value);
   renderList(discoveredMapsElement, discovery?.discoveredCandidates ?? [], formatCandidate);
@@ -846,7 +1076,7 @@ function renderList(element, values, formatter) {
 }
 
 function formatCandidate(candidate) {
-  const pid = candidate.processId === null || candidate.processId === undefined ? 'no PID' : `PID ${candidate.processId}`;
+  const pid = candidate.processId === null || candidate.processId === undefined ? t('discovery.noPid') : `PID ${candidate.processId}`;
   const process = candidate.processName ? `, ${candidate.processName}` : '';
   return `${candidate.mapName} (${pid}${process}, ${candidate.discoverySource})`;
 }
@@ -872,7 +1102,7 @@ function showDashboard(session) {
   loginPanel.hidden = true;
   dashboardPanel.hidden = false;
   logoutButton.hidden = false;
-  setStatus(`Signed in as ${session.displayName ?? session.username}`);
+  setStatus(t('status.signedIn', { name: session.displayName ?? session.username }));
   passwordUsernameElement.value = session.username ?? '';
   showTab(localStorage.getItem(tabStorageKey) || 'sourceTab', false);
 }
@@ -889,26 +1119,6 @@ function showTab(tabId, persist = true) {
     tab.hidden = tab.id !== target;
     tab.classList.toggle('active', tab.id === target);
   });
-}
-
-function setLanguage(language) {
-  const nextLanguage = translations[language] ? language : 'en';
-  localStorage.setItem(languageStorageKey, nextLanguage);
-  languageSelectElement.value = nextLanguage;
-  document.documentElement.lang = nextLanguage;
-  document.querySelectorAll('[data-i18n]').forEach(element => {
-    element.textContent = t(element.dataset.i18n);
-  });
-  sessionSetupRowsElement.querySelectorAll('.setupProfileId option[value=""]').forEach(option => {
-    option.textContent = t('setup.noProfile');
-  });
-  sessionSetupRowsElement.querySelectorAll('.sessionSetupRow button').forEach(button => {
-    button.textContent = t('setup.remove');
-  });
-}
-
-function t(key) {
-  return translations[languageSelectElement.value]?.[key] ?? translations.en[key] ?? key;
 }
 
 async function fetchJson(path) {
