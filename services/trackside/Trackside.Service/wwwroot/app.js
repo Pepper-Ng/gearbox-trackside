@@ -1,4 +1,5 @@
 const statusElement = document.querySelector('#status');
+const statusModeElement = document.querySelector('#statusMode');
 const summaryElement = document.querySelector('#summary');
 const bestSummaryElement = document.querySelector('#bestSummary');
 const bestSectionElement = document.querySelector('#bestSection');
@@ -156,6 +157,8 @@ function setView(view) {
     button.classList.toggle('active', button.dataset.view === view);
   });
   const isLive = view === 'live';
+  statusModeElement.textContent = isLive ? 'Live Feed' : 'Leaderboard';
+  statusModeElement.classList.toggle('live', isLive);
   summaryElement.hidden = !isLive;
   liveSectionElement.hidden = !isLive;
   bestSummaryElement.hidden = isLive;

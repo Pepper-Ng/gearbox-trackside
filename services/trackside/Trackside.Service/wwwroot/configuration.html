@@ -10,8 +10,12 @@
 <body>
   <main class="shell configShell">
     <header class="topbar">
-      <div>
-        <h1 data-i18n="admin.title">Admin</h1>
+      <div class="brandLockup">
+        <img class="brandLogo" src="/brand/gearbox-trackside-logo-dark-wordmark.png" alt="Gearbox Trackside">
+        <h1 class="srOnly" data-i18n="admin.title">Admin</h1>
+      </div>
+      <div class="topbarMeta" aria-live="polite">
+        <span class="statusPill">Admin Control</span>
         <p id="configurationStatus" data-i18n="status.checkingSession">Checking admin session...</p>
       </div>
       <div class="topbarActions">
@@ -61,7 +65,7 @@
       </div>
     </section>
 
-    <section id="dashboardPanel" hidden>
+    <section id="dashboardPanel" class="dashboardShell" hidden>
       <nav class="adminTabs" aria-label="Admin sections">
         <button class="active" data-tab="sourceTab" type="button" data-i18n="tabs.source">Source</button>
         <button data-tab="sessionSetupTab" type="button" data-i18n="tabs.sessionSetup">Session Setup</button>
@@ -73,6 +77,8 @@
 
       <section id="sourceTab" class="adminTab active" data-i18n-aria="aria.sourceConfiguration" aria-label="Source configuration">
         <section class="configurationPanel">
+          <h2 data-i18n="sourceConfig.title">Live Source</h2>
+          <p class="wideField" data-i18n="sourceConfig.description">Choose the timing source, memory-map discovery behavior, and polling rates used by the live kiosk feed.</p>
           <label>
             <span data-i18n="source.mode">Source mode</span>
             <select id="sourceMode">

@@ -1,8 +1,16 @@
-import { useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { formatGap, formatLapTime, formatNumber } from '../format';
 import { BestLapBoardResponse, BestLapRow, BestLapWindow, DriverSnapshot, KioskDisplayMode, LastFinishedSessionResponse, LastFinishedSessionRow, LiveSessionConnection, LiveSessionSnapshot, SectorSnapshot, startLiveSessionFeed, TracksideApiClient } from '../tracksideApi';
 
 type ViewMode = BestLapWindow | 'last' | 'live';
+
+const viewOptions: { label: string; value: ViewMode }[] = [
+  { label: 'Monthly', value: 'monthly' },
+  { label: 'Weekly', value: 'weekly' },
+  { label: 'Daily', value: 'daily' },
+  { label: 'Last Session', value: 'last' },
+  { label: 'Live', value: 'live' },
+];
 
 /** Main kiosk application shell. */
 export function App() {
@@ -128,24 +136,8 @@ export function App() {
 
   return (
     <main className="shell">
-      <header className="topbar">
-        <div>
-          <h1>Trackside</h1>
-          <p>{view === 'live' ? status : boardStatus}</p>
-        </div>
-        <div className="topbarActions">
-          <a href="/configuration.html">Admin</a>
-          <a href="/api/health">Health</a>
-        </div>
-      </header>
-
-      <nav className="viewTabs" aria-label="Trackside views">
-        <button className={view === 'monthly' ? 'active' : undefined} type="button" onClick={() => setView('monthly')}>Monthly</button>
-        <button className={view === 'weekly' ? 'active' : undefined} type="button" onClick={() => setView('weekly')}>Weekly</button>
-        <button className={view === 'daily' ? 'active' : undefined} type="button" onClick={() => setView('daily')}>Daily</button>
-        <button className={view === 'last' ? 'active' : undefined} type="button" onClick={() => setView('last')}>Last Session</button>
-        <button className={view === 'live' ? 'active' : undefined} type="button" onClick={() => setView('live')}>Live</button>
-      </nav>
+      <ShellHeader status={view === 'live' ? status : boardStatus} view={view} />
+      <ViewSwitcher currentView={view} onChange={setView} />
 
       {view === 'live'
         ? <LiveBoard snapshot={snapshot} />
@@ -164,7 +156,7 @@ interface LiveBoardProps {
 function LiveBoard({ snapshot }: LiveBoardProps) {
   return (
     <>
-      <section className="summary" aria-label="Session summary">
+      <MetricGrid label="Session summary">
         <Metric label="Track" value={snapshot?.session.trackName} />
         <Metric label="Session" value={snapshot?.session.kind} />
         <Metric label="Phase" value={snapshot?.session.phase} />
@@ -174,14 +166,13 @@ function LiveBoard({ snapshot }: LiveBoardProps) {
           label="Air / Track"
           value={`${formatNumber(snapshot?.session.airTemperatureCelsius)}C / ${formatNumber(snapshot?.session.trackTemperatureCelsius)}C`}
         />
-      </section>
+      </MetricGrid>
 
-      <section>
-        <h2>Live Board</h2>
+      <BoardPanel title="Live Board" meta={`${snapshot?.drivers.length ?? 0} drivers`}>
         <div className="tableFrame">
           <LeaderboardTable drivers={snapshot?.drivers ?? []} />
         </div>
-      </section>
+      </BoardPanel>
     </>
   );
 }
@@ -198,20 +189,19 @@ function BestLapBoard({ board, view }: BestLapBoardProps) {
   const rows = board?.rows ?? [];
   return (
     <>
-      <section className="summary" aria-label="Best-lap summary">
+      <MetricGrid label="Best-lap summary">
         <Metric label="Board" value={title} />
         <Metric label="Track" value={board?.trackName ?? (view === 'monthly' ? 'Not set' : 'All tracks')} />
         <Metric label="Mode" value={board?.mode === 'all-laps' ? 'All laps' : 'Per driver'} />
         <Metric label="Since" value={formatDate(board?.fromUtc)} />
         <Metric label="Entries" value={rows.length} />
-      </section>
+      </MetricGrid>
 
-      <section>
-        <h2>{title}</h2>
+      <BoardPanel title={title} meta={`${rows.length} timed laps`}>
         <div className="tableFrame">
           <BestLapTable rows={rows} showTrack={!board?.trackName} />
         </div>
-      </section>
+      </BoardPanel>
     </>
   );
 }
@@ -370,6 +360,99 @@ function Metric({ label, value }: MetricProps) {
   );
 }
 
+interface ShellHeaderProps {
+  /** Current status message shown in the masthead. */
+  status: string;
+  /** Selected display mode. */
+  view: ViewMode;
+}
+
+function ShellHeader({ status, view }: ShellHeaderProps) {
+  return (
+    <header className="topbar">
+      <BrandMark />
+      <div className="topbarMeta" aria-live="polite">
+        <span className={view === 'live' ? 'statusPill live' : 'statusPill'}>{view === 'live' ? 'Live Feed' : 'Leaderboard'}</span>
+        <p>{status}</p>
+      </div>
+      <div className="topbarActions">
+        <a href="/configuration.html">Admin</a>
+        <a href="/api/health">Health</a>
+      </div>
+    </header>
+  );
+}
+
+function BrandMark() {
+  return (
+    <div className="brandLockup">
+      <img className="brandLogo" src="/brand/gearbox-trackside-logo-dark-wordmark.png" alt="Gearbox Trackside" />
+      <h1 className="srOnly">Trackside Kiosk</h1>
+    </div>
+  );
+}
+
+interface ViewSwitcherProps {
+  /** Current view mode. */
+  currentView: ViewMode;
+  /** Called when the user selects a different view. */
+  onChange: (view: ViewMode) => void;
+}
+
+function ViewSwitcher({ currentView, onChange }: ViewSwitcherProps) {
+  return (
+    <nav className="viewTabs" aria-label="Trackside views">
+      {viewOptions.map(option => (
+        <button
+          key={option.value}
+          aria-current={currentView === option.value ? 'page' : undefined}
+          className={currentView === option.value ? 'active' : undefined}
+          type="button"
+          onClick={() => onChange(option.value)}
+        >
+          {option.label}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+interface MetricGridProps {
+  /** Accessible label for the metric group. */
+  label: string;
+  /** Metric cards. */
+  children: ReactNode;
+}
+
+function MetricGrid({ label, children }: MetricGridProps) {
+  return (
+    <section className="summary" aria-label={label}>
+      {children}
+    </section>
+  );
+}
+
+interface BoardPanelProps {
+  /** Panel title. */
+  title: string;
+  /** Compact panel metadata. */
+  meta: string;
+  /** Panel content. */
+  children: ReactNode;
+}
+
+function BoardPanel({ title, meta, children }: BoardPanelProps) {
+  return (
+    <section className="boardPanel">
+      <div className="sectionHeader">
+        <h2>{title}</h2>
+        <span>{meta}</span>
+      </div>
+      {children}
+    </section>
+  );
+}
+
 interface LastSessionBoardProps {
   /** Last finished session result. */
   result: LastFinishedSessionResponse | null;
@@ -379,20 +462,19 @@ function LastSessionBoard({ result }: LastSessionBoardProps) {
   const rows = result?.rows ?? [];
   return (
     <>
-      <section className="summary" aria-label="Last session summary">
+      <MetricGrid label="Last session summary">
         <Metric label="Board" value="Last Session" />
         <Metric label="Track" value={result?.trackName ?? 'No finished session'} />
         <Metric label="Session" value={result?.sessionKind} />
         <Metric label="Finished" value={formatDate(result?.lastSeenUtc)} />
         <Metric label="Entries" value={rows.length} />
-      </section>
+      </MetricGrid>
 
-      <section>
-        <h2>Last Session</h2>
+      <BoardPanel title="Last Session" meta={`${rows.length} result rows`}>
         <div className="tableFrame">
           <LastSessionTable rows={rows} />
         </div>
-      </section>
+      </BoardPanel>
     </>
   );
 }

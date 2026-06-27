@@ -12,8 +12,12 @@
 <body>
   <main class="shell">
     <header class="topbar">
-      <div>
-        <h1>Trackside</h1>
+      <div class="brandLockup">
+        <img class="brandLogo" src="/brand/gearbox-trackside-logo-dark-wordmark.png" alt="Gearbox Trackside">
+        <h1 class="srOnly">Trackside Kiosk</h1>
+      </div>
+      <div class="topbarMeta" aria-live="polite">
+        <span id="statusMode" class="statusPill">Leaderboard</span>
         <p id="status">Connecting to local host...</p>
       </div>
       <div class="topbarActions">
@@ -31,45 +35,55 @@
     </nav>
 
     <section class="summary" id="bestSummary"></section>
-    <section class="drivers" id="bestSection">
-      <h2 id="bestTitle">Monthly Track</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Rank</th>
-            <th>Driver</th>
-            <th>Rig</th>
-            <th>Vehicle</th>
-            <th>Lap</th>
-            <th>Time</th>
-            <th>Set</th>
-          </tr>
-        </thead>
-        <tbody id="bestLaps"></tbody>
-      </table>
+    <section class="boardPanel drivers" id="bestSection">
+      <div class="sectionHeader">
+        <h2 id="bestTitle">Monthly Track</h2>
+        <span>Timed laps</span>
+      </div>
+      <div class="tableFrame">
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Driver</th>
+              <th>Rig</th>
+              <th>Vehicle</th>
+              <th>Lap</th>
+              <th>Time</th>
+              <th>Set</th>
+            </tr>
+          </thead>
+          <tbody id="bestLaps"></tbody>
+        </table>
+      </div>
     </section>
 
     <section class="summary" id="summary" hidden></section>
-    <section class="drivers" id="liveSection" hidden>
-      <h2>Live Board</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Rank</th>
-            <th>Driver</th>
-            <th>Rig</th>
-            <th>Vehicle</th>
-            <th>Laps</th>
-            <th>Best</th>
-            <th>Current</th>
-            <th>S1</th>
-            <th>S2</th>
-            <th>S3</th>
-            <th>Gap</th>
-          </tr>
-        </thead>
-        <tbody id="drivers"></tbody>
-      </table>
+    <section class="boardPanel drivers" id="liveSection" hidden>
+      <div class="sectionHeader">
+        <h2>Live Board</h2>
+        <span>Live timing</span>
+      </div>
+      <div class="tableFrame">
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Driver</th>
+              <th>Rig</th>
+              <th>Vehicle</th>
+              <th>Laps</th>
+              <th>Best</th>
+              <th>Current</th>
+              <th>S1</th>
+              <th>S2</th>
+              <th>S3</th>
+              <th>Gap</th>
+            </tr>
+          </thead>
+          <tbody id="drivers"></tbody>
+        </table>
+      </div>
     </section>
   </main>
   <script src="/app.js" type="module"></script>
