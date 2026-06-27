@@ -126,7 +126,7 @@ public sealed class SqliteTracksideStoreTests
     }
 
     /// <summary>
-    /// Placeholder snapshots from a server waiting in garage with no known track or drivers are not historical sessions.
+    /// Placeholder snapshots from a server waiting in garage without lap activity are not historical sessions.
     /// </summary>
     [Fact]
     public async Task DoesNotPersistPlaceholderSnapshotsAsSessions()
@@ -147,6 +147,20 @@ public sealed class SqliteTracksideStoreTests
         };
 
         await store.SaveLiveSessionSnapshotAsync(placeholder, countForHistory: true, CancellationToken.None);
+
+        var startupGarage = BuildSnapshot() with
+        {
+            Session = BuildSnapshot().Session with { Phase = SessionPhase.Garage },
+            Drivers = BuildSnapshot().Drivers
+                .Select(driver => driver with
+                {
+                    CompletedLaps = 0,
+                    BestLapSeconds = null,
+                    LastLapSeconds = null,
+                })
+                .ToList(),
+        };
+        await store.SaveLiveSessionSnapshotAsync(startupGarage, countForHistory: true, CancellationToken.None);
 
         Assert.Empty(await store.GetHistoricalSessionsAsync(new HistoricalSessionQuery(), CancellationToken.None));
         Assert.Empty(await store.GetBestLapsAsync(new HistoricalBestLapQuery(), CancellationToken.None));
@@ -183,13 +197,14 @@ public sealed class SqliteTracksideStoreTests
         ITracksideStore store = CreateStore(temporaryDirectory);
         await store.SaveLiveSessionSnapshotAsync(BuildSnapshot(), countForHistory: true, CancellationToken.None);
         await InsertPlaceholderSessionAsync(temporaryDirectory);
+        await InsertStartupSessionWithoutLapsAsync(temporaryDirectory);
 
-        Assert.Equal(2, (await store.GetHistoricalSessionsAsync(new HistoricalSessionQuery(), CancellationToken.None)).Count);
+        Assert.Equal(3, (await store.GetHistoricalSessionsAsync(new HistoricalSessionQuery(), CancellationToken.None)).Count);
 
         var deleted = await store.DeleteEmptyHistoricalSessionsAsync(CancellationToken.None);
         var sessions = await store.GetHistoricalSessionsAsync(new HistoricalSessionQuery(), CancellationToken.None);
 
-        Assert.Equal(1, deleted);
+        Assert.Equal(2, deleted);
         var session = Assert.Single(sessions);
         Assert.Equal("Loch Drummond - Short", session.TrackName);
     }
@@ -588,6 +603,32 @@ public sealed class SqliteTracksideStoreTests
                 'placeholder-session', 'shared-memory', 'Unknown track', 'Practice', 'Garage',
                 '2026-06-25T12:00:00.0000000+00:00', '2026-06-25T12:00:00.0000000+00:00',
                 0, 'Unknown', 1);
+            """;
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task InsertStartupSessionWithoutLapsAsync(TemporaryDirectory temporaryDirectory)
+    {
+        var databasePath = Path.Combine(temporaryDirectory.Path, "trackside-test.db");
+        await using var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = databasePath }.ToString());
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO sessions (
+                session_id, source, track_name, session_kind, session_phase, first_seen_utc, last_seen_utc,
+                vehicle_count, overall_flag, count_for_history)
+            VALUES (
+                'startup-session', 'shared-memory', 'Bahrain GP', 'Practice', 'Garage',
+                '2026-06-25T12:00:00.0000000+00:00', '2026-06-25T12:00:00.0000000+00:00',
+                4, 'Unknown', 1);
+
+            INSERT INTO participants (
+                session_id, driver_id, rig_name, display_name, vehicle_name, first_seen_utc, last_seen_utc,
+                latest_rank, completed_laps)
+            VALUES (
+                'startup-session', '1', 'Setup1', 'Setup1', 'Formula Pro',
+                '2026-06-25T12:00:00.0000000+00:00', '2026-06-25T12:00:00.0000000+00:00',
+                1, 0);
             """;
         await command.ExecuteNonQueryAsync();
     }

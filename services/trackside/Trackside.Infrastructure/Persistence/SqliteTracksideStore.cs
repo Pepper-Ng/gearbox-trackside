@@ -727,6 +727,12 @@ public sealed class SqliteTracksideStore : ITracksideStore
                 WHERE NOT EXISTS (
                     SELECT 1 FROM participants WHERE participants.session_id = sessions.session_id
                 )
+                   OR NOT EXISTS (
+                    SELECT 1
+                    FROM laps
+                    INNER JOIN participants lap_participants ON lap_participants.participant_id = laps.participant_id
+                    WHERE lap_participants.session_id = sessions.session_id
+                )
                    OR lower(trim(sessions.track_name)) IN ('unknown', 'unknown track', 'unavailable')
             );
             """,
@@ -738,6 +744,12 @@ public sealed class SqliteTracksideStore : ITracksideStore
             DELETE FROM sessions
             WHERE NOT EXISTS (
                 SELECT 1 FROM participants WHERE participants.session_id = sessions.session_id
+            )
+               OR NOT EXISTS (
+                SELECT 1
+                FROM laps
+                INNER JOIN participants lap_participants ON lap_participants.participant_id = laps.participant_id
+                WHERE lap_participants.session_id = sessions.session_id
             )
                OR lower(trim(track_name)) IN ('unknown', 'unknown track', 'unavailable');
             """,
@@ -1816,8 +1828,16 @@ public sealed class SqliteTracksideStore : ITracksideStore
 
     private static bool ShouldPersistSnapshot(LiveSessionSnapshot snapshot)
     {
-        return snapshot.Drivers.Count > 0 && IsKnownTrackName(snapshot.Session.TrackName);
+        return snapshot.Drivers.Count > 0
+            && IsKnownTrackName(snapshot.Session.TrackName)
+            && snapshot.Drivers.Any(HasHistoricalLapActivity);
     }
+
+    private static bool HasHistoricalLapActivity(DriverSnapshot driver) => driver.CompletedLaps > 0
+        || IsPositiveFinite(driver.LastLapSeconds)
+        || IsPositiveFinite(driver.BestLapSeconds);
+
+    private static bool IsPositiveFinite(double? value) => value is > 0 && double.IsFinite(value.Value);
 
     private static bool IsKnownTrackName(string? trackName)
     {

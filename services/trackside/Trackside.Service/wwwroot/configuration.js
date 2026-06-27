@@ -111,7 +111,11 @@ const translations = {
     'sessions.title': 'Session History',
     'sessions.description': 'Stored sessions used for historical boards. This is not the live-session monitor.',
     'sessions.detailTitle': 'Session Detail',
-    'sessions.history': 'History',
+    'sessions.boards': 'Boards',
+    'sessions.included': 'Included',
+    'sessions.excluded': 'Excluded',
+    'sessions.include': 'Include',
+    'sessions.exclude': 'Exclude',
     'sessions.track': 'Track',
     'sessions.kind': 'Session',
     'sessions.phase': 'Phase',
@@ -135,7 +139,7 @@ const translations = {
     'sessions.deleted': 'Stored session deleted.',
     'sessions.emptyDeleted': 'Deleted {count} empty stored sessions.',
     'sessions.confirmDelete': 'Delete this stored session from history?',
-    'sessions.confirmDeleteEmpty': 'Delete stored sessions that have no participants or no known track?',
+    'sessions.confirmDeleteEmpty': 'Delete stored sessions that have no participants, no completed laps, or no known track?',
   },
   nl: {
     'admin.title': 'Beheer',
@@ -176,7 +180,11 @@ const translations = {
     'sessions.title': 'Sessiehistorie',
     'sessions.description': 'Opgeslagen sessies voor historische klassementen. Dit is niet de live-sessiemonitor.',
     'sessions.detailTitle': 'Sessiedetail',
-    'sessions.history': 'Historie',
+    'sessions.boards': 'Borden',
+    'sessions.included': 'Telt mee',
+    'sessions.excluded': 'Uitgesloten',
+    'sessions.include': 'Meetellen',
+    'sessions.exclude': 'Uitsluiten',
     'sessions.track': 'Circuit',
     'sessions.kind': 'Sessie',
     'sessions.phase': 'Fase',
@@ -200,7 +208,7 @@ const translations = {
     'sessions.deleted': 'Opgeslagen sessie verwijderd.',
     'sessions.emptyDeleted': '{count} lege opgeslagen sessies verwijderd.',
     'sessions.confirmDelete': 'Deze opgeslagen sessie uit de historie verwijderen?',
-    'sessions.confirmDeleteEmpty': 'Opgeslagen sessies zonder rijders of bekend circuit verwijderen?',
+    'sessions.confirmDeleteEmpty': 'Opgeslagen sessies zonder rijders, zonder voltooide ronden of zonder bekend circuit verwijderen?',
   },
 };
 
@@ -383,7 +391,7 @@ function renderSessions(sessions) {
   for (const session of sessions) {
     const row = document.createElement('tr');
     row.dataset.sessionId = session.sessionId;
-    appendCheckboxCell(row, session.countForHistory, checked => setSessionCountForHistory(session.sessionId, checked));
+    appendCell(row, session.countForHistory ? t('sessions.included') : t('sessions.excluded'));
     appendCell(row, session.trackName);
     appendCell(row, session.sessionKind);
     appendCell(row, session.sessionPhase);
@@ -393,6 +401,10 @@ function renderSessions(sessions) {
     appendCell(row, formatSeconds(session.bestLapSeconds));
     appendActionsCell(row, [
       { label: t('sessions.view'), onClick: () => loadSessionDetail(session.sessionId).catch(showError) },
+      {
+        label: session.countForHistory ? t('sessions.exclude') : t('sessions.include'),
+        onClick: () => setSessionCountForHistory(session.sessionId, !session.countForHistory).catch(showError),
+      },
       { label: t('sessions.delete'), onClick: () => deleteHistoricalSession(session.sessionId).catch(showError), danger: true },
     ]);
     sessionRowsElement.appendChild(row);
@@ -955,28 +967,6 @@ async function readJsonResponse(response) {
 function appendCell(row, value) {
   const cell = document.createElement('td');
   cell.textContent = value ?? '-';
-  row.appendChild(cell);
-}
-
-function appendCheckboxCell(row, checked, onChange) {
-  const cell = document.createElement('td');
-  const checkbox = document.createElement('input');
-  checkbox.className = 'tableCheckbox';
-  checkbox.type = 'checkbox';
-  checkbox.checked = Boolean(checked);
-  checkbox.addEventListener('change', async () => {
-    const nextChecked = checkbox.checked;
-    checkbox.disabled = true;
-    try {
-      await onChange(nextChecked);
-    } catch (error) {
-      checkbox.checked = !nextChecked;
-      showError(error);
-    } finally {
-      checkbox.disabled = false;
-    }
-  });
-  cell.appendChild(checkbox);
   row.appendChild(cell);
 }
 
