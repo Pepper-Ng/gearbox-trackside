@@ -97,7 +97,9 @@ public static class TracksideWebApplication
 
         app.Use(async (context, next) =>
         {
-            if (context.Request.Path.Equals("/config", StringComparison.OrdinalIgnoreCase))
+            var path = context.Request.Path.Value ?? string.Empty;
+            if (path.Equals("/config", StringComparison.OrdinalIgnoreCase)
+                || path.Equals("/config/", StringComparison.OrdinalIgnoreCase))
             {
                 context.Request.Path = "/configuration.html";
             }

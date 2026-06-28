@@ -271,7 +271,7 @@ const translations = {
     'source.fixturePath': 'Fixture-pad',
     'source.scoringMapName': 'Exacte scorekaart',
     'source.processId': 'PID van dedicated server',
-    'source.autoDiscover': 'Memory-kaarten automatisch ontdekken',
+    'source.autoDiscover': 'Memory-map automatisch ontdekken',
     'source.processNames': 'Procesnamen dedicated server',
     'source.multipleMapPolicy': 'Meerdere kaartbeleid',
     'source.requireExplicitSelection': 'Vereis expliciete selectie',

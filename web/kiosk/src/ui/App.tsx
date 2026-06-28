@@ -163,12 +163,40 @@ interface LiveBoardProps {
 }
 
 function LiveBoard({ snapshot }: LiveBoardProps) {
+  const [clockAnchor, setClockAnchor] = useState({ seconds: 0, timestamp: Date.now() });
+  const [tick, setTick] = useState(Date.now());
+
+  useEffect(() => {
+    const currentSeconds = snapshot?.session?.currentSessionSeconds;
+    if (currentSeconds == null) {
+      return;
+    }
+
+    setClockAnchor({
+      seconds: currentSeconds,
+      timestamp: Date.now(),
+    });
+  }, [snapshot?.session?.currentSessionSeconds]);
+
+  useEffect(() => {
+    if (snapshot?.session?.currentSessionSeconds == null) {
+      return;
+    }
+
+    const interval = window.setInterval(() => setTick(Date.now()), 50);
+    return () => window.clearInterval(interval);
+  }, [snapshot?.session?.currentSessionSeconds]);
+
+  const interpolatedClockSeconds = snapshot?.session?.currentSessionSeconds != null
+    ? clockAnchor.seconds + Math.max(0, (tick - clockAnchor.timestamp) / 1000)
+    : undefined;
+
   return (
     <>
       <section className="sessionStrip" aria-label="Session summary">
-        <SlimMetric label="Track" value={snapshot?.session.trackName} />
-        <SlimMetric label="Session" value={snapshot?.session.kind} />
-        <SlimMetric label="Clock" value={formatLapTime(snapshot?.session.currentSessionSeconds)} />
+        <Metric label="Track" value={snapshot?.session.trackName} />
+        <Metric label="Session" value={snapshot?.session.kind} />
+        <Metric label="Clock" value={formatLapTime(interpolatedClockSeconds)} />
       </section>
 
       <BoardPanel title="Live Board" meta={`${snapshot?.drivers.length ?? 0} drivers`} live>

@@ -6,6 +6,7 @@ using Trackside.Application.Configuration;
 using Trackside.Application.LiveSession;
 using Trackside.Application.Persistence;
 using Trackside.Domain.LiveSession;
+using Trackside.Service.Configuration;
 using Trackside.Service.Hubs;
 
 namespace Trackside.Service.Workers;
@@ -20,6 +21,7 @@ public sealed class LiveSessionPublisher : BackgroundService
     private readonly ITracksideStore _store;
     private readonly IHubContext<LiveSessionHub, ILiveSessionClient> _hubContext;
     private readonly IOptionsMonitor<TracksideLiveSessionOptions> _options;
+    private readonly IOptionsMonitor<TracksideOptions> _tracksideOptions;
     private readonly IOptionsMonitor<TracksidePersistenceOptions> _persistenceOptions;
     private readonly ILogger<LiveSessionPublisher> _logger;
 
@@ -39,6 +41,7 @@ public sealed class LiveSessionPublisher : BackgroundService
         ITracksideStore store,
         IHubContext<LiveSessionHub, ILiveSessionClient> hubContext,
         IOptionsMonitor<TracksideLiveSessionOptions> options,
+        IOptionsMonitor<TracksideOptions> tracksideOptions,
         IOptionsMonitor<TracksidePersistenceOptions> persistenceOptions,
         ILogger<LiveSessionPublisher> logger)
     {
@@ -47,6 +50,7 @@ public sealed class LiveSessionPublisher : BackgroundService
         _store = store;
         _hubContext = hubContext;
         _options = options;
+        _tracksideOptions = tracksideOptions;
         _persistenceOptions = persistenceOptions;
         _logger = logger;
     }
@@ -99,10 +103,17 @@ public sealed class LiveSessionPublisher : BackgroundService
 
     private TimeSpan GetPublishInterval()
     {
-        var seconds = Math.Max(
+        var publishSeconds = Math.Max(
             TracksideLiveSessionOptions.MinimumPublishIntervalSeconds,
             _options.CurrentValue.PublishIntervalSeconds);
 
-        return TimeSpan.FromSeconds(seconds);
+        var tracksideOptions = _tracksideOptions.CurrentValue;
+        if (tracksideOptions.Source.Mode == LiveSessionSourceMode.SharedMemory)
+        {
+            var scoringSeconds = 1.0 / Math.Clamp(tracksideOptions.Source.SharedMemory.ScoringPollHz, 0.25, 200.0);
+            return TimeSpan.FromSeconds(Math.Min(publishSeconds, scoringSeconds));
+        }
+
+        return TimeSpan.FromSeconds(publishSeconds);
     }
 }
