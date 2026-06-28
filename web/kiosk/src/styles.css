@@ -41,8 +41,7 @@ body::before {
   z-index: -1;
   background:
     linear-gradient(115deg, transparent 0 42%, rgba(0, 176, 255, .06) 42.2% 42.6%, transparent 42.8%),
-    linear-gradient(115deg, transparent 0 54%, rgba(255, 138, 0, .05) 54.2% 54.55%, transparent 54.8%),
-    repeating-linear-gradient(90deg, rgba(255, 255, 255, .025) 0 1px, transparent 1px 96px);
+    linear-gradient(115deg, transparent 0 54%, rgba(255, 138, 0, .05) 54.2% 54.55%, transparent 54.8%);
   content: "";
   pointer-events: none;
 }
@@ -54,6 +53,29 @@ textarea {
   font: inherit;
 }
 
+.flagSwatch {
+  width: 92px;
+  height: 92px;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  color: var(--gt-graphite);
+  font-weight: 800;
+  text-align: center;
+  white-space: normal;
+  padding: 8px;
+}
+
+.flagSwatch span {
+  color: inherit;
+  font-size: 0.95rem;
+}
+
+.flagMetric span {
+  display: block;
+  margin-bottom: 10px;
+}
 .srOnly {
   position: absolute;
   width: 1px;
@@ -82,6 +104,106 @@ textarea {
     rgba(7, 9, 12, .86);
   box-shadow: var(--gt-shadow);
   padding: 18px 20px;
+}
+
+.topbarPills {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.topbarFlag {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+  margin-left: 30px;
+}
+
+.topbarFlag .flagSwatch {
+  width: 80px;
+  height: 80px;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  color: var(--gt-graphite);
+  font-weight: 800;
+  text-align: center;
+  white-space: normal;
+  padding: 8px;
+}
+
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  border: 1px solid rgba(0, 176, 255, .42);
+  border-radius: 999px;
+  background: rgba(0, 176, 255, .1);
+  color: var(--gt-blue);
+  font-family: "Rajdhani", "Bahnschrift", "Segoe UI", sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  padding: 4px 8px;
+  text-transform: uppercase;
+}
+
+.statusPill::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 12px currentColor;
+  content: "";
+}
+
+.statusPill.live {
+  border-color: rgba(255, 32, 45, .48);
+  background: rgba(255, 32, 45, .11);
+  color: var(--gt-red);
+}
+
+.statusPill.connection {
+  border-color: rgba(46, 204, 113, .48);
+  background: rgba(46, 204, 113, .12);
+  color: #2ecc71;
+}
+
+.sessionStrip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.slimMetric {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 64px;
+  border: 1px solid var(--gt-line);
+  border-radius: 12px;
+  background: var(--gt-panel);
+  padding: 10px 12px;
+}
+
+.slimMetric span {
+  color: var(--gt-muted);
+  font-size: 10px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.slimMetric strong {
+  margin-top: 6px;
+  font-size: 16px;
+  line-height: 1.1;
+}
+
+.liveBoardFrame {
+  border-top: 14px solid var(--flag-color, var(--gt-blue));
 }
 
 .brandLockup {
@@ -144,6 +266,12 @@ textarea {
   border-color: rgba(255, 32, 45, .48);
   background: rgba(255, 32, 45, .11);
   color: var(--gt-red);
+}
+
+.statusPill.connection {
+  border-color: rgba(46, 204, 113, .48);
+  background: rgba(46, 204, 113, .12);
+  color: #2ecc71;
 }
 
 .topbarActions,
@@ -266,6 +394,15 @@ h2 {
     linear-gradient(150deg, rgba(255, 255, 255, .08), transparent 45%),
     var(--gt-panel);
   padding: 16px;
+}
+
+.metric.featured {
+  min-height: 132px;
+  grid-column: span 2;
+}
+
+.metric.featured strong {
+  font-size: clamp(32px, 4vw, 52px);
 }
 
 .metric::before {
@@ -457,13 +594,14 @@ tbody tr:last-child td {
 }
 
 .bestTime {
-  color: var(--gt-good);
+  color: var(--gt-fastest);
   font-weight: 800;
 }
 
 .bestLapRow {
   background: linear-gradient(90deg, rgba(216, 107, 255, .14), transparent 42%);
 }
+
 
 .bestLapRow .rankCell {
   color: var(--gt-fastest);

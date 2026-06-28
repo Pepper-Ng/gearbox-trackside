@@ -1,91 +1,16 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Trackside Kiosk</title>
-  <link rel="icon" href="/favicon.ico" sizes="any">
-  <link rel="icon" href="/icons/icon-32.png" type="image/png" sizes="32x32">
-  <link rel="apple-touch-icon" href="/icons/icon-128.png">
-  <link rel="stylesheet" href="/styles.css">
-</head>
-<body>
-  <main class="shell">
-    <header class="topbar">
-      <div class="brandLockup">
-        <img class="brandLogo" src="/brand/gearbox-trackside-logo-dark-wordmark.png" alt="Gearbox Trackside">
-        <h1 class="srOnly">Trackside Kiosk</h1>
-      </div>
-      <div class="topbarMeta" aria-live="polite">
-        <span id="statusMode" class="statusPill">Leaderboard</span>
-        <p id="status">Connecting to local host...</p>
-      </div>
-      <div class="topbarActions">
-        <a href="/configuration.html">Admin</a>
-        <a href="/api/health">Health</a>
-      </div>
-    </header>
-
-    <nav class="viewTabs" aria-label="Trackside views">
-      <button class="active" data-view="monthly" type="button">Monthly</button>
-      <button data-view="weekly" type="button">Weekly</button>
-      <button data-view="daily" type="button">Daily</button>
-      <button data-view="last" type="button">Last Session</button>
-      <button data-view="live" type="button">Live</button>
-    </nav>
-
-    <section class="summary" id="bestSummary"></section>
-    <section class="boardPanel drivers" id="bestSection">
-      <div class="sectionHeader">
-        <h2 id="bestTitle">Monthly Track</h2>
-        <span>Timed laps</span>
-      </div>
-      <div class="tableFrame">
-        <table>
-          <thead>
-            <tr>
-              <th>Rank</th>
-              <th>Driver</th>
-              <th>Rig</th>
-              <th>Vehicle</th>
-              <th>Lap</th>
-              <th>Time</th>
-              <th>Set</th>
-            </tr>
-          </thead>
-          <tbody id="bestLaps"></tbody>
-        </table>
-      </div>
-    </section>
-
-    <section class="summary" id="summary" hidden></section>
-    <section class="boardPanel drivers" id="liveSection" hidden>
-      <div class="sectionHeader">
-        <h2>Live Board</h2>
-        <span>Live timing</span>
-      </div>
-      <div class="tableFrame">
-        <table>
-          <thead>
-            <tr>
-              <th>Rank</th>
-              <th>Driver</th>
-              <th>Rig</th>
-              <th>Vehicle</th>
-              <th>Laps</th>
-              <th>Best</th>
-              <th>Current</th>
-              <th>S1</th>
-              <th>S2</th>
-              <th>S3</th>
-              <th>Gap</th>
-            </tr>
-          </thead>
-          <tbody id="drivers"></tbody>
-        </table>
-      </div>
-    </section>
-  </main>
-  <script src="/app.js" type="module"></script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Trackside Kiosk</title>
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" href="/icons/icon-32.png" type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/icons/icon-128.png" />
+    <script type="module" crossorigin src="/assets/index-Xv_KgIZj.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-BNOtHpUi.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
 </html>

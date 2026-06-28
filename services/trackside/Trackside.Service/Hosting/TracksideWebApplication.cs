@@ -53,8 +53,8 @@ public static class TracksideWebApplication
                 options.Cookie.Name = "Trackside.Admin";
                 options.Cookie.HttpOnly = true;
                 options.Cookie.SameSite = SameSiteMode.Strict;
-                options.LoginPath = "/configuration.html";
-                options.AccessDeniedPath = "/configuration.html";
+                options.LoginPath = "/config";
+                options.AccessDeniedPath = "/config";
                 options.ExpireTimeSpan = TimeSpan.FromHours(8);
                 options.SlidingExpiration = true;
                 options.Events.OnRedirectToLogin = context =>
@@ -94,6 +94,16 @@ public static class TracksideWebApplication
         });
 
         var app = builder.Build();
+
+        app.Use(async (context, next) =>
+        {
+            if (context.Request.Path.Equals("/config", StringComparison.OrdinalIgnoreCase))
+            {
+                context.Request.Path = "/configuration.html";
+            }
+
+            await next();
+        });
 
         app.UseDefaultFiles();
         app.UseStaticFiles();

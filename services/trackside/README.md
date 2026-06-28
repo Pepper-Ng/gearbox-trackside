@@ -46,7 +46,7 @@ dotnet run --project services\trackside\Trackside.Service -- --console --source 
 ```
 
 Open `http://127.0.0.1:8877` for the packaged/static kiosk shell.
-Open `http://127.0.0.1:8877/configuration.html` for the admin dashboard. On a new install, the installer should create the first admin user; if no admin store exists, the dashboard shows a first-run setup form. After login, admins can edit source/alias/shared-memory discovery settings, prepare rig/session assignments, browse persisted sessions and participants, correct/exclude participants, invalidate laps, toggle whether a session counts for historical boards, configure the default kiosk display mode, run retention cleanup, create admin users, change passwords, and view advanced service status.
+Open `http://127.0.0.1:8877/config` for the admin dashboard. On a new install, the installer should create the first admin user; if no admin store exists, the dashboard shows a first-run setup form. After login, admins can edit source/alias/shared-memory discovery settings, prepare rig/session assignments, browse persisted sessions and participants, correct/exclude participants, invalidate laps, toggle whether a session counts for historical boards, configure the default kiosk display mode, run retention cleanup, create admin users, change passwords, and view advanced service status.
 
 Use `--console` for local development. Without it, `Trackside.Service` is configured for Windows Service lifetime when run as an installed service.
 

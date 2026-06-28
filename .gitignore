@@ -9,4 +9,4 @@ dist/
 artifacts/
 tools/rf2-poc/telemetry-recordings/
 tools/rf2-poc/logs/
-web/kiosk/dist/
+web/kiosk/dist/services/trackside/Trackside.Service/wwwroot/assets/
