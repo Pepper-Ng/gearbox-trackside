@@ -99,6 +99,9 @@ public sealed class LeaderboardSnapshotBuilder : ILeaderboardSnapshotBuilder
             CurrentSector = source.CurrentSector,
             TrackPositionPercent = trackPositionPercent,
             LapDistanceMeters = source.LapDistanceMeters,
+            PosX = source.PosX,
+            PosY = source.PosY,
+            PosZ = source.PosZ,
             Sectors = sectors,
         };
     }

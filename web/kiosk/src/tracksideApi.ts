@@ -109,6 +109,12 @@ export interface DriverSnapshot {
   trackPositionPercent?: number | null;
   /** Current lap distance in meters. */
   lapDistanceMeters?: number | null;
+  /** Raw X coordinate from the scoring source when available. */
+  posX?: number | null;
+  /** Raw Y coordinate from the scoring source when available. */
+  posY?: number | null;
+  /** Raw Z coordinate from the scoring source when available. */
+  posZ?: number | null;
   /** Sector timing rows. */
   sectors: SectorSnapshot[];
 }

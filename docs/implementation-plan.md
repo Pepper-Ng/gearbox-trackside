@@ -194,6 +194,13 @@ Do not attempt all camera modes in the first camera milestone. Start with a simp
 
 Incident detection and automatic replay are deferred. They should be revisited only after the live board and basic camera feed are proven.
 
+### Track geometry and TinyPedal reference
+
+* The current repo has no Trackside-specific track geometry generator yet. Existing code exposes raw RF2 world coordinates through the scoring pipeline, but a map outline / track layout is still missing.
+* TinyPedal is a useful reference because it separates the source of truth: exact world coordinates from the simulator are one input, while the track layout / geometry is a second, separately constructed model.
+* Recommendation: implement the geometry generation in the backend/service layer, not in the raw shared-memory parser. The backend should produce a normalized track geometry payload or SVG-friendly shape once per track, then render live driver positions on the frontend using `posX/posY` values.
+* The frontend `/tracker` page should remain a presentation layer that consumes backend-provided track shape data plus live driver positions, rather than attempting to infer the map from lap percent values.
+
 ---
 
 ## 5. Architecture

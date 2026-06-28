@@ -227,6 +227,9 @@ public sealed class Rf2ScoringPayloadParser : IRf2ScoringPayloadParser
             LapsBehindLeader = vehicle.LapsBehindLeader < 0 ? null : vehicle.LapsBehindLeader,
             LapDistanceMeters = lapDistance,
             TrackPositionPercent = PercentOfLap(lapDistance, sessionLapDistance),
+            PosX = Coordinate(vehicle.Pos.X),
+            PosY = Coordinate(vehicle.Pos.Y),
+            PosZ = Coordinate(vehicle.Pos.Z),
         };
     }
 
@@ -338,6 +341,8 @@ public sealed class Rf2ScoringPayloadParser : IRf2ScoringPayloadParser
     }
 
     private static double? Timed(double value) => value is > 0 and < 86400 && double.IsFinite(value) ? Math.Round(value, 3) : null;
+
+    private static double? Coordinate(double value) => double.IsFinite(value) ? value : null;
 
     private static double? NonNegative(double value) => value >= 0 && double.IsFinite(value) ? Math.Round(value, 3) : null;
 

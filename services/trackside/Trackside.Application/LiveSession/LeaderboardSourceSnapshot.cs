@@ -218,4 +218,19 @@ public sealed record LeaderboardDriverSource
     /// Track position as a percentage of the current lap.
     /// </summary>
     public double? TrackPositionPercent { get; init; }
+
+    /// <summary>
+    /// Exact world X coordinate from the scoring payload when available.
+    /// </summary>
+    public double? PosX { get; init; }
+
+    /// <summary>
+    /// Exact world Y coordinate from the scoring payload when available.
+    /// </summary>
+    public double? PosY { get; init; }
+
+    /// <summary>
+    /// Exact world Z coordinate from the scoring payload when available.
+    /// </summary>
+    public double? PosZ { get; init; }
 }

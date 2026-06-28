@@ -96,6 +96,21 @@ public sealed record DriverSnapshot
     public double? LapDistanceMeters { get; init; }
 
     /// <summary>
+    /// Exact world X coordinate from the scoring payload when available.
+    /// </summary>
+    public double? PosX { get; init; }
+
+    /// <summary>
+    /// Exact world Y coordinate from the scoring payload when available.
+    /// </summary>
+    public double? PosY { get; init; }
+
+    /// <summary>
+    /// Exact world Z coordinate from the scoring payload when available.
+    /// </summary>
+    public double? PosZ { get; init; }
+
+    /// <summary>
     /// Sector timing details for this driver.
     /// </summary>
     public List<SectorSnapshot> Sectors { get; init; } = [];

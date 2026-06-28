@@ -1,8 +1,9 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { formatGap, formatLapTime, formatNumber } from '../format';
 import { BestLapBoardResponse, BestLapRow, BestLapWindow, DriverSnapshot, KioskDisplayMode, LastFinishedSessionResponse, LastFinishedSessionRow, LiveSessionConnection, LiveSessionSnapshot, SectorSnapshot, startLiveSessionFeed, TracksideApiClient } from '../tracksideApi';
+import { TrackerPage } from './TrackerPage';
 
-type ViewMode = BestLapWindow | 'last' | 'live';
+type ViewMode = BestLapWindow | 'last' | 'live' | 'tracker';
 
 const supportedPaths: Record<string, ViewMode> = {
   '/monthly': 'monthly',
@@ -10,6 +11,7 @@ const supportedPaths: Record<string, ViewMode> = {
   '/daily': 'daily',
   '/last-session': 'last',
   '/live': 'live',
+  '/tracker': 'tracker',
 };
 
 function getViewFromPath(path: string): ViewMode | null {
@@ -82,7 +84,7 @@ export function App() {
   }, [client]);
 
   useEffect(() => {
-    if (view === 'live' || view === 'last') {
+    if (view === 'live' || view === 'last' || view === 'tracker') {
       return;
     }
 
@@ -150,9 +152,11 @@ export function App() {
 
       {view === 'live'
         ? <LiveBoard snapshot={snapshot} />
-        : view === 'last'
-          ? <LastSessionBoard result={lastSession} />
-          : <BestLapBoard board={board} view={view} />}
+        : view === 'tracker'
+          ? <TrackerPage snapshot={snapshot} />
+          : view === 'last'
+            ? <LastSessionBoard result={lastSession} />
+            : <BestLapBoard board={board} view={view} />}
     </main>
   );
 }
