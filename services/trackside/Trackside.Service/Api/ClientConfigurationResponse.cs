@@ -18,6 +18,11 @@ public sealed record ClientConfigurationResponse
     public string LiveSessionHubPath { get; init; } = LiveSessionRoutes.HubPath;
 
     /// <summary>
+    /// REST path used by the driver tracker to fetch current track geometry.
+    /// </summary>
+    public string TrackGeometryPath { get; init; } = LiveSessionRoutes.CurrentTrackGeometryPath;
+
+    /// <summary>
     /// Health endpoint path used by diagnostics pages and tray menu items.
     /// </summary>
     public string HealthPath { get; init; } = LiveSessionRoutes.HealthPath;
@@ -31,6 +36,11 @@ public sealed record ClientConfigurationResponse
     /// Default display mode a kiosk screen should open with.
     /// </summary>
     public KioskDisplayMode DefaultDisplayMode { get; init; } = KioskDisplayMode.Monthly;
+
+    /// <summary>
+    /// Browser-side driver tracker refresh/redraw rate in Hertz. Source freshness is determined separately.
+    /// </summary>
+    public double DriverTrackerClientRefreshHz { get; init; } = TracksideDriverTrackerOptions.DefaultClientRefreshHz;
 
     /// <summary>
     /// Default frontend language for kiosk and admin screens.

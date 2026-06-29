@@ -670,7 +670,8 @@ tbody tr:last-child td {
 .sessionsTable,
 .sessionParticipantsTable,
 .lapCorrectionTable,
-.sessionSetupTable {
+.sessionSetupTable,
+.driverTrackerTracksTable {
   min-width: 920px;
 }
 

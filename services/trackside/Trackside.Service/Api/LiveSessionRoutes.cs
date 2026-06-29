@@ -11,6 +11,11 @@ public static class LiveSessionRoutes
     public const string CurrentSessionPath = "/api/live-session/current";
 
     /// <summary>
+    /// REST endpoint for the current track's generated driver-tracker geometry.
+    /// </summary>
+    public const string CurrentTrackGeometryPath = "/api/track-geometry/current";
+
+    /// <summary>
     /// REST endpoint for host health and source status.
     /// </summary>
     public const string HealthPath = "/api/health";
@@ -59,6 +64,21 @@ public static class LiveSessionRoutes
     /// Admin endpoint for kiosk display defaults.
     /// </summary>
     public const string AdminKioskPath = "/api/admin/kiosk";
+
+    /// <summary>
+    /// Admin endpoint for driver tracker display settings.
+    /// </summary>
+    public const string AdminDriverTrackerPath = "/api/admin/driver-tracker";
+
+    /// <summary>
+    /// Admin endpoint for driver tracker generated-geometry track catalog.
+    /// </summary>
+    public const string AdminDriverTrackerTracksPath = "/api/admin/driver-tracker/tracks";
+
+    /// <summary>
+    /// Admin endpoint for starting generated-geometry recording passes.
+    /// </summary>
+    public const string AdminDriverTrackerRecordingsPath = "/api/admin/driver-tracker/recordings";
 
     /// <summary>
     /// Admin endpoint for frontend localization settings.

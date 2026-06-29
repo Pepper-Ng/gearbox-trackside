@@ -39,7 +39,10 @@
       "gapToNextSeconds": 0.687,
       "gapToLeaderSeconds": 0.687,
       "lapsBehindLeader": 0,
-      "lapDistanceMeters": 2250.0
+      "lapDistanceMeters": 2250.0,
+      "posX": 120.0,
+      "posY": 4.0,
+      "posZ": -38.0
     },
     {
       "driverId": "1",
@@ -62,7 +65,10 @@
       "gapToNextSeconds": null,
       "gapToLeaderSeconds": 0.0,
       "lapsBehindLeader": 0,
-      "lapDistanceMeters": 1450.0
+      "lapDistanceMeters": 1450.0,
+      "posX": 42.0,
+      "posY": 3.5,
+      "posZ": 96.0
     },
     {
       "driverId": "3",
@@ -86,7 +92,10 @@
       "gapToNextSeconds": 1.888,
       "gapToLeaderSeconds": 2.575,
       "lapsBehindLeader": 0,
-      "lapDistanceMeters": 2975.0
+      "lapDistanceMeters": 2975.0,
+      "posX": -64.0,
+      "posY": 5.0,
+      "posZ": -122.0
     },
     {
       "driverId": "4",
@@ -102,7 +111,10 @@
       "gapToNextSeconds": null,
       "gapToLeaderSeconds": null,
       "lapsBehindLeader": 0,
-      "lapDistanceMeters": 780.0
+      "lapDistanceMeters": 780.0,
+      "posX": -118.0,
+      "posY": 4.5,
+      "posZ": 20.0
     }
   ]
 }

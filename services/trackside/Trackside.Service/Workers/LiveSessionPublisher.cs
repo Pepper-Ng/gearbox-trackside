@@ -23,6 +23,7 @@ public sealed class LiveSessionPublisher : BackgroundService
     private readonly IOptionsMonitor<TracksideLiveSessionOptions> _options;
     private readonly IOptionsMonitor<TracksideOptions> _tracksideOptions;
     private readonly IOptionsMonitor<TracksidePersistenceOptions> _persistenceOptions;
+    private readonly ILiveDataPublisher _liveDataPublisher;
     private readonly ILogger<LiveSessionPublisher> _logger;
 
     /// <summary>
@@ -35,6 +36,7 @@ public sealed class LiveSessionPublisher : BackgroundService
     /// <param name="options">Live application options used for publish cadence.</param>
     /// <param name="tracksideOptions">Trackside options used to align publish cadence with source polling.</param>
     /// <param name="persistenceOptions">Persistence options used for default session inclusion.</param>
+    /// <param name="liveDataPublisher">Publisher for projected live data consumed by optional modules.</param>
     /// <param name="logger">Logger for source failures and lifecycle events.</param>
     public LiveSessionPublisher(
         ILiveSessionSource source,
@@ -44,6 +46,7 @@ public sealed class LiveSessionPublisher : BackgroundService
         IOptionsMonitor<TracksideLiveSessionOptions> options,
         IOptionsMonitor<TracksideOptions> tracksideOptions,
         IOptionsMonitor<TracksidePersistenceOptions> persistenceOptions,
+        ILiveDataPublisher liveDataPublisher,
         ILogger<LiveSessionPublisher> logger)
     {
         _source = source;
@@ -53,6 +56,7 @@ public sealed class LiveSessionPublisher : BackgroundService
         _options = options;
         _tracksideOptions = tracksideOptions;
         _persistenceOptions = persistenceOptions;
+        _liveDataPublisher = liveDataPublisher;
         _logger = logger;
     }
 
@@ -67,6 +71,7 @@ public sealed class LiveSessionPublisher : BackgroundService
             {
                 var snapshot = await _source.GetCurrentAsync(stoppingToken);
                 _state.Update(snapshot);
+                await _liveDataPublisher.PublishAsync(new ScoringContextFrame { Snapshot = snapshot }, stoppingToken);
                 await PersistSnapshotAsync(snapshot, stoppingToken);
                 await _hubContext.Clients.All.SessionUpdated(snapshot);
             }

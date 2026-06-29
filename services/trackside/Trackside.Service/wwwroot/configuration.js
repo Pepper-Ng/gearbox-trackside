@@ -46,6 +46,11 @@ const monthlyTrackNameElement = document.querySelector('#monthlyTrackName');
 const monthlyTrackReasonElement = document.querySelector('#monthlyTrackReason');
 const kioskDisplayModeElement = document.querySelector('#kioskDisplayMode');
 const saveKioskDisplayModeButton = document.querySelector('#saveKioskDisplayMode');
+const driverTrackerClientRefreshHzElement = document.querySelector('#driverTrackerClientRefreshHz');
+const driverTrackerGeometryRecordingLapsElement = document.querySelector('#driverTrackerGeometryRecordingLaps');
+const saveDriverTrackerSettingsButton = document.querySelector('#saveDriverTrackerSettings');
+const refreshDriverTrackerTracksButton = document.querySelector('#refreshDriverTrackerTracks');
+const driverTrackerTrackRowsElement = document.querySelector('#driverTrackerTrackRows');
 const setMonthlyTrackButton = document.querySelector('#setMonthlyTrack');
 const resetMonthlyTrackButton = document.querySelector('#resetMonthlyTrack');
 const monthlyBestLapsElement = document.querySelector('#monthlyBestLaps');
@@ -96,6 +101,8 @@ const translations = {
     'status.profileCreated': 'Driver profile created.',
     'status.sessionIncluded': 'Session inclusion updated.',
     'status.kioskSaved': 'Kiosk display mode saved.',
+    'status.driverTrackerSaved': 'Driver tracker settings saved.',
+    'status.driverTrackerRecordingStarted': 'Geometry recording started.',
     'status.monthlyTrackStarted': 'Monthly track started with fresh stats.',
     'status.monthlyTrackReset': 'Monthly track stats reset.',
     'firstAdmin.title': 'First Admin',
@@ -122,7 +129,7 @@ const translations = {
     'source.requireExplicitSelection': 'Require explicit selection',
     'source.useFirstDiscovered': 'Use first discovered',
     'source.scoringPollHz': 'Scoring poll Hz',
-    'source.telemetryEnabled': 'Enable telemetry loop scaffold',
+    'source.telemetryEnabled': 'Enable telemetry loop',
     'source.telemetryPollHz': 'Telemetry poll Hz',
     'source.driverAliasesJson': 'Driver aliases JSON',
     'source.refresh': 'Refresh',
@@ -137,6 +144,25 @@ const translations = {
     'kioskDisplay.daily': 'Daily',
     'kioskDisplay.lastSession': 'Last Session',
     'kioskDisplay.live': 'Live',
+    'kioskDisplay.tracker': 'Tracker',
+    'driverTracker.title': 'Driver Tracker',
+    'driverTracker.clientRefreshHz': 'Client refresh Hz',
+    'driverTracker.geometryRecordingLaps': 'Geometry laps',
+    'driverTracker.saveButton': 'Save Tracker',
+    'driverTracker.refreshTracks': 'Refresh Tracks',
+    'driverTracker.track': 'Track',
+    'driverTracker.status': 'Status',
+    'driverTracker.coverage': 'Coverage',
+    'driverTracker.laps': 'Laps',
+    'driverTracker.samples': 'Samples',
+    'driverTracker.updated': 'Updated',
+    'driverTracker.actions': 'Actions',
+    'driverTracker.noTracks': 'No tracks seen yet.',
+    'driverTracker.ready': 'Ready',
+    'driverTracker.recording': 'Recording',
+    'driverTracker.seen': 'Seen',
+    'driverTracker.improve': 'Improve',
+    'driverTracker.restart': 'Restart',
     'monthlyTrack.title': 'Monthly Track',
     'monthlyTrack.noActive': 'No active monthly track.',
     'monthlyTrack.trackName': 'Track name',
@@ -251,6 +277,8 @@ const translations = {
     'status.profileCreated': 'Bestuurdersprofiel aangemaakt.',
     'status.sessionIncluded': 'Sessie-inclusie bijgewerkt.',
     'status.kioskSaved': 'Kiosk-weergavemodus opgeslagen.',
+    'status.driverTrackerSaved': 'Drivertracker-instellingen opgeslagen.',
+    'status.driverTrackerRecordingStarted': 'Geometrie-opname gestart.',
     'status.monthlyTrackStarted': 'Maandelijk klassement gestart met frisse statistieken.',
     'status.monthlyTrackReset': 'Maandelijkse klassementstatistieken gereset.',
     'firstAdmin.title': 'Eerste beheerder',
@@ -292,6 +320,25 @@ const translations = {
     'kioskDisplay.daily': 'Dagelijks',
     'kioskDisplay.lastSession': 'Laatste sessie',
     'kioskDisplay.live': 'Live',
+    'kioskDisplay.tracker': 'Tracker',
+    'driverTracker.title': 'Drivertracker',
+    'driverTracker.clientRefreshHz': 'Client refresh Hz',
+    'driverTracker.geometryRecordingLaps': 'Geometrieronden',
+    'driverTracker.saveButton': 'Tracker opslaan',
+    'driverTracker.refreshTracks': 'Banen vernieuwen',
+    'driverTracker.track': 'Baan',
+    'driverTracker.status': 'Status',
+    'driverTracker.coverage': 'Dekking',
+    'driverTracker.laps': 'Ronden',
+    'driverTracker.samples': 'Samples',
+    'driverTracker.updated': 'Bijgewerkt',
+    'driverTracker.actions': 'Acties',
+    'driverTracker.noTracks': 'Nog geen banen gezien.',
+    'driverTracker.ready': 'Gereed',
+    'driverTracker.recording': 'Opnemen',
+    'driverTracker.seen': 'Gezien',
+    'driverTracker.improve': 'Verbeteren',
+    'driverTracker.restart': 'Herstarten',
     'monthlyTrack.title': 'Maandelijkse baan',
     'monthlyTrack.noActive': 'Geen actieve maandelijkse baan.',
     'monthlyTrack.trackName': 'Baannaam',
@@ -430,6 +477,8 @@ addSetupRowButton.addEventListener('click', () => {
 clearSessionSetupButton.addEventListener('click', () => clearSessionSetup().catch(showError));
 createProfileButton.addEventListener('click', () => createDriverProfile().catch(showError));
 saveKioskDisplayModeButton.addEventListener('click', () => saveKioskSettings().catch(showError));
+saveDriverTrackerSettingsButton.addEventListener('click', () => saveDriverTrackerSettings().catch(showError));
+refreshDriverTrackerTracksButton.addEventListener('click', () => loadDriverTrackerTracks().catch(showError));
 setMonthlyTrackButton.addEventListener('click', () => setMonthlyTrack().catch(showError));
 resetMonthlyTrackButton.addEventListener('click', () => resetMonthlyTrack().catch(showError));
 runRetentionCleanupButton.addEventListener('click', () => runRetentionCleanup().catch(showError));
@@ -458,7 +507,7 @@ async function loadSession() {
   }
 
   showDashboard(session);
-  await Promise.all([loadConfiguration(), loadSessionSetup(), loadSessions(), loadKioskSettings(), loadLeaderboards(), loadUsers(), loadAdvancedStatus()]);
+  await Promise.all([loadConfiguration(), loadSessionSetup(), loadSessions(), loadKioskSettings(), loadDriverTrackerSettings(), loadDriverTrackerTracks(), loadLeaderboards(), loadUsers(), loadAdvancedStatus()]);
 }
 
 async function createFirstAdmin() {
@@ -468,7 +517,7 @@ async function createFirstAdmin() {
     password: setupPasswordElement.value,
   });
   showDashboard(session);
-  await Promise.all([loadConfiguration(), loadSessionSetup(), loadSessions(), loadKioskSettings(), loadLeaderboards(), loadUsers(), loadAdvancedStatus()]);
+  await Promise.all([loadConfiguration(), loadSessionSetup(), loadSessions(), loadKioskSettings(), loadDriverTrackerSettings(), loadDriverTrackerTracks(), loadLeaderboards(), loadUsers(), loadAdvancedStatus()]);
 }
 
 async function login() {
@@ -477,7 +526,7 @@ async function login() {
     password: loginPasswordElement.value,
   });
   showDashboard(session);
-  await Promise.all([loadConfiguration(), loadSessionSetup(), loadSessions(), loadKioskSettings(), loadLeaderboards(), loadUsers(), loadAdvancedStatus()]);
+  await Promise.all([loadConfiguration(), loadSessionSetup(), loadSessions(), loadKioskSettings(), loadDriverTrackerSettings(), loadDriverTrackerTracks(), loadLeaderboards(), loadUsers(), loadAdvancedStatus()]);
 }
 
 async function logout() {
@@ -892,6 +941,17 @@ async function loadKioskSettings() {
   kioskDisplayModeElement.value = settings.defaultDisplayMode ?? 'Monthly';
 }
 
+async function loadDriverTrackerSettings() {
+  const settings = await fetchJson('/api/admin/driver-tracker');
+  driverTrackerClientRefreshHzElement.value = String(settings.clientRefreshHz ?? 50);
+  driverTrackerGeometryRecordingLapsElement.value = String(settings.geometryRecordingLaps ?? 1);
+}
+
+async function loadDriverTrackerTracks() {
+  const catalog = await fetchJson('/api/admin/driver-tracker/tracks');
+  renderDriverTrackerTracks(catalog.tracks ?? []);
+}
+
 async function saveLocalizationChoice(language) {
   setLanguage(language);
   await putJson('/api/admin/localization', { defaultLanguage: language });
@@ -921,6 +981,72 @@ async function saveKioskSettings() {
   const settings = await putJson('/api/admin/kiosk', { defaultDisplayMode: kioskDisplayModeElement.value });
   kioskDisplayModeElement.value = settings.defaultDisplayMode ?? 'Monthly';
   setStatus(t('status.kioskSaved'));
+}
+
+async function saveDriverTrackerSettings() {
+  const clientRefreshHz = Number(driverTrackerClientRefreshHzElement.value);
+  const geometryRecordingLaps = Number(driverTrackerGeometryRecordingLapsElement.value);
+  const settings = await putJson('/api/admin/driver-tracker', { clientRefreshHz, geometryRecordingLaps });
+  driverTrackerClientRefreshHzElement.value = String(settings.clientRefreshHz ?? 50);
+  driverTrackerGeometryRecordingLapsElement.value = String(settings.geometryRecordingLaps ?? 1);
+  setStatus(t('status.driverTrackerSaved'));
+}
+
+function renderDriverTrackerTracks(tracks) {
+  driverTrackerTrackRowsElement.replaceChildren();
+  if (tracks.length === 0) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 7;
+    cell.textContent = t('driverTracker.noTracks');
+    row.appendChild(cell);
+    driverTrackerTrackRowsElement.appendChild(row);
+    return;
+  }
+
+  for (const track of tracks) {
+    const row = document.createElement('tr');
+    appendCell(row, track.trackName ?? '-');
+    appendCell(row, driverTrackerStatusText(track));
+    appendCell(row, `${Number(track.coveragePercent ?? 0).toFixed(1)}%`);
+    appendCell(row, `${track.recordedLapCount ?? 0}/${track.targetCompletedLaps ?? 1}`);
+    appendCell(row, String(track.sampleCount ?? 0));
+    appendCell(row, formatDate(track.updatedUtc));
+    appendActionsCell(row, [
+      {
+        label: t('driverTracker.improve'),
+        onClick: () => startDriverTrackerRecording(track.trackName, false).catch(showError),
+      },
+      {
+        label: t('driverTracker.restart'),
+        onClick: () => startDriverTrackerRecording(track.trackName, true).catch(showError),
+      },
+    ]);
+    driverTrackerTrackRowsElement.appendChild(row);
+  }
+}
+
+function driverTrackerStatusText(track) {
+  if (track.isRecording) {
+    return t('driverTracker.recording');
+  }
+
+  if (track.hasGeometry) {
+    return t('driverTracker.ready');
+  }
+
+  return t('driverTracker.seen');
+}
+
+async function startDriverTrackerRecording(trackName, resetExistingGeometry) {
+  const targetCompletedLaps = Number(driverTrackerGeometryRecordingLapsElement.value || 1);
+  await postJson('/api/admin/driver-tracker/recordings', {
+    trackName,
+    targetCompletedLaps,
+    resetExistingGeometry,
+  });
+  setStatus(t('status.driverTrackerRecordingStarted'));
+  await loadDriverTrackerTracks();
 }
 
 async function runRetentionCleanup() {

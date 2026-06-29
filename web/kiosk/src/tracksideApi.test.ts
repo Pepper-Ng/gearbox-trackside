@@ -16,9 +16,11 @@ describe('startLiveSessionFeed', () => {
         return {
           currentSessionPath: '/api/live-session/current',
           liveSessionHubPath: '/hubs/live-session',
+          trackGeometryPath: '/api/track-geometry/current',
           healthPath: '/api/health',
           recommendedReconnectSeconds: 2,
           defaultDisplayMode: 'Monthly',
+          driverTrackerClientRefreshHz: 50,
         };
       },
       async getCurrentSession(path) {
@@ -35,6 +37,9 @@ describe('startLiveSessionFeed', () => {
       },
       async getLastFinishedSession() {
         return { isAvailable: false, rows: [] };
+      },
+      async getTrackGeometry() {
+        return { isAvailable: false, sampleCount: 0, coveragePercent: 0, isCompleteLap: false, points: [] };
       },
       async connectLiveSession(path, onSnapshot) {
         calls.push(`hub:${path}`);

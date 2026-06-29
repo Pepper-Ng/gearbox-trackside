@@ -196,10 +196,12 @@ Incident detection and automatic replay are deferred. They should be revisited o
 
 ### Track geometry and TinyPedal reference
 
-* The current repo has no Trackside-specific track geometry generator yet. Existing code exposes raw RF2 world coordinates through the scoring pipeline, but a map outline / track layout is still missing.
-* TinyPedal is a useful reference because it separates the source of truth: exact world coordinates from the simulator are one input, while the track layout / geometry is a second, separately constructed model.
-* Recommendation: implement the geometry generation in the backend/service layer, not in the raw shared-memory parser. The backend should produce a normalized track geometry payload or SVG-friendly shape once per track, then render live driver positions on the frontend using `posX/posY` values.
-* The frontend `/tracker` page should remain a presentation layer that consumes backend-provided track shape data plus live driver positions, rather than attempting to infer the map from lap percent values.
+* Trackside generates driver-tracker geometry in the backend from raw rF2 telemetry world coordinates. rF2 world `+Y` is vertical, so top-down track rendering uses `X/Z`, not `X/Y`; scoring data is used as qualifying context for lap progress, valid-lap state, pit/garage state, and track-edge filtering.
+* TinyPedal is a useful reference because it separates the source of truth: exact world coordinates from the simulator are one input, while the track layout / geometry is a second, separately constructed model. Its mapping flow does **not** read an official complete rF2 track-geometry endpoint; it records longitudinal/lateral world-plane coordinates from a driven lap (`mPos.x` and `-mPos.z`) plus lap distance/elevation, validates a completed lap, then persists a separate track-map SVG file for later rendering.
+* Live shared-memory data should be projected once into small frames and published through the live-data subscription service. Modules register as consumers of the frame types they need, rather than reading shared memory or storing full telemetry themselves.
+* Geometry generation belongs behind a backend/service module, not in the raw shared-memory parser. The current module consumes scoring-context and telemetry-position frames, records telemetry-derived geometry per seen track, prunes abandoned in-memory candidate laps, and auto-disables once the target number of complete lap passes has produced reliable geometry; operators can restart recording from the admin panel to improve a track map. The module boundary should remain swappable so an AIW-based provider can replace or augment generated geometry later.
+* The frontend `/tracker` page should remain a presentation layer that consumes backend-provided track shape data plus live driver positions, rather than attempting to infer the map from lap percent values alone. Lap progress is only useful for ordering raw coordinate samples into a path.
+* Trackside should only mark generated geometry as available after enough non-pit, non-garage, on-track, valid-lap samples cover a full lap. Partial geometry may be stored as evidence, but should not be rendered as a reliable map.
 
 ---
 

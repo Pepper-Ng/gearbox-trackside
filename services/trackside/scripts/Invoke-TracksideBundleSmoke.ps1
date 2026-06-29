@@ -128,6 +128,11 @@ try {
         throw 'Fixture snapshot did not include a track name.'
     }
 
+    $trackGeometry = Invoke-RestMethod -Uri "$baseUrl/api/track-geometry/current" -TimeoutSec 5
+    if ($null -eq $trackGeometry.isAvailable -or $null -eq $trackGeometry.coveragePercent -or $null -eq $trackGeometry.isCompleteLap) {
+        throw 'Track geometry endpoint did not return geometry quality metadata.'
+    }
+
     Write-Host "Bundle runtime smoke passed at $baseUrl using track '$($snapshot.session.trackName)'."
 }
 catch {

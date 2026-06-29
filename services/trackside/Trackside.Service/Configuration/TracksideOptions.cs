@@ -44,6 +44,11 @@ public sealed class TracksideOptions
     public TracksideKioskOptions Kiosk { get; init; } = new();
 
     /// <summary>
+    /// Driver tracker display and refresh settings.
+    /// </summary>
+    public TracksideDriverTrackerOptions DriverTracker { get; init; } = new();
+
+    /// <summary>
     /// Browser origins allowed to call the local API during frontend development.
     /// </summary>
     public TracksideCorsOptions Cors { get; init; } = new();
@@ -120,6 +125,57 @@ public enum KioskDisplayMode
     /// Live timing board.
     /// </summary>
     Live,
+
+    /// <summary>
+    /// Live driver tracker map.
+    /// </summary>
+    Tracker,
+}
+
+/// <summary>
+/// Driver tracker display and refresh settings.
+/// </summary>
+public sealed class TracksideDriverTrackerOptions
+{
+    /// <summary>
+    /// Minimum supported browser tracker refresh rate.
+    /// </summary>
+    public const double MinimumClientRefreshHz = 1.0;
+
+    /// <summary>
+    /// Maximum supported browser tracker refresh rate.
+    /// </summary>
+    public const double MaximumClientRefreshHz = 60.0;
+
+    /// <summary>
+    /// Default browser tracker refresh rate.
+    /// </summary>
+    public const double DefaultClientRefreshHz = 50.0;
+
+    /// <summary>
+    /// Minimum number of complete lap passes to average into generated geometry.
+    /// </summary>
+    public const int MinimumGeometryRecordingLaps = 1;
+
+    /// <summary>
+    /// Maximum number of complete lap passes to average into generated geometry.
+    /// </summary>
+    public const int MaximumGeometryRecordingLaps = 20;
+
+    /// <summary>
+    /// Default number of complete lap passes to average into generated geometry.
+    /// </summary>
+    public const int DefaultGeometryRecordingLaps = 1;
+
+    /// <summary>
+    /// Browser-side tracker refresh rate in Hertz. This does not control source polling freshness.
+    /// </summary>
+    public double ClientRefreshHz { get; init; } = DefaultClientRefreshHz;
+
+    /// <summary>
+    /// Number of complete lap passes collected before generated geometry is considered complete.
+    /// </summary>
+    public int GeometryRecordingLaps { get; init; } = DefaultGeometryRecordingLaps;
 }
 
 /// <summary>

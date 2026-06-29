@@ -6,16 +6,20 @@ export interface ClientConfiguration {
   currentSessionPath: string;
   /** SignalR hub path for live-session pushes. */
   liveSessionHubPath: string;
+  /** REST path for current track geometry. */
+  trackGeometryPath: string;
   /** Health endpoint path for diagnostics. */
   healthPath: string;
   /** Recommended reconnect delay in seconds. */
   recommendedReconnectSeconds: number;
   /** Default display mode a kiosk screen should open with. */
   defaultDisplayMode: KioskDisplayMode;
+  /** Browser-side driver tracker refresh rate in Hertz. */
+  driverTrackerClientRefreshHz: number;
 }
 
 /** Supported backend-configured kiosk display modes. */
-export type KioskDisplayMode = 'Monthly' | 'Weekly' | 'Daily' | 'LastSession' | 'Live';
+export type KioskDisplayMode = 'Monthly' | 'Weekly' | 'Daily' | 'LastSession' | 'Live' | 'Tracker';
 
 /** Coarse session category used by the kiosk. */
 export type SessionKind = 'Unknown' | 'Practice' | 'Qualifying' | 'Race';
@@ -115,6 +119,14 @@ export interface DriverSnapshot {
   posY?: number | null;
   /** Raw Z coordinate from the scoring source when available. */
   posZ?: number | null;
+  /** True when the source reports the driver between pit entry and pit exit. */
+  isInPits: boolean;
+  /** True when the source reports the driver in the garage stall. */
+  isInGarageStall: boolean;
+  /** Lateral distance from the approximate center path in meters. */
+  pathLateralMeters?: number | null;
+  /** Relevant track edge distance from the approximate center path in meters. */
+  trackEdgeMeters?: number | null;
   /** Sector timing rows. */
   sectors: SectorSnapshot[];
 }
@@ -133,6 +145,45 @@ export interface LiveSessionSnapshot {
   session: LiveSessionInfo;
   /** Current driver rows. */
   drivers: DriverSnapshot[];
+}
+
+/** Generated track geometry for the current driver tracker page. */
+export interface TrackGeometryResponse {
+  /** True when enough geometry points are available to draw a track line. */
+  isAvailable: boolean;
+  /** Track name associated with the geometry. */
+  trackName?: string | null;
+  /** Source that last contributed geometry samples. */
+  source?: string | null;
+  /** UTC timestamp when the geometry cache was last updated. */
+  updatedUtc?: string | null;
+  /** Number of samples in the generated geometry. */
+  sampleCount: number;
+  /** Approximate lap coverage represented by geometry samples. */
+  coveragePercent: number;
+  /** True when enough start-to-finish samples exist for reliable rendering. */
+  isCompleteLap: boolean;
+  /** Raw world-coordinate bounds for normalizing live driver markers. */
+  bounds?: TrackGeometryBounds | null;
+  /** Normalized geometry points ordered by lap progress. */
+  points: TrackGeometryPoint[];
+}
+
+/** Raw X/Z world-coordinate bounds for a generated track geometry. */
+export interface TrackGeometryBounds {
+  minWorldX: number;
+  maxWorldX: number;
+  minWorldZ: number;
+  maxWorldZ: number;
+}
+
+/** One normalized point in a generated track geometry. */
+export interface TrackGeometryPoint {
+  worldX: number;
+  worldZ: number;
+  x: number;
+  y: number;
+  progressPercent: number;
 }
 
 /** Active monthly track period returned by the backend. */
@@ -237,6 +288,8 @@ export interface LiveSessionFeedClient {
   getBestLaps(window: BestLapWindow, limit?: number, mode?: BestLapBoardMode): Promise<BestLapBoardResponse>;
   /** Fetches the last finished session result. */
   getLastFinishedSession(): Promise<LastFinishedSessionResponse>;
+  /** Fetches generated track geometry for the current track. */
+  getTrackGeometry(path?: string): Promise<TrackGeometryResponse>;
   /** Opens the live SignalR feed. */
   connectLiveSession(
     hubPath: string,
@@ -289,6 +342,11 @@ export class TracksideApiClient implements LiveSessionFeedClient {
   /** Fetches the last finished session result. */
   public async getLastFinishedSession(): Promise<LastFinishedSessionResponse> {
     return this.getJson<LastFinishedSessionResponse>('/api/leaderboards/last-session');
+  }
+
+  /** Fetches generated track geometry for the current track. */
+  public async getTrackGeometry(path = '/api/track-geometry/current'): Promise<TrackGeometryResponse> {
+    return this.getJson<TrackGeometryResponse>(path);
   }
 
   /** Fetches the active monthly track. */

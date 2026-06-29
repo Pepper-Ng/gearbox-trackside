@@ -259,10 +259,42 @@
               <option value="Daily" data-i18n="kioskDisplay.daily">Daily</option>
               <option value="LastSession" data-i18n="kioskDisplay.lastSession">Last Session</option>
               <option value="Live" data-i18n="kioskDisplay.live">Live</option>
+              <option value="Tracker" data-i18n="kioskDisplay.tracker">Tracker</option>
             </select>
           </label>
           <div class="buttonRow">
             <button id="saveKioskDisplayMode" type="button" data-i18n="kioskDisplay.saveButton">Save Display Mode</button>
+          </div>
+        </section>
+        <section class="configurationPanel">
+          <h2 data-i18n="driverTracker.title">Driver Tracker</h2>
+          <label>
+            <span data-i18n="driverTracker.clientRefreshHz">Client refresh Hz</span>
+            <input id="driverTrackerClientRefreshHz" type="number" min="1" max="60" step="1">
+          </label>
+          <label>
+            <span data-i18n="driverTracker.geometryRecordingLaps">Geometry laps</span>
+            <input id="driverTrackerGeometryRecordingLaps" type="number" min="1" max="20" step="1">
+          </label>
+          <div class="buttonRow">
+            <button id="saveDriverTrackerSettings" type="button" data-i18n="driverTracker.saveButton">Save Tracker</button>
+            <button id="refreshDriverTrackerTracks" type="button" data-i18n="driverTracker.refreshTracks">Refresh Tracks</button>
+          </div>
+          <div class="tableFrame wideField">
+            <table class="driverTrackerTracksTable">
+              <thead>
+                <tr>
+                  <th data-i18n="driverTracker.track">Track</th>
+                  <th data-i18n="driverTracker.status">Status</th>
+                  <th data-i18n="driverTracker.coverage">Coverage</th>
+                  <th data-i18n="driverTracker.laps">Laps</th>
+                  <th data-i18n="driverTracker.samples">Samples</th>
+                  <th data-i18n="driverTracker.updated">Updated</th>
+                  <th data-i18n="driverTracker.actions">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="driverTrackerTrackRows"></tbody>
+            </table>
           </div>
         </section>
         <section class="configurationPanel">

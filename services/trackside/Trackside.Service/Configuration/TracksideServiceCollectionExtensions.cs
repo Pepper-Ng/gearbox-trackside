@@ -7,7 +7,9 @@ using Trackside.Application.Persistence;
 using Trackside.Infrastructure.Persistence;
 using Trackside.Infrastructure.Rf2.SharedMemory;
 using Trackside.Service.Hosting;
+using Trackside.Service.LiveData;
 using Trackside.Service.Security;
+using Trackside.Service.Tracking;
 using Trackside.Service.Workers;
 
 namespace Trackside.Service.Configuration;
@@ -31,6 +33,10 @@ public static class TracksideServiceCollectionExtensions
                 "Fixture mode requires Trackside:Source:FixturePath.")
             .Validate(options => options.LiveSession.PublishIntervalSeconds is >= TracksideLiveSessionOptions.MinimumPublishIntervalSeconds and <= 60.0,
                 "Trackside:LiveSession:PublishIntervalSeconds must be between 0.25 and 60 seconds.")
+            .Validate(options => options.DriverTracker.ClientRefreshHz is >= TracksideDriverTrackerOptions.MinimumClientRefreshHz and <= TracksideDriverTrackerOptions.MaximumClientRefreshHz,
+                "Trackside:DriverTracker:ClientRefreshHz must be between 1 and 60 Hz.")
+            .Validate(options => options.DriverTracker.GeometryRecordingLaps is >= TracksideDriverTrackerOptions.MinimumGeometryRecordingLaps and <= TracksideDriverTrackerOptions.MaximumGeometryRecordingLaps,
+                "Trackside:DriverTracker:GeometryRecordingLaps must be between 1 and 20.")
             .Validate(options => !string.IsNullOrWhiteSpace(options.Deployment.InstallMode),
                 "Trackside:Deployment:InstallMode is required.")
             .Validate(options => !string.IsNullOrWhiteSpace(options.Deployment.ServiceName),
@@ -57,11 +63,23 @@ public static class TracksideServiceCollectionExtensions
                 "Trackside:Localization:DefaultLanguage must be either 'en' or 'nl'.")
             .ValidateOnStart();
 
+        services.AddOptions<TracksideDriverTrackerOptions>()
+            .Bind(configuration.GetSection($"{TracksideOptions.SectionName}:{nameof(TracksideOptions.DriverTracker)}"))
+            .Validate(options => options.ClientRefreshHz is >= TracksideDriverTrackerOptions.MinimumClientRefreshHz and <= TracksideDriverTrackerOptions.MaximumClientRefreshHz,
+                "Trackside:DriverTracker:ClientRefreshHz must be between 1 and 60 Hz.")
+            .Validate(options => options.GeometryRecordingLaps is >= TracksideDriverTrackerOptions.MinimumGeometryRecordingLaps and <= TracksideDriverTrackerOptions.MaximumGeometryRecordingLaps,
+                "Trackside:DriverTracker:GeometryRecordingLaps must be between 1 and 20.")
+            .ValidateOnStart();
+
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<LiveSessionState>();
         services.AddSingleton<TracksideSourceConfigurationStore>();
         services.AddSingleton<TracksideWritableConfigurationStore>();
         services.AddSingleton<AdminUserStore>();
+        services.AddSingleton<ILiveDataPublisher, LiveDataPublisher>();
+        services.AddSingleton<TrackGeometryRecorder>();
+        services.AddSingleton<ILiveDataConsumer<ScoringContextFrame>>(serviceProvider => serviceProvider.GetRequiredService<TrackGeometryRecorder>());
+        services.AddSingleton<ILiveDataConsumer<TelemetryPositionFrame>>(serviceProvider => serviceProvider.GetRequiredService<TrackGeometryRecorder>());
         services.AddSingleton(ResolveSqliteStoreOptions);
         services.AddSingleton<ITracksideStore, SqliteTracksideStore>();
         services.AddSingleton<ILeaderboardSnapshotBuilder, LeaderboardSnapshotBuilder>();
@@ -70,6 +88,7 @@ public static class TracksideServiceCollectionExtensions
         services.AddSingleton<IRf2SharedMemoryMapDiscovery, Rf2SharedMemoryMapDiscovery>();
         services.AddSingleton<Rf2ScoringMapResolver>();
         services.AddSingleton<IRf2ScoringPayloadParser, Rf2ScoringPayloadParser>();
+        services.AddSingleton<IRf2TelemetryPayloadParser, Rf2TelemetryPayloadParser>();
         services.AddSingleton<ILiveSessionSource, ReloadingLiveSessionSource>();
         services.AddHostedService<TracksidePersistenceInitializer>();
         services.AddHostedService<TracksideRetentionCleanupWorker>();

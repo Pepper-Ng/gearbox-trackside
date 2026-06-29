@@ -52,6 +52,29 @@ public sealed class TracksideWritableConfigurationStore
     }
 
     /// <summary>
+    /// Persists driver tracker settings.
+    /// </summary>
+    /// <param name="driverTracker">Driver tracker options to persist.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Task that completes after the file is written.</returns>
+    public async Task SaveDriverTrackerAsync(TracksideDriverTrackerOptions driverTracker, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(driverTracker);
+        var path = WritableConfigurationPath;
+        Directory.CreateDirectory(Path.GetDirectoryName(path) ?? _runtimeContext.ContentRootPath);
+
+        var root = await LoadConfigurationRootAsync(path, cancellationToken);
+        var trackside = GetOrCreateObject(root, "Trackside");
+        trackside["DriverTracker"] = JsonSerializer.SerializeToNode(driverTracker, TracksideJson.SerializerOptions);
+
+        var writeOptions = new JsonSerializerOptions(TracksideJson.SerializerOptions)
+        {
+            WriteIndented = true,
+        };
+        await WriteAllTextAtomicallyAsync(path, root.ToJsonString(writeOptions), cancellationToken);
+    }
+
+    /// <summary>
     /// Persists frontend localization settings.
     /// </summary>
     /// <param name="localization">Localization options to persist.</param>

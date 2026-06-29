@@ -9,6 +9,7 @@
     "phase": "GreenFlag",
     "currentSessionSeconds": 126.5,
     "scheduledDurationSeconds": 1800.0,
+    "lapDistanceMeters": 3200.0,
     "airTemperatureCelsius": 22.5,
     "trackTemperatureCelsius": 30.0,
     "overallFlag": "GREEN"
@@ -25,6 +26,11 @@
       "lastLapSeconds": 83.901,
       "currentLapSeconds": 36.2,
       "gapToLeaderSeconds": 0.0,
+      "trackPositionPercent": 45.31,
+      "lapDistanceMeters": 1450.0,
+      "posX": 42.0,
+      "posY": 3.5,
+      "posZ": 96.0,
       "sectors": [
         { "number": 1, "bestSeconds": 25.211, "lastSeconds": 25.8, "isOverallBest": true },
         { "number": 2, "bestSeconds": 27.891, "lastSeconds": 27.9, "isOverallBest": true },
@@ -42,6 +48,11 @@
       "lastLapSeconds": 84.12,
       "currentLapSeconds": 48.6,
       "gapToLeaderSeconds": 0.687,
+      "trackPositionPercent": 70.31,
+      "lapDistanceMeters": 2250.0,
+      "posX": 120.0,
+      "posY": 4.0,
+      "posZ": -38.0,
       "sectors": [
         { "number": 1, "bestSeconds": 25.4, "lastSeconds": 25.9, "isOverallBest": false },
         { "number": 2, "bestSeconds": 28.4, "lastSeconds": 28.3, "isOverallBest": false },
@@ -59,6 +70,11 @@
       "lastLapSeconds": 85.5,
       "currentLapSeconds": 71.8,
       "gapToLeaderSeconds": 2.575,
+      "trackPositionPercent": 92.97,
+      "lapDistanceMeters": 2975.0,
+      "posX": -64.0,
+      "posY": 5.0,
+      "posZ": -122.0,
       "sectors": [
         { "number": 1, "bestSeconds": 26.1, "lastSeconds": 26.3, "isOverallBest": false },
         { "number": 2, "bestSeconds": 28.9, "lastSeconds": 29.1, "isOverallBest": false },

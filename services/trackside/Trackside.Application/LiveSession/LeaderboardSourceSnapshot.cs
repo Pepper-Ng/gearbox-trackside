@@ -233,4 +233,24 @@ public sealed record LeaderboardDriverSource
     /// Exact world Z coordinate from the scoring payload when available.
     /// </summary>
     public double? PosZ { get; init; }
+
+    /// <summary>
+    /// True when the source reports the vehicle between pit entry and pit exit.
+    /// </summary>
+    public bool IsInPits { get; init; }
+
+    /// <summary>
+    /// True when the source reports the vehicle in its garage stall.
+    /// </summary>
+    public bool IsInGarageStall { get; init; }
+
+    /// <summary>
+    /// Lateral distance from the approximate center path in meters.
+    /// </summary>
+    public double? PathLateralMeters { get; init; }
+
+    /// <summary>
+    /// Relevant track edge distance from the approximate center path in meters.
+    /// </summary>
+    public double? TrackEdgeMeters { get; init; }
 }

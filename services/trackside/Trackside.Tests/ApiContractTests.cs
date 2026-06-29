@@ -17,6 +17,15 @@ public sealed class ApiContractTests
     }
 
     /// <summary>
+    /// Keeps the public track geometry endpoint stable for tracker screens.
+    /// </summary>
+    [Fact]
+    public void CurrentTrackGeometryPathIsStable()
+    {
+        Assert.Equal("/api/track-geometry/current", LiveSessionRoutes.CurrentTrackGeometryPath);
+    }
+
+    /// <summary>
     /// Keeps the SignalR hub path aligned with ADR-0001.
     /// </summary>
     [Fact]
@@ -113,6 +122,33 @@ public sealed class ApiContractTests
     public void AdminKioskPathIsStable()
     {
         Assert.Equal("/api/admin/kiosk", LiveSessionRoutes.AdminKioskPath);
+    }
+
+    /// <summary>
+    /// Keeps driver tracker settings endpoint stable for the admin dashboard.
+    /// </summary>
+    [Fact]
+    public void AdminDriverTrackerPathIsStable()
+    {
+        Assert.Equal("/api/admin/driver-tracker", LiveSessionRoutes.AdminDriverTrackerPath);
+    }
+
+    /// <summary>
+    /// Keeps driver tracker track catalog endpoint stable for the admin dashboard.
+    /// </summary>
+    [Fact]
+    public void AdminDriverTrackerTracksPathIsStable()
+    {
+        Assert.Equal("/api/admin/driver-tracker/tracks", LiveSessionRoutes.AdminDriverTrackerTracksPath);
+    }
+
+    /// <summary>
+    /// Keeps driver tracker recording endpoint stable for the admin dashboard.
+    /// </summary>
+    [Fact]
+    public void AdminDriverTrackerRecordingsPathIsStable()
+    {
+        Assert.Equal("/api/admin/driver-tracker/recordings", LiveSessionRoutes.AdminDriverTrackerRecordingsPath);
     }
 
     /// <summary>

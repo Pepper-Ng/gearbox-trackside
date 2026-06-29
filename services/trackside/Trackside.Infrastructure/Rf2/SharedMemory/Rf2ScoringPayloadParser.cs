@@ -230,6 +230,10 @@ public sealed class Rf2ScoringPayloadParser : IRf2ScoringPayloadParser
             PosX = Coordinate(vehicle.Pos.X),
             PosY = Coordinate(vehicle.Pos.Y),
             PosZ = Coordinate(vehicle.Pos.Z),
+            IsInPits = vehicle.InPits != 0,
+            IsInGarageStall = vehicle.InGarageStall != 0,
+            PathLateralMeters = Coordinate(vehicle.PathLateral),
+            TrackEdgeMeters = Coordinate(vehicle.TrackEdge),
         };
     }
 

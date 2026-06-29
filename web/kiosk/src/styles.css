@@ -614,6 +614,96 @@ tbody tr:last-child td {
   padding: 28px 20px;
 }
 
+.trackerPage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.trackerMap {
+  width: 100%;
+  height: min(72vh, 780px);
+  min-height: 420px;
+  filter: drop-shadow(0 24px 42px rgba(0, 0, 0, .28));
+}
+
+.trackerMapBackground {
+  fill: rgba(8, 10, 14, .86);
+  stroke: rgba(255, 255, 255, .12);
+  stroke-width: 2;
+}
+
+.trackGeometryLine {
+  fill: none;
+  stroke: rgba(246, 248, 251, .72);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 12;
+}
+
+.driverMarker circle {
+  fill: var(--marker-color);
+  stroke: var(--gt-graphite);
+  stroke-width: 4;
+}
+
+.driverMarker text {
+  fill: var(--gt-graphite);
+  font-family: "Rajdhani", "Bahnschrift", "Segoe UI", sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+  text-anchor: middle;
+}
+
+.trackerRoster {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.trackerRosterItem {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 10px;
+  min-height: 56px;
+  border: 1px solid var(--gt-line);
+  border-radius: 12px;
+  background: var(--gt-panel);
+  padding: 9px 11px;
+}
+
+.trackerRosterItem span {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--marker-color);
+  color: var(--gt-graphite);
+  font-family: "Rajdhani", "Bahnschrift", "Segoe UI", sans-serif;
+  font-weight: 800;
+}
+
+.trackerRosterItem strong,
+.trackerRosterItem small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trackerRosterItem strong {
+  color: var(--gt-text);
+}
+
+.trackerRosterItem small {
+  grid-column: 2;
+  color: var(--gt-muted);
+  font-size: 12px;
+}
+
 @media (max-width: 940px) {
   .topbar {
     grid-template-columns: 1fr;
@@ -635,6 +725,10 @@ tbody tr:last-child td {
 
   .viewTabs {
     position: static;
+  }
+
+  .trackerPage {
+    grid-template-columns: 1fr;
   }
 }
 

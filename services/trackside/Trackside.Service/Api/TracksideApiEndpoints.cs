@@ -15,6 +15,7 @@ using Trackside.Infrastructure.Rf2.SharedMemory;
 using Trackside.Service.Configuration;
 using Trackside.Service.Hosting;
 using Trackside.Service.Security;
+using Trackside.Service.Tracking;
 
 namespace Trackside.Service.Api;
 
@@ -33,6 +34,10 @@ public static class TracksideApiEndpoints
         endpoints.MapGet(LiveSessionRoutes.CurrentSessionPath, GetCurrentSessionAsync)
             .WithName("GetCurrentLiveSession")
             .WithSummary("Returns the current normalized live-session snapshot.");
+
+        endpoints.MapGet(LiveSessionRoutes.CurrentTrackGeometryPath, GetCurrentTrackGeometryAsync)
+            .WithName("GetCurrentTrackGeometry")
+            .WithSummary("Returns cached generated track geometry for the current live-session track.");
 
         endpoints.MapGet(LiveSessionRoutes.ClientConfigurationPath, GetClientConfiguration)
             .WithName("GetClientConfiguration")
@@ -135,6 +140,26 @@ public static class TracksideApiEndpoints
             .WithName("SaveKioskSettings")
             .WithSummary("Persists kiosk display defaults.");
 
+        endpoints.MapGet(LiveSessionRoutes.AdminDriverTrackerPath, GetDriverTrackerSettings)
+            .RequireAuthorization()
+            .WithName("GetDriverTrackerSettings")
+            .WithSummary("Returns driver tracker settings.");
+
+        endpoints.MapPut(LiveSessionRoutes.AdminDriverTrackerPath, SaveDriverTrackerSettingsAsync)
+            .RequireAuthorization()
+            .WithName("SaveDriverTrackerSettings")
+            .WithSummary("Persists driver tracker settings.");
+
+        endpoints.MapGet(LiveSessionRoutes.AdminDriverTrackerTracksPath, GetDriverTrackerTracks)
+            .RequireAuthorization()
+            .WithName("GetDriverTrackerTracks")
+            .WithSummary("Returns seen tracks and generated-geometry recording status.");
+
+        endpoints.MapPost(LiveSessionRoutes.AdminDriverTrackerRecordingsPath, StartDriverTrackerRecording)
+            .RequireAuthorization()
+            .WithName("StartDriverTrackerRecording")
+            .WithSummary("Starts or improves generated track geometry from telemetry.");
+
         endpoints.MapGet(LiveSessionRoutes.AdminLocalizationPath, GetLocalization)
             .RequireAuthorization()
             .WithName("GetLocalization")
@@ -205,6 +230,7 @@ public static class TracksideApiEndpoints
     private static async Task<IResult> GetCurrentSessionAsync(
         ILiveSessionSource source,
         LiveSessionState state,
+        ILiveDataPublisher liveDataPublisher,
         CancellationToken cancellationToken)
     {
         var snapshot = state.Current;
@@ -214,13 +240,34 @@ public static class TracksideApiEndpoints
             state.Update(snapshot);
         }
 
+        await liveDataPublisher.PublishAsync(new ScoringContextFrame { Snapshot = snapshot }, cancellationToken);
+
         return Results.Ok(snapshot);
+    }
+
+    private static async Task<IResult> GetCurrentTrackGeometryAsync(
+        ILiveSessionSource source,
+        LiveSessionState state,
+        ILiveDataPublisher liveDataPublisher,
+        TrackGeometryRecorder trackGeometryRecorder,
+        CancellationToken cancellationToken)
+    {
+        var snapshot = state.Current;
+        if (snapshot is null)
+        {
+            snapshot = await source.GetCurrentAsync(cancellationToken);
+            state.Update(snapshot);
+        }
+
+        await liveDataPublisher.PublishAsync(new ScoringContextFrame { Snapshot = snapshot }, cancellationToken);
+        return Results.Ok(trackGeometryRecorder.Get(snapshot.Session.TrackName));
     }
 
     private static IResult GetClientConfiguration(IOptionsMonitor<TracksideOptions> options) => Results.Ok(new ClientConfigurationResponse
     {
         DefaultDisplayMode = options.CurrentValue.Kiosk.DefaultDisplayMode,
         DefaultLanguage = options.CurrentValue.Localization.DefaultLanguage,
+        DriverTrackerClientRefreshHz = options.CurrentValue.DriverTracker.ClientRefreshHz,
     });
 
     private static async Task<IResult> GetLocalization(IOptionsMonitor<TracksideOptions> options) => Results.Ok(LocalizationResponse.From(options.CurrentValue.Localization));
@@ -408,6 +455,13 @@ public static class TracksideApiEndpoints
 
     private static IResult GetKioskSettings(IOptionsMonitor<TracksideOptions> options) => Results.Ok(KioskSettingsResponse.From(options.CurrentValue.Kiosk));
 
+    private static IResult GetDriverTrackerSettings(IOptionsMonitor<TracksideOptions> options) => Results.Ok(DriverTrackerSettingsResponse.From(options.CurrentValue.DriverTracker));
+
+    private static IResult GetDriverTrackerTracks(TrackGeometryRecorder trackGeometryRecorder) => Results.Ok(new DriverTrackerTracksResponse
+    {
+        Tracks = trackGeometryRecorder.ListTracks(),
+    });
+
     private static async Task<IResult> SaveKioskSettingsAsync(
         KioskSettingsRequest request,
         TracksideWritableConfigurationStore configurationStore,
@@ -422,6 +476,58 @@ public static class TracksideApiEndpoints
         }
 
         return Results.Ok(KioskSettingsResponse.From(options));
+    }
+
+    private static async Task<IResult> SaveDriverTrackerSettingsAsync(
+        DriverTrackerSettingsRequest request,
+        TracksideWritableConfigurationStore configurationStore,
+        IConfiguration configuration,
+        CancellationToken cancellationToken)
+    {
+        if (!double.IsFinite(request.ClientRefreshHz) || request.ClientRefreshHz is < TracksideDriverTrackerOptions.MinimumClientRefreshHz or > TracksideDriverTrackerOptions.MaximumClientRefreshHz)
+        {
+            return Results.BadRequest(new { error = "ClientRefreshHz must be between 1 and 60." });
+        }
+
+        if (request.GeometryRecordingLaps is < TracksideDriverTrackerOptions.MinimumGeometryRecordingLaps or > TracksideDriverTrackerOptions.MaximumGeometryRecordingLaps)
+        {
+            return Results.BadRequest(new { error = "GeometryRecordingLaps must be between 1 and 20." });
+        }
+
+        var options = new TracksideDriverTrackerOptions
+        {
+            ClientRefreshHz = Math.Round(request.ClientRefreshHz, 2),
+            GeometryRecordingLaps = request.GeometryRecordingLaps,
+        };
+        await configurationStore.SaveDriverTrackerAsync(options, cancellationToken);
+        if (configuration is IConfigurationRoot configurationRoot)
+        {
+            configurationRoot.Reload();
+        }
+
+        return Results.Ok(DriverTrackerSettingsResponse.From(options));
+    }
+
+    private static IResult StartDriverTrackerRecording(DriverTrackerRecordingRequest request, TrackGeometryRecorder trackGeometryRecorder)
+    {
+        if (string.IsNullOrWhiteSpace(request.TrackName))
+        {
+            return Results.BadRequest(new { error = "TrackName is required." });
+        }
+
+        if (request.TargetCompletedLaps is < TracksideDriverTrackerOptions.MinimumGeometryRecordingLaps or > TracksideDriverTrackerOptions.MaximumGeometryRecordingLaps)
+        {
+            return Results.BadRequest(new { error = "TargetCompletedLaps must be between 1 and 20." });
+        }
+
+        var result = trackGeometryRecorder.StartRecording(new TrackGeometryRecordingRequest
+        {
+            TrackName = request.TrackName,
+            TargetCompletedLaps = request.TargetCompletedLaps,
+            ResetExistingGeometry = request.ResetExistingGeometry,
+        });
+
+        return Results.Ok(result);
     }
 
     private static async Task<IResult> EnforceRetentionAsync(
@@ -1136,6 +1242,79 @@ public sealed record KioskSettingsRequest
     /// Default display mode for newly opened kiosk screens.
     /// </summary>
     public KioskDisplayMode DefaultDisplayMode { get; init; } = KioskDisplayMode.Monthly;
+}
+
+/// <summary>
+/// Driver tracker settings response.
+/// </summary>
+public sealed record DriverTrackerSettingsResponse
+{
+    /// <summary>
+    /// Browser-side tracker refresh/redraw rate in Hertz. Source freshness is determined separately.
+    /// </summary>
+    public double ClientRefreshHz { get; init; } = TracksideDriverTrackerOptions.DefaultClientRefreshHz;
+
+    /// <summary>
+    /// Default complete lap passes recorded before generated geometry is considered complete.
+    /// </summary>
+    public int GeometryRecordingLaps { get; init; } = TracksideDriverTrackerOptions.DefaultGeometryRecordingLaps;
+
+    /// <summary>
+    /// Maps configured driver tracker options to an API response.
+    /// </summary>
+    public static DriverTrackerSettingsResponse From(TracksideDriverTrackerOptions options) => new()
+    {
+        ClientRefreshHz = options.ClientRefreshHz,
+        GeometryRecordingLaps = options.GeometryRecordingLaps,
+    };
+}
+
+/// <summary>
+/// Driver tracker settings save request.
+/// </summary>
+public sealed record DriverTrackerSettingsRequest
+{
+    /// <summary>
+    /// Browser-side tracker refresh/redraw rate in Hertz. Source freshness is determined separately.
+    /// </summary>
+    public double ClientRefreshHz { get; init; } = TracksideDriverTrackerOptions.DefaultClientRefreshHz;
+
+    /// <summary>
+    /// Default complete lap passes recorded before generated geometry is considered complete.
+    /// </summary>
+    public int GeometryRecordingLaps { get; init; } = TracksideDriverTrackerOptions.DefaultGeometryRecordingLaps;
+}
+
+/// <summary>
+/// Driver tracker generated-geometry track catalog response.
+/// </summary>
+public sealed record DriverTrackerTracksResponse
+{
+    /// <summary>
+    /// Seen and persisted tracks.
+    /// </summary>
+    public IReadOnlyList<TrackGeometryCatalogEntry> Tracks { get; init; } = [];
+}
+
+/// <summary>
+/// Request to start or improve generated geometry for a track.
+/// </summary>
+public sealed record DriverTrackerRecordingRequest
+{
+    /// <summary>
+    /// Track to record.
+    /// </summary>
+    public string TrackName { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Complete lap passes to average into this recording pass.
+    /// </summary>
+    public int TargetCompletedLaps { get; init; } = TracksideDriverTrackerOptions.DefaultGeometryRecordingLaps;
+
+    /// <summary>
+    /// True to replace existing generated geometry before recording.
+    /// </summary>
+    public bool ResetExistingGeometry { get; init; } = true;
 }
 
 /// <summary>

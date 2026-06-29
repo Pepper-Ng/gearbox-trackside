@@ -102,6 +102,10 @@ public sealed class LeaderboardSnapshotBuilder : ILeaderboardSnapshotBuilder
             PosX = source.PosX,
             PosY = source.PosY,
             PosZ = source.PosZ,
+            IsInPits = source.IsInPits,
+            IsInGarageStall = source.IsInGarageStall,
+            PathLateralMeters = source.PathLateralMeters,
+            TrackEdgeMeters = source.TrackEdgeMeters,
             Sectors = sectors,
         };
     }

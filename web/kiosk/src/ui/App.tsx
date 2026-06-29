@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { formatGap, formatLapTime, formatNumber } from '../format';
-import { BestLapBoardResponse, BestLapRow, BestLapWindow, DriverSnapshot, KioskDisplayMode, LastFinishedSessionResponse, LastFinishedSessionRow, LiveSessionConnection, LiveSessionSnapshot, SectorSnapshot, startLiveSessionFeed, TracksideApiClient } from '../tracksideApi';
+import { BestLapBoardResponse, BestLapRow, BestLapWindow, ClientConfiguration, DriverSnapshot, KioskDisplayMode, LastFinishedSessionResponse, LastFinishedSessionRow, LiveSessionConnection, LiveSessionSnapshot, SectorSnapshot, startLiveSessionFeed, TracksideApiClient } from '../tracksideApi';
 import { TrackerPage } from './TrackerPage';
 
 type ViewMode = BestLapWindow | 'last' | 'live' | 'tracker';
@@ -25,21 +25,21 @@ export function App() {
   const [snapshot, setSnapshot] = useState<LiveSessionSnapshot | null>(null);
   const [board, setBoard] = useState<BestLapBoardResponse | null>(null);
   const [lastSession, setLastSession] = useState<LastFinishedSessionResponse | null>(null);
+  const [clientConfiguration, setClientConfiguration] = useState<ClientConfiguration | null>(null);
   const [view, setView] = useState<ViewMode>(() => getViewFromPath(window.location.pathname) ?? 'monthly');
   const [status, setStatus] = useState('Loading configuration...');
   const [boardStatus, setBoardStatus] = useState('Loading best laps...');
 
   useEffect(() => {
     const currentView = getViewFromPath(window.location.pathname);
-    if (currentView) {
-      return;
-    }
-
     let cancelled = false;
     client.getClientConfiguration()
       .then(configuration => {
         if (!cancelled) {
-          setView(toViewMode(configuration.defaultDisplayMode));
+          setClientConfiguration(configuration);
+          if (!currentView) {
+            setView(toViewMode(configuration.defaultDisplayMode));
+          }
         }
       })
       .catch(() => {
@@ -148,12 +148,17 @@ export function App() {
 
   return (
     <main className="shell">
-      <ShellHeader status={view === 'live' ? status : boardStatus} view={view} flag={snapshot?.session.overallFlag} />
+      <ShellHeader status={view === 'live' ? status : view === 'tracker' ? '' : boardStatus} view={view} flag={snapshot?.session.overallFlag} />
 
       {view === 'live'
         ? <LiveBoard snapshot={snapshot} />
         : view === 'tracker'
-          ? <TrackerPage snapshot={snapshot} />
+          ? <TrackerPage
+              snapshot={snapshot}
+              client={client}
+              geometryPath={clientConfiguration?.trackGeometryPath}
+              clientRefreshHz={clientConfiguration?.driverTrackerClientRefreshHz}
+            />
           : view === 'last'
             ? <LastSessionBoard result={lastSession} />
             : <BestLapBoard board={board} view={view} />}
@@ -367,6 +372,8 @@ function toViewMode(displayMode: KioskDisplayMode): ViewMode {
       return 'last';
     case 'Live':
       return 'live';
+    case 'Tracker':
+      return 'tracker';
     default:
       return 'monthly';
   }
@@ -461,6 +468,7 @@ interface ShellHeaderProps {
 function ShellHeader({ status, view, flag }: ShellHeaderProps) {
   const isConnected = view === 'live' && /^Connected through\b/i.test(status);
   const sanitized = sanitizeStatus(status);
+  const modeLabel = view === 'live' ? 'LIVE' : view === 'tracker' ? 'Tracker' : 'Leaderboard';
 
   return (
     <header className="topbar">
@@ -469,7 +477,7 @@ function ShellHeader({ status, view, flag }: ShellHeaderProps) {
         <div className="topbarPills">
           {isConnected ? <span className="statusPill connection">CONNECTED</span> : null}
           <span className={view === 'live' ? 'statusPill live' : 'statusPill'}>
-            {view === 'live' ? 'LIVE' : 'Leaderboard'}
+            {modeLabel}
           </span>
         </div>
         {sanitized ? <p>{sanitized}</p> : null}
