@@ -29,14 +29,22 @@ public sealed class LiveDataPublisher : ILiveDataPublisher
     {
         foreach (var consumer in _serviceProvider.GetServices<ILiveDataConsumer<TFrame>>())
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+
             try
             {
                 await consumer.ConsumeAsync(frame, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                throw;
+                return;
+            }
+            catch (OperationCanceledException ex)
+            {
+                _logger.LogDebug(ex, "Live-data consumer {ConsumerType} canceled while handling {FrameType}.", consumer.GetType().Name, typeof(TFrame).Name);
             }
             catch (Exception ex)
             {

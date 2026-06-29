@@ -128,6 +128,18 @@ try {
         throw 'Admin configuration page did not include the expected shell and script reference.'
     }
 
+    $configAlias = Invoke-WebRequest -Uri "$baseUrl/config" -UseBasicParsing -TimeoutSec 5
+    if ($configAlias.Content -notmatch 'Trackside Admin' -or $configAlias.Content -notmatch 'configuration\.js') {
+        throw 'Config alias did not serve the admin configuration page.'
+    }
+
+    foreach ($trackerPath in @('/tracker')) {
+        $trackerPage = Invoke-WebRequest -Uri "$baseUrl$trackerPath" -UseBasicParsing -TimeoutSec 5
+        if ($trackerPage.Content -notmatch '<div id="root"' -or $trackerPage.Content -notmatch '/assets/[^""'']+\.js') {
+            throw "Tracker route '$trackerPath' did not return the kiosk shell."
+        }
+    }
+
     $adminStylesheet = Invoke-WebRequest -Uri "$baseUrl/styles.css" -UseBasicParsing -TimeoutSec 5
     foreach ($requiredToken in @('gt-graphite', 'configurationPanel', 'tableFrame', 'dangerButton')) {
         if ($adminStylesheet.Content -notmatch [regex]::Escape($requiredToken)) {

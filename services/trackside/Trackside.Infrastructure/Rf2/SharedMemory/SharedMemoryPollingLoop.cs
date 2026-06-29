@@ -121,7 +121,14 @@ public sealed class SharedMemoryPollingLoop<T> : IDisposable
                 _logger.LogDebug(ex, "{LoopName} shared-memory polling iteration failed.", _name);
             }
 
-            await Task.Delay(_pollInterval, _stop.Token);
+            try
+            {
+                await Task.Delay(_pollInterval, _stop.Token);
+            }
+            catch (OperationCanceledException) when (_stop.IsCancellationRequested)
+            {
+                break;
+            }
         }
     }
 }

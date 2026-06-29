@@ -14,7 +14,7 @@ const supportedPaths: Record<string, ViewMode> = {
   '/tracker': 'tracker',
 };
 
-function getViewFromPath(path: string): ViewMode | null {
+export function getViewFromPath(path: string): ViewMode | null {
   const normalized = path.toLowerCase().replace(/\/+$/, '') || '/';
   return supportedPaths[normalized] ?? null;
 }
@@ -367,17 +367,18 @@ function capitalize(value: string): string {
   return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
 }
 
-function toViewMode(displayMode: KioskDisplayMode): ViewMode {
-  switch (displayMode) {
-    case 'Weekly':
+export function toViewMode(displayMode: KioskDisplayMode | string): ViewMode {
+  switch (displayMode.toLowerCase()) {
+    case 'weekly':
       return 'weekly';
-    case 'Daily':
+    case 'daily':
       return 'daily';
-    case 'LastSession':
+    case 'lastsession':
+    case 'last-session':
       return 'last';
-    case 'Live':
+    case 'live':
       return 'live';
-    case 'Tracker':
+    case 'tracker':
       return 'tracker';
     default:
       return 'monthly';

@@ -95,13 +95,16 @@ public static class TracksideWebApplication
 
         var app = builder.Build();
 
+        var configurationPagePath = Path.Combine(app.Environment.ContentRootPath, "wwwroot", "configuration.html");
         app.Use(async (context, next) =>
         {
             var path = context.Request.Path.Value ?? string.Empty;
             if (path.Equals("/config", StringComparison.OrdinalIgnoreCase)
                 || path.Equals("/config/", StringComparison.OrdinalIgnoreCase))
             {
-                context.Request.Path = "/configuration.html";
+                context.Response.ContentType = "text/html; charset=utf-8";
+                await context.Response.SendFileAsync(configurationPagePath);
+                return;
             }
 
             await next();
