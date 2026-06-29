@@ -294,6 +294,7 @@ export interface LiveSessionFeedClient {
   connectLiveSession(
     hubPath: string,
     onSnapshot: (snapshot: LiveSessionSnapshot) => void,
+    onTrackGeometry?: (geometry: TrackGeometryResponse) => void,
   ): Promise<LiveSessionConnection>;
 }
 
@@ -302,16 +303,25 @@ export async function startLiveSessionFeed(
   client: LiveSessionFeedClient,
   onSnapshot: (snapshot: LiveSessionSnapshot) => void,
   onStatus: (status: string) => void,
+  onTrackGeometry?: (geometry: TrackGeometryResponse) => void,
 ): Promise<LiveSessionConnection> {
   const configuration = await client.getClientConfiguration();
   const current = await client.getCurrentSession(configuration.currentSessionPath);
   onSnapshot(current);
   onStatus('Connected through REST recovery endpoint');
 
+  if (onTrackGeometry) {
+    try {
+      onTrackGeometry(await client.getTrackGeometry(configuration.trackGeometryPath));
+    } catch {
+      // Geometry can legitimately be unavailable before a complete lap has been collected.
+    }
+  }
+
   return client.connectLiveSession(configuration.liveSessionHubPath, pushedSnapshot => {
     onSnapshot(pushedSnapshot);
     onStatus('Connected through SignalR live updates');
-  });
+  }, onTrackGeometry);
 }
 
 /** Browser API client for REST and SignalR communication with Trackside.Host. */
@@ -358,6 +368,7 @@ export class TracksideApiClient implements LiveSessionFeedClient {
   public async connectLiveSession(
     hubPath: string,
     onSnapshot: (snapshot: LiveSessionSnapshot) => void,
+    onTrackGeometry?: (geometry: TrackGeometryResponse) => void,
   ): Promise<LiveSessionConnection> {
     const connection = new signalR.HubConnectionBuilder()
       .withUrl(this.toUrl(hubPath))
@@ -365,6 +376,10 @@ export class TracksideApiClient implements LiveSessionFeedClient {
       .build();
 
     connection.on('SessionUpdated', onSnapshot);
+    if (onTrackGeometry) {
+      connection.on('TrackGeometryUpdated', onTrackGeometry);
+    }
+
     await connection.start();
     return connection;
   }

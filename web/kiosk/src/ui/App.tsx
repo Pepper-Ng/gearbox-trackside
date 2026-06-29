@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { formatGap, formatLapTime, formatNumber } from '../format';
-import { BestLapBoardResponse, BestLapRow, BestLapWindow, ClientConfiguration, DriverSnapshot, KioskDisplayMode, LastFinishedSessionResponse, LastFinishedSessionRow, LiveSessionConnection, LiveSessionSnapshot, SectorSnapshot, startLiveSessionFeed, TracksideApiClient } from '../tracksideApi';
+import { BestLapBoardResponse, BestLapRow, BestLapWindow, ClientConfiguration, DriverSnapshot, KioskDisplayMode, LastFinishedSessionResponse, LastFinishedSessionRow, LiveSessionConnection, LiveSessionSnapshot, SectorSnapshot, startLiveSessionFeed, TrackGeometryResponse, TracksideApiClient } from '../tracksideApi';
 import { TrackerPage } from './TrackerPage';
 
 type ViewMode = BestLapWindow | 'last' | 'live' | 'tracker';
@@ -23,6 +23,7 @@ function getViewFromPath(path: string): ViewMode | null {
 export function App() {
   const client = useMemo(() => new TracksideApiClient(), []);
   const [snapshot, setSnapshot] = useState<LiveSessionSnapshot | null>(null);
+  const [trackGeometry, setTrackGeometry] = useState<TrackGeometryResponse | null>(null);
   const [board, setBoard] = useState<BestLapBoardResponse | null>(null);
   const [lastSession, setLastSession] = useState<LastFinishedSessionResponse | null>(null);
   const [clientConfiguration, setClientConfiguration] = useState<ClientConfiguration | null>(null);
@@ -64,6 +65,11 @@ export function App() {
       nextStatus => {
         if (!cancelled) {
           setStatus(nextStatus);
+        }
+      },
+      geometry => {
+        if (!cancelled) {
+          setTrackGeometry(geometry);
         }
       },
     ).then(nextConnection => {
@@ -155,8 +161,7 @@ export function App() {
         : view === 'tracker'
           ? <TrackerPage
               snapshot={snapshot}
-              client={client}
-              geometryPath={clientConfiguration?.trackGeometryPath}
+              geometry={trackGeometry}
               clientRefreshHz={clientConfiguration?.driverTrackerClientRefreshHz}
             />
           : view === 'last'

@@ -1,4 +1,5 @@
 using Trackside.Domain.LiveSession;
+using Trackside.Service.Tracking;
 
 namespace Trackside.Service.Hubs;
 
@@ -13,4 +14,11 @@ public interface ILiveSessionClient
     /// <param name="snapshot">Snapshot that replaces the client's current view.</param>
     /// <returns>A task that completes when SignalR has dispatched the message.</returns>
     Task SessionUpdated(LiveSessionSnapshot snapshot);
+
+    /// <summary>
+    /// Receives generated track geometry for the current live-session track.
+    /// </summary>
+    /// <param name="geometry">Generated track geometry response.</param>
+    /// <returns>A task that completes when SignalR has dispatched the message.</returns>
+    Task TrackGeometryUpdated(TrackGeometryResponse geometry);
 }

@@ -7,6 +7,7 @@ using Trackside.Application.Persistence;
 using Trackside.Infrastructure.Persistence;
 using Trackside.Infrastructure.Rf2.SharedMemory;
 using Trackside.Service.Hosting;
+using Trackside.Service.Hubs;
 using Trackside.Service.LiveData;
 using Trackside.Service.Security;
 using Trackside.Service.Tracking;
@@ -80,6 +81,7 @@ public static class TracksideServiceCollectionExtensions
         services.AddSingleton<TrackGeometryRecorder>();
         services.AddSingleton<ILiveDataConsumer<ScoringContextFrame>>(serviceProvider => serviceProvider.GetRequiredService<TrackGeometryRecorder>());
         services.AddSingleton<ILiveDataConsumer<TelemetryPositionFrame>>(serviceProvider => serviceProvider.GetRequiredService<TrackGeometryRecorder>());
+        services.AddSingleton<ILiveDataConsumer<TrackGeometryChangedFrame>, TrackGeometrySignalRPublisher>();
         services.AddSingleton(ResolveSqliteStoreOptions);
         services.AddSingleton<ITracksideStore, SqliteTracksideStore>();
         services.AddSingleton<ILeaderboardSnapshotBuilder, LeaderboardSnapshotBuilder>();

@@ -155,7 +155,7 @@ public static class TracksideApiEndpoints
             .WithName("GetDriverTrackerTracks")
             .WithSummary("Returns seen tracks and generated-geometry recording status.");
 
-        endpoints.MapPost(LiveSessionRoutes.AdminDriverTrackerRecordingsPath, StartDriverTrackerRecording)
+        endpoints.MapPost(LiveSessionRoutes.AdminDriverTrackerRecordingsPath, StartDriverTrackerRecordingAsync)
             .RequireAuthorization()
             .WithName("StartDriverTrackerRecording")
             .WithSummary("Starts or improves generated track geometry from telemetry.");
@@ -508,7 +508,10 @@ public static class TracksideApiEndpoints
         return Results.Ok(DriverTrackerSettingsResponse.From(options));
     }
 
-    private static IResult StartDriverTrackerRecording(DriverTrackerRecordingRequest request, TrackGeometryRecorder trackGeometryRecorder)
+    private static async Task<IResult> StartDriverTrackerRecordingAsync(
+        DriverTrackerRecordingRequest request,
+        TrackGeometryRecorder trackGeometryRecorder,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.TrackName))
         {
@@ -520,12 +523,12 @@ public static class TracksideApiEndpoints
             return Results.BadRequest(new { error = "TargetCompletedLaps must be between 1 and 20." });
         }
 
-        var result = trackGeometryRecorder.StartRecording(new TrackGeometryRecordingRequest
+        var result = await trackGeometryRecorder.StartRecordingAsync(new TrackGeometryRecordingRequest
         {
             TrackName = request.TrackName,
             TargetCompletedLaps = request.TargetCompletedLaps,
             ResetExistingGeometry = request.ResetExistingGeometry,
-        });
+        }, cancellationToken);
 
         return Results.Ok(result);
     }

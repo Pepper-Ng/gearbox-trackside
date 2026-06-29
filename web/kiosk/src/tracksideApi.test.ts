@@ -1,14 +1,18 @@
 import { describe, expect, it, vi } from 'vitest';
-import { LiveSessionFeedClient, LiveSessionSnapshot, startLiveSessionFeed } from './tracksideApi';
+import { LiveSessionFeedClient, LiveSessionSnapshot, TrackGeometryResponse, startLiveSessionFeed } from './tracksideApi';
 
 describe('startLiveSessionFeed', () => {
   it('loads the current REST snapshot before connecting live updates', async () => {
     const calls: string[] = [];
     const pushedSnapshots: Array<(snapshot: LiveSessionSnapshot) => void> = [];
+    const pushedGeometry: Array<(geometry: TrackGeometryResponse) => void> = [];
     const receivedSnapshots: LiveSessionSnapshot[] = [];
+    const receivedGeometry: TrackGeometryResponse[] = [];
     const statuses: string[] = [];
     const currentSnapshot = makeSnapshot(1);
     const liveSnapshot = makeSnapshot(2);
+    const initialGeometry = makeGeometry(false);
+    const liveGeometry = makeGeometry(true);
     const connection = { stop: vi.fn(async () => undefined) };
     const client: LiveSessionFeedClient = {
       async getClientConfiguration() {
@@ -39,11 +43,15 @@ describe('startLiveSessionFeed', () => {
         return { isAvailable: false, rows: [] };
       },
       async getTrackGeometry() {
-        return { isAvailable: false, sampleCount: 0, coveragePercent: 0, isCompleteLap: false, points: [] };
+        calls.push('geometry:/api/track-geometry/current');
+        return initialGeometry;
       },
-      async connectLiveSession(path, onSnapshot) {
+      async connectLiveSession(path, onSnapshot, onTrackGeometry) {
         calls.push(`hub:${path}`);
         pushedSnapshots.push(onSnapshot);
+        if (onTrackGeometry) {
+          pushedGeometry.push(onTrackGeometry);
+        }
         return connection;
       },
     };
@@ -52,15 +60,28 @@ describe('startLiveSessionFeed', () => {
       client,
       snapshot => receivedSnapshots.push(snapshot),
       status => statuses.push(status),
+      geometry => receivedGeometry.push(geometry),
     );
     pushedSnapshots[0](liveSnapshot);
+    pushedGeometry[0](liveGeometry);
 
     expect(handle).toBe(connection);
-    expect(calls).toEqual(['configuration', 'current:/api/live-session/current', 'hub:/hubs/live-session']);
+    expect(calls).toEqual(['configuration', 'current:/api/live-session/current', 'geometry:/api/track-geometry/current', 'hub:/hubs/live-session']);
     expect(receivedSnapshots.map(snapshot => snapshot.updateSequence)).toEqual([1, 2]);
+    expect(receivedGeometry.map(geometry => geometry.isAvailable)).toEqual([false, true]);
     expect(statuses).toEqual(['Connected through REST recovery endpoint', 'Connected through SignalR live updates']);
   });
 });
+
+function makeGeometry(isAvailable: boolean): TrackGeometryResponse {
+  return {
+    isAvailable,
+    sampleCount: isAvailable ? 180 : 0,
+    coveragePercent: isAvailable ? 100 : 0,
+    isCompleteLap: isAvailable,
+    points: [],
+  };
+}
 
 function makeSnapshot(updateSequence: number): LiveSessionSnapshot {
   return {

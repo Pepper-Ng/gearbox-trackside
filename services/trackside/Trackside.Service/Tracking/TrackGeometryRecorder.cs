@@ -11,6 +11,17 @@ using Trackside.Service.Hosting;
 namespace Trackside.Service.Tracking;
 
 /// <summary>
+/// Live-data frame published when generated track geometry changes.
+/// </summary>
+public sealed record TrackGeometryChangedFrame
+{
+    /// <summary>
+    /// Updated generated track geometry.
+    /// </summary>
+    public TrackGeometryResponse Geometry { get; init; } = TrackGeometryResponse.Unavailable(null, 0, 0.0, false, null, null);
+}
+
+/// <summary>
 /// Builds, qualifies, and persists track geometry from telemetry world coordinates plus scoring context.
 /// </summary>
 public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFrame>, ILiveDataConsumer<TelemetryPositionFrame>
@@ -28,6 +39,7 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
     private readonly TimeProvider _timeProvider;
     private readonly TracksideRuntimeContext _runtimeContext;
     private readonly IOptionsMonitor<TracksideOptions> _options;
+    private readonly ILiveDataPublisher _liveDataPublisher;
     private readonly Dictionary<string, TrackGeometryState> _tracks = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Dictionary<string, DriverSampleContext>> _scoringContexts = new(StringComparer.OrdinalIgnoreCase);
 
@@ -37,11 +49,13 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
     public TrackGeometryRecorder(
         TimeProvider timeProvider,
         TracksideRuntimeContext runtimeContext,
-        IOptionsMonitor<TracksideOptions> options)
+        IOptionsMonitor<TracksideOptions> options,
+        ILiveDataPublisher liveDataPublisher)
     {
         _timeProvider = timeProvider;
         _runtimeContext = runtimeContext;
         _options = options;
+        _liveDataPublisher = liveDataPublisher;
     }
 
     /// <summary>
@@ -53,7 +67,12 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
     public ValueTask ConsumeAsync(ScoringContextFrame frame, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        UpdateScoringSnapshot(frame.Snapshot);
+        var changed = UpdateScoringSnapshotCore(frame.Snapshot);
+        if (changed is not null)
+        {
+            return _liveDataPublisher.PublishAsync(changed, cancellationToken);
+        }
+
         return ValueTask.CompletedTask;
     }
 
@@ -61,21 +80,28 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
     public ValueTask ConsumeAsync(TelemetryPositionFrame frame, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        UpdateTelemetry(frame);
+        var changed = UpdateTelemetryCore(frame);
+        if (changed is not null)
+        {
+            return _liveDataPublisher.PublishAsync(changed, cancellationToken);
+        }
+
         return ValueTask.CompletedTask;
     }
 
     /// <inheritdoc />
-    public void UpdateScoringSnapshot(LiveSessionSnapshot? snapshot)
+    public void UpdateScoringSnapshot(LiveSessionSnapshot? snapshot) => UpdateScoringSnapshotCore(snapshot);
+
+    private TrackGeometryChangedFrame? UpdateScoringSnapshotCore(LiveSessionSnapshot? snapshot)
     {
         if (snapshot is null || string.IsNullOrWhiteSpace(snapshot.Session.TrackName))
         {
-            return;
+            return null;
         }
 
         if (!IsTrackNameUsable(snapshot.Session.TrackName))
         {
-            return;
+            return null;
         }
 
         lock (_gate)
@@ -112,7 +138,7 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
 
             if (!changed && state.UpdatedUtc != default)
             {
-                return;
+                return null;
             }
 
             state.Source = snapshot.Source;
@@ -123,20 +149,24 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
             {
                 Persist(state, now);
             }
+
+            return new TrackGeometryChangedFrame { Geometry = BuildResponse(state) };
         }
     }
 
     /// <inheritdoc />
-    public void UpdateTelemetry(TelemetryPositionFrame? frame)
+    public void UpdateTelemetry(TelemetryPositionFrame? frame) => UpdateTelemetryCore(frame);
+
+    private TrackGeometryChangedFrame? UpdateTelemetryCore(TelemetryPositionFrame? frame)
     {
         if (frame is null || string.IsNullOrWhiteSpace(frame.TrackName) || frame.Vehicles.Count == 0)
         {
-            return;
+            return null;
         }
 
         if (!IsTrackNameUsable(frame.TrackName))
         {
-            return;
+            return null;
         }
 
         lock (_gate)
@@ -154,7 +184,7 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
             {
                 state.Source = frame.Source;
                 state.UpdatedUtc = now;
-                return;
+                return null;
             }
 
             var changed = false;
@@ -170,7 +200,7 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
 
             if (!changed)
             {
-                return;
+                return null;
             }
 
             state.Source = frame.Source;
@@ -181,6 +211,8 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
             {
                 Persist(state, now);
             }
+
+            return new TrackGeometryChangedFrame { Geometry = BuildResponse(state) };
         }
     }
 
@@ -218,9 +250,11 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
     /// <summary>
     /// Starts a new telemetry recording pass for a seen or named track.
     /// </summary>
-    public TrackGeometryCatalogEntry StartRecording(TrackGeometryRecordingRequest request)
+    public async ValueTask<TrackGeometryCatalogEntry> StartRecordingAsync(TrackGeometryRecordingRequest request, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(request.TrackName);
+        TrackGeometryChangedFrame changed;
+        TrackGeometryCatalogEntry entry;
 
         lock (_gate)
         {
@@ -234,8 +268,12 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
             state.StartRecording(ClampTargetLaps(request.TargetCompletedLaps ?? DefaultTargetLaps()), request.ResetExistingGeometry);
             state.UpdatedUtc = now;
             Persist(state, now);
-            return ToCatalogEntry(state);
+            entry = ToCatalogEntry(state);
+            changed = new TrackGeometryChangedFrame { Geometry = BuildResponse(state) };
         }
+
+        await _liveDataPublisher.PublishAsync(changed, cancellationToken);
+        return entry;
     }
 
     private TrackGeometryState GetOrLoadState(string trackName)

@@ -111,7 +111,7 @@ public sealed class TrackGeometryRecorderTests
     /// Admin catalog shows seen tracks and can start a fresh improvement recording target.
     /// </summary>
     [Fact]
-    public void CatalogListsSeenTracksAndStartsRecording()
+    public async Task CatalogListsSeenTracksAndStartsRecording()
     {
         var cache = CreateCache(out var tempRoot);
         try
@@ -128,11 +128,11 @@ public sealed class TrackGeometryRecorderTests
             Assert.True(seen.IsRecording);
             Assert.False(seen.HasGeometry);
 
-            var recording = cache.StartRecording(new TrackGeometryRecordingRequest
+            var recording = await cache.StartRecordingAsync(new TrackGeometryRecordingRequest
             {
                 TrackName = "Loch Drummond - Short",
                 TargetCompletedLaps = 3,
-            });
+            }, CancellationToken.None);
 
             Assert.True(recording.IsRecording);
             Assert.Equal(3, recording.TargetCompletedLaps);
@@ -148,25 +148,29 @@ public sealed class TrackGeometryRecorderTests
     /// Restarting a track recording resets the stored geometry and applies the new completed-lap target.
     /// </summary>
     [Fact]
-    public void StartRecordingRestartsCompletedGeometryWithNewTarget()
+    public async Task StartRecordingRestartsCompletedGeometryWithNewTarget()
     {
-        var cache = CreateCache(out var tempRoot);
+        var publisher = new RecordingLiveDataPublisher();
+        var cache = CreateCache(out var tempRoot, publisher: publisher);
         try
         {
             RecordTelemetryLap(cache, "1", completedLaps: 0, startIndex: 0, endIndex: 100);
             Assert.True(cache.Get("Loch Drummond - Short").IsAvailable);
 
-            var recording = cache.StartRecording(new TrackGeometryRecordingRequest
+            var recording = await cache.StartRecordingAsync(new TrackGeometryRecordingRequest
             {
                 TrackName = "Loch Drummond - Short",
                 TargetCompletedLaps = 2,
-            });
+            }, CancellationToken.None);
 
             Assert.True(recording.IsRecording);
             Assert.False(recording.HasGeometry);
             Assert.Equal(2, recording.TargetCompletedLaps);
             Assert.Equal(0, recording.RecordedLapCount);
             Assert.Equal(0, recording.SampleCount);
+            var pushedGeometry = Assert.IsType<TrackGeometryChangedFrame>(publisher.PublishedFrames.Last()).Geometry;
+            Assert.False(pushedGeometry.IsAvailable);
+            Assert.Equal(0, pushedGeometry.SampleCount);
         }
         finally
         {
@@ -178,7 +182,7 @@ public sealed class TrackGeometryRecorderTests
     /// Improve mode keeps existing geometry and continues averaging until the new target completed-lap count is reached.
     /// </summary>
     [Fact]
-    public void StartRecordingImprovesWithoutResettingGeometry()
+    public async Task StartRecordingImprovesWithoutResettingGeometry()
     {
         var cache = CreateCache(out var tempRoot);
         try
@@ -187,12 +191,12 @@ public sealed class TrackGeometryRecorderTests
             var before = cache.Get("Loch Drummond - Short");
             Assert.True(before.IsAvailable);
 
-            var recording = cache.StartRecording(new TrackGeometryRecordingRequest
+            var recording = await cache.StartRecordingAsync(new TrackGeometryRecordingRequest
             {
                 TrackName = "Loch Drummond - Short",
                 TargetCompletedLaps = 2,
                 ResetExistingGeometry = false,
-            });
+            }, CancellationToken.None);
 
             Assert.True(recording.IsRecording);
             Assert.Equal(1, recording.RecordedLapCount);
@@ -330,23 +334,26 @@ public sealed class TrackGeometryRecorderTests
     private static TrackGeometryRecorder CreateCache(
         out string tempRoot,
         int geometryRecordingLaps = TracksideDriverTrackerOptions.DefaultGeometryRecordingLaps,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        ILiveDataPublisher? publisher = null)
     {
         tempRoot = Path.Combine(Path.GetTempPath(), $"trackside-geometry-{Guid.NewGuid():N}");
-        return CreateCache(tempRoot, geometryRecordingLaps, timeProvider);
+        return CreateCache(tempRoot, geometryRecordingLaps, timeProvider, publisher);
     }
 
     private static TrackGeometryRecorder CreateCache(
         string tempRoot,
         int geometryRecordingLaps = TracksideDriverTrackerOptions.DefaultGeometryRecordingLaps,
-        TimeProvider? timeProvider = null) => new(
+        TimeProvider? timeProvider = null,
+        ILiveDataPublisher? publisher = null) => new(
         timeProvider ?? TimeProvider.System,
         new TracksideRuntimeContext(true, false, tempRoot, null),
         new StaticOptionsMonitor<TracksideOptions>(new TracksideOptions
         {
             Deployment = new TracksideDeploymentOptions { DataPath = tempRoot },
             DriverTracker = new TracksideDriverTrackerOptions { GeometryRecordingLaps = geometryRecordingLaps },
-        }));
+        }),
+        publisher ?? NoopLiveDataPublisher.Instance);
 
     private static void RecordTelemetryLap(
         TrackGeometryRecorder cache,
@@ -508,5 +515,25 @@ public sealed class TrackGeometryRecorderTests
         public override DateTimeOffset GetUtcNow() => _utcNow;
 
         public void Advance(TimeSpan value) => _utcNow += value;
+    }
+
+    private sealed class NoopLiveDataPublisher : ILiveDataPublisher
+    {
+        public static readonly NoopLiveDataPublisher Instance = new();
+
+        public ValueTask PublishAsync<TFrame>(TFrame frame, CancellationToken cancellationToken)
+            where TFrame : notnull => ValueTask.CompletedTask;
+    }
+
+    private sealed class RecordingLiveDataPublisher : ILiveDataPublisher
+    {
+        public List<object> PublishedFrames { get; } = [];
+
+        public ValueTask PublishAsync<TFrame>(TFrame frame, CancellationToken cancellationToken)
+            where TFrame : notnull
+        {
+            PublishedFrames.Add(frame);
+            return ValueTask.CompletedTask;
+        }
     }
 }

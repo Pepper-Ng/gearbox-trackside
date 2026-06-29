@@ -16,6 +16,7 @@
     <Content Include="..\Assets\app.ico" Link="Assets\app.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Update="Fixtures\**\*" CopyToOutputDirectory="PreserveNewest" />
     <Content Update="wwwroot\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Remove="wwwroot\assets\**\*;wwwroot\brand\**\*;wwwroot\icons\**\*;wwwroot\favicon.ico;wwwroot\index.html" />
   </ItemGroup>
 
   <ItemGroup>
@@ -29,7 +30,7 @@
     <KioskWwwRoot>$(MSBuildProjectDirectory)\wwwroot</KioskWwwRoot>
   </PropertyGroup>
 
-  <Target Name="CopyKioskDistToWwwRoot" BeforeTargets="Build;Publish" Condition="Exists('$(KioskDistDir)')">
+  <Target Name="CopyKioskDistToWwwRoot" BeforeTargets="ResolveCurrentProjectStaticWebAssetsInputs;Build;Publish" Condition="Exists('$(KioskDistDir)')">
     <Message Text="Copying kiosk build output from $(KioskDistDir) to $(KioskWwwRoot) while preserving admin static files" Importance="high" />
     <RemoveDir Directories="$(KioskWwwRoot)\assets" Condition="Exists('$(KioskWwwRoot)\assets')" />
     <RemoveDir Directories="$(KioskWwwRoot)\brand" Condition="Exists('$(KioskWwwRoot)\brand')" />
@@ -40,6 +41,13 @@
       <KioskDistFiles Include="$(KioskDistDir)\**\*" />
     </ItemGroup>
     <Copy SourceFiles="@(KioskDistFiles)" DestinationFolder="$(KioskWwwRoot)\%(RecursiveDir)" SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" />
+    <ItemGroup>
+      <Content Include="wwwroot\assets\**\*;wwwroot\brand\**\*;wwwroot\icons\**\*;wwwroot\favicon.ico;wwwroot\index.html" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="RequireKioskDistForPublish" BeforeTargets="Publish" Condition="!Exists('$(KioskDistDir)\index.html')">
+    <Error Text="Kiosk dist is missing. Run npm --prefix web\kiosk run build before publishing Trackside.Service." />
   </Target>
 
   <Target Name="CopyWwwRootToOutput" AfterTargets="Build" Condition="Exists('$(KioskWwwRoot)')">

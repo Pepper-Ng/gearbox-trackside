@@ -1,10 +1,9 @@
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
-import { type DriverSnapshot, type LiveSessionSnapshot, type TrackGeometryBounds, type TrackGeometryResponse, type TracksideApiClient } from '../tracksideApi';
+import { type DriverSnapshot, type LiveSessionSnapshot, type TrackGeometryBounds, type TrackGeometryResponse } from '../tracksideApi';
 
 interface TrackerPageProps {
   snapshot: LiveSessionSnapshot | null;
-  client: TracksideApiClient;
-  geometryPath: string | null | undefined;
+  geometry: TrackGeometryResponse | null;
   clientRefreshHz: number | null | undefined;
 }
 
@@ -13,9 +12,8 @@ const minMapHeight = 360;
 const maxMapHeight = 1000;
 const mapPadding = 56;
 
-export function TrackerPage({ snapshot, client, geometryPath, clientRefreshHz }: TrackerPageProps) {
+export function TrackerPage({ snapshot, geometry, clientRefreshHz }: TrackerPageProps) {
   const [trackerSnapshot, setTrackerSnapshot] = useState<LiveSessionSnapshot | null>(snapshot);
-  const [geometry, setGeometry] = useState<TrackGeometryResponse | null>(null);
   const latestSnapshot = useRef<LiveSessionSnapshot | null>(snapshot);
   const refreshHz = clampRefreshHz(clientRefreshHz);
 
@@ -40,31 +38,6 @@ export function TrackerPage({ snapshot, client, geometryPath, clientRefreshHz }:
       window.clearTimeout(timer);
     };
   }, [refreshHz]);
-
-  useEffect(() => {
-    let cancelled = false;
-    let timer = 0;
-
-    async function tick() {
-      try {
-        const nextGeometry = await client.getTrackGeometry(geometryPath ?? undefined);
-        if (!cancelled) {
-          setGeometry(nextGeometry);
-        }
-      } catch {
-      }
-
-      if (!cancelled) {
-        timer = window.setTimeout(tick, 1000);
-      }
-    }
-
-    void tick();
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [client, geometryPath]);
 
   const mapMetrics = useMemo(() => buildMapMetrics(geometry?.bounds), [geometry?.bounds]);
   const pathPoints = useMemo(() => (geometry?.points ?? [])
