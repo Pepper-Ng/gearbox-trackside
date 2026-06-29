@@ -95,21 +95,6 @@ public static class TracksideWebApplication
 
         var app = builder.Build();
 
-        var configurationPagePath = Path.Combine(app.Environment.ContentRootPath, "wwwroot", "configuration.html");
-        app.Use(async (context, next) =>
-        {
-            var path = context.Request.Path.Value ?? string.Empty;
-            if (path.Equals("/config", StringComparison.OrdinalIgnoreCase)
-                || path.Equals("/config/", StringComparison.OrdinalIgnoreCase))
-            {
-                context.Response.ContentType = "text/html; charset=utf-8";
-                await context.Response.SendFileAsync(configurationPagePath);
-                return;
-            }
-
-            await next();
-        });
-
         app.UseDefaultFiles();
         app.UseStaticFiles();
         app.UseCors(TracksideCors.PolicyName);
@@ -117,6 +102,15 @@ public static class TracksideWebApplication
         app.UseAuthorization();
         app.MapTracksideApi();
         app.MapHub<LiveSessionHub>(LiveSessionRoutes.HubPath);
+        IResult GetConfigurationPage()
+        {
+            var configurationPagePath = Path.Combine(app.Environment.ContentRootPath, "wwwroot", "configuration.html");
+            return File.Exists(configurationPagePath)
+                ? Results.Text(File.ReadAllText(configurationPagePath), "text/html")
+                : Results.NotFound("configuration.html was not found.");
+        }
+
+        app.MapGet("/config", GetConfigurationPage).WithOrder(-100);
         app.MapFallbackToFile("index.html");
 
         return app;

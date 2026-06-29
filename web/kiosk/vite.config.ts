@@ -1,6 +1,8 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
+const backendTarget = 'http://127.0.0.1:8877';
+
 /**
  * Vite configuration for the development kiosk shell.
  * The ASP.NET Core host serves the built output for packaged operation.
@@ -12,9 +14,15 @@ export default defineConfig({
     port: 5173,
     strictPort: false,
     proxy: {
-      '/api': 'http://127.0.0.1:8877',
+      '/api': backendTarget,
+      '/config': backendTarget,
+      '/configuration.html': backendTarget,
+      '/configuration.js': backendTarget,
+      '/styles.css': backendTarget,
+      '/favicon.ico': backendTarget,
+      '/brand': backendTarget,
       '/hubs': {
-        target: 'http://127.0.0.1:8877',
+        target: backendTarget,
         ws: true,
       },
     },
