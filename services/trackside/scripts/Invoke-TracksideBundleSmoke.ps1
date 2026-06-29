@@ -116,11 +116,23 @@ try {
     }
 
     [void](Invoke-WebRequest -Uri "$baseUrl$($scriptMatch.Groups['path'].Value)" -UseBasicParsing -TimeoutSec 5)
-    [void](Invoke-WebRequest -Uri "$baseUrl$($stylesheetMatch.Groups['path'].Value)" -UseBasicParsing -TimeoutSec 5)
+    $kioskStylesheet = Invoke-WebRequest -Uri "$baseUrl$($stylesheetMatch.Groups['path'].Value)" -UseBasicParsing -TimeoutSec 5
+    foreach ($requiredToken in @('gt-graphite', 'leaderboardTable', 'bestLapTable', 'trackerPage')) {
+        if ($kioskStylesheet.Content -notmatch [regex]::Escape($requiredToken)) {
+            throw "Kiosk stylesheet did not include expected venue-preview UI token '$requiredToken'."
+        }
+    }
 
     $adminPage = Invoke-WebRequest -Uri "$baseUrl/configuration.html" -UseBasicParsing -TimeoutSec 5
     if ($adminPage.Content -notmatch 'Trackside Admin' -or $adminPage.Content -notmatch 'configuration\.js') {
         throw 'Admin configuration page did not include the expected shell and script reference.'
+    }
+
+    $adminStylesheet = Invoke-WebRequest -Uri "$baseUrl/styles.css" -UseBasicParsing -TimeoutSec 5
+    foreach ($requiredToken in @('gt-graphite', 'configurationPanel', 'tableFrame', 'dangerButton')) {
+        if ($adminStylesheet.Content -notmatch [regex]::Escape($requiredToken)) {
+            throw "Admin stylesheet did not include expected venue-preview UI token '$requiredToken'."
+        }
     }
 
     $snapshot = Invoke-RestMethod -Uri "$baseUrl/api/live-session/current" -TimeoutSec 5

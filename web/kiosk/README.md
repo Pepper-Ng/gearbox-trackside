@@ -24,5 +24,5 @@ dotnet run --project services\trackside\Trackside.Service -- --console --source 
 ## Extension Points
 
 - `src/tracksideApi.ts` defines the browser-facing REST and SignalR contracts.
-- `src/ui/App.tsx` is only a basic fixture display, not the final board design.
-- Keep initial load through `/api/live-session/current`; use SignalR updates only after the recovery snapshot succeeds.
+- `src/ui/App.tsx` is the current venue-preview board shell for monthly, weekly, daily, last-session, live, and tracker views.
+- Keep initial live-session load through `/api/live-session/current`; use SignalR updates after the recovery snapshot succeeds. Tracker geometry follows the same pattern: one REST recovery fetch, then SignalR geometry updates.

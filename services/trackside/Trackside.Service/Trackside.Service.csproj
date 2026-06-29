@@ -60,4 +60,14 @@
     <Copy SourceFiles="@(WwwRootFiles)" DestinationFolder="$(TargetDir)wwwroot\%(RecursiveDir)" SkipUnchangedFiles="true" />
   </Target>
 
+  <Target Name="CopyWwwRootToPublish" AfterTargets="Publish" Condition="Exists('$(KioskWwwRoot)') and '$(PublishDir)' != ''">
+    <Message Text="Copying project wwwroot content to publish folder $(PublishDir)wwwroot" Importance="high" />
+    <RemoveDir Directories="$(PublishDir)wwwroot" />
+    <MakeDir Directories="$(PublishDir)wwwroot" />
+    <ItemGroup>
+      <WwwRootPublishFiles Include="$(KioskWwwRoot)\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(WwwRootPublishFiles)" DestinationFolder="$(PublishDir)wwwroot\%(RecursiveDir)" SkipUnchangedFiles="true" />
+  </Target>
+
 </Project>
