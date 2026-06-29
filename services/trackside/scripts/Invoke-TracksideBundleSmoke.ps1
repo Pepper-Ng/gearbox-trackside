@@ -100,6 +100,29 @@ try {
         throw "Expected health serviceState Console, received '$($health.serviceState)'."
     }
 
+    $kioskPage = Invoke-WebRequest -Uri "$baseUrl/" -UseBasicParsing -TimeoutSec 5
+    if ($kioskPage.Content -notmatch '<div id="root"') {
+        throw 'Kiosk page did not include the React root element.'
+    }
+
+    $scriptMatch = [regex]::Match($kioskPage.Content, 'src="(?<path>/assets/[^"]+\.js)"')
+    if (!$scriptMatch.Success) {
+        throw 'Kiosk page did not reference a built JavaScript asset.'
+    }
+
+    $stylesheetMatch = [regex]::Match($kioskPage.Content, 'href="(?<path>/assets/[^"]+\.css)"')
+    if (!$stylesheetMatch.Success) {
+        throw 'Kiosk page did not reference a built stylesheet asset.'
+    }
+
+    [void](Invoke-WebRequest -Uri "$baseUrl$($scriptMatch.Groups['path'].Value)" -UseBasicParsing -TimeoutSec 5)
+    [void](Invoke-WebRequest -Uri "$baseUrl$($stylesheetMatch.Groups['path'].Value)" -UseBasicParsing -TimeoutSec 5)
+
+    $adminPage = Invoke-WebRequest -Uri "$baseUrl/configuration.html" -UseBasicParsing -TimeoutSec 5
+    if ($adminPage.Content -notmatch 'Trackside Admin' -or $adminPage.Content -notmatch 'configuration\.js') {
+        throw 'Admin configuration page did not include the expected shell and script reference.'
+    }
+
     $snapshot = Invoke-RestMethod -Uri "$baseUrl/api/live-session/current" -TimeoutSec 5
     if ([string]::IsNullOrWhiteSpace($snapshot.session.trackName)) {
         throw 'Fixture snapshot did not include a track name.'

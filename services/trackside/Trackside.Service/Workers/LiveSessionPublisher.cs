@@ -33,6 +33,7 @@ public sealed class LiveSessionPublisher : BackgroundService
     /// <param name="store">Durable Phase 2 store.</param>
     /// <param name="hubContext">SignalR hub context used for browser pushes.</param>
     /// <param name="options">Live application options used for publish cadence.</param>
+    /// <param name="tracksideOptions">Trackside options used to align publish cadence with source polling.</param>
     /// <param name="persistenceOptions">Persistence options used for default session inclusion.</param>
     /// <param name="logger">Logger for source failures and lifecycle events.</param>
     public LiveSessionPublisher(

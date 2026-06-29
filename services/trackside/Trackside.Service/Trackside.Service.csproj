@@ -5,7 +5,7 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <AssemblyName>Trackside.Service</AssemblyName>
     <RootNamespace>Trackside.Service</RootNamespace>
-    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <ApplicationIcon>..\Assets\app.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -13,7 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="Assets\app.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\Assets\app.ico" Link="Assets\app.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Update="Fixtures\**\*" CopyToOutputDirectory="PreserveNewest" />
     <Content Update="wwwroot\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
@@ -30,7 +30,11 @@
   </PropertyGroup>
 
   <Target Name="CopyKioskDistToWwwRoot" BeforeTargets="Build;Publish" Condition="Exists('$(KioskDistDir)')">
-    <Message Text="Copying kiosk build output from $(KioskDistDir) to $(KioskWwwRoot)" Importance="high" />
+    <Message Text="Copying kiosk build output from $(KioskDistDir) to $(KioskWwwRoot) while preserving admin static files" Importance="high" />
+    <RemoveDir Directories="$(KioskWwwRoot)\assets" Condition="Exists('$(KioskWwwRoot)\assets')" />
+    <RemoveDir Directories="$(KioskWwwRoot)\brand" Condition="Exists('$(KioskWwwRoot)\brand')" />
+    <RemoveDir Directories="$(KioskWwwRoot)\icons" Condition="Exists('$(KioskWwwRoot)\icons')" />
+    <Delete Files="$(KioskWwwRoot)\favicon.ico;$(KioskWwwRoot)\index.html" />
     <MakeDir Directories="$(KioskWwwRoot)" />
     <ItemGroup>
       <KioskDistFiles Include="$(KioskDistDir)\**\*" />

@@ -55,14 +55,24 @@ function Invoke-Tool {
     }
 }
 
-function Copy-CleanDirectory {
+function Copy-KioskDistToWwwRoot {
     param(
         [Parameter(Mandatory)] [string]$Source,
         [Parameter(Mandatory)] [string]$Destination
     )
 
-    if (Test-Path $Destination) {
-        Remove-Item -Recurse -Force $Destination
+    foreach ($generatedDirectory in @('assets', 'brand', 'icons')) {
+        $generatedPath = Join-Path $Destination $generatedDirectory
+        if (Test-Path $generatedPath) {
+            Remove-Item -Recurse -Force $generatedPath
+        }
+    }
+
+    foreach ($generatedFile in @('favicon.ico', 'index.html')) {
+        $generatedPath = Join-Path $Destination $generatedFile
+        if (Test-Path $generatedPath) {
+            Remove-Item -Force $generatedPath
+        }
     }
 
     New-Item -ItemType Directory -Force $Destination | Out-Null
@@ -109,7 +119,7 @@ Invoke-Tool -FilePath dotnet -Arguments $rigAgentPublishArguments -WorkingDirect
 Invoke-Tool -FilePath dotnet -Arguments $updaterPublishArguments -WorkingDirectory $repoRoot
 
 if (!$SkipKioskBuild) {
-    Copy-CleanDirectory (Join-Path $repoRoot 'web\kiosk\dist') (Join-Path $serviceOut 'wwwroot')
+    Copy-KioskDistToWwwRoot (Join-Path $repoRoot 'web\kiosk\dist') (Join-Path $serviceOut 'wwwroot')
 }
 
 $configRoot = Join-Path $bundleRoot 'config'
