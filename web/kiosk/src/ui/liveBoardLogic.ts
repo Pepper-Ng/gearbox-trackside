@@ -40,6 +40,15 @@ export function getDriverStatus(driver: DriverSnapshot, sessionKind: string | nu
   return isOutLap ? { label: 'OUT', tone: 'out' } : null;
 }
 
+export function getRacePositionDelta(currentRank: number | null | undefined, baselineRank: number | null | undefined): number | null {
+  if (!isFiniteNumber(currentRank) || !isFiniteNumber(baselineRank) || currentRank <= 0 || baselineRank <= 0) {
+    return null;
+  }
+
+  const delta = Math.trunc(baselineRank) - Math.trunc(currentRank);
+  return delta === 0 ? null : delta;
+}
+
 function isFiniteNumber(value: number | null | undefined): value is number {
   return value !== null && value !== undefined && Number.isFinite(value);
 }

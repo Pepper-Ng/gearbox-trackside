@@ -531,6 +531,34 @@ tbody tr:last-child td {
   font-weight: 800;
 }
 
+.rankStack {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.positionDeltaBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 18px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 2px 5px;
+}
+
+.positionDeltaBadge-gained {
+  color: var(--gt-good);
+}
+
+.positionDeltaBadge-lost {
+  color: var(--gt-red);
+}
+
 .driverCell {
   display: grid;
   gap: 5px;
@@ -570,10 +598,11 @@ tbody tr:last-child td {
 }
 
 .sectorBars {
-  display: none;
-  align-items: end;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
   gap: 4px;
-  height: 14px;
+  height: 16px;
 }
 
 .sectorBar {
@@ -820,10 +849,6 @@ tbody tr:last-child td {
     display: none;
   }
 
-  .sectorBars {
-    display: flex;
-  }
-
   .leaderboardTable .columnRank {
     width: 52px;
   }
@@ -837,6 +862,42 @@ tbody tr:last-child td {
 }
 
 @media (max-width: 680px) {
+  .topbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .topbarMeta {
+    grid-column: 1 / -1;
+    justify-items: start;
+    gap: 6px;
+  }
+
+  .topbarPills {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .topbarFlag {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: center;
+    margin-left: 0;
+  }
+
+  .topbarFlag .flagSwatch {
+    width: 58px;
+    height: 58px;
+    border-radius: 12px;
+    padding: 5px;
+  }
+
+  .topbarFlag .flagSwatch span {
+    font-size: 11px;
+  }
+
   .sessionStrip {
     grid-template-columns: 1fr;
   }
@@ -875,11 +936,40 @@ tbody tr:last-child td {
   }
 
   .topbar {
-    padding: 14px;
+    padding: 10px 12px;
   }
 
   .brandLogo {
-    width: min(100%, 286px);
+    width: min(100%, 210px);
+    max-height: 72px;
+  }
+
+  .statusPill {
+    font-size: 10px;
+    letter-spacing: .1em;
+    padding: 4px 7px;
+  }
+
+  .sessionStrip {
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 1fr);
+    gap: 6px;
+    margin-top: 10px;
+  }
+
+  .sessionStrip .metric {
+    min-height: 42px;
+    border-radius: 10px;
+    padding: 8px 10px;
+  }
+
+  .sessionStrip .metric span {
+    display: none;
+  }
+
+  .sessionStrip .metric strong {
+    margin-top: 0;
+    font-size: 15px;
+    line-height: 1;
   }
 
   .viewTabs button {
@@ -902,7 +992,7 @@ tbody tr:last-child td {
   }
 
   .leaderboardTable .columnRank {
-    width: 42px;
+    width: 54px;
   }
 
   .leaderboardTable .columnBest,
@@ -918,6 +1008,22 @@ tbody tr:last-child td {
   .driverCell span,
   .sectorCell small {
     font-size: 11px;
+  }
+
+  .sectorBars {
+    gap: 3px;
+  }
+
+  .sectorBar {
+    width: 3px;
+    height: 11px;
+  }
+
+  .positionDeltaBadge {
+    min-width: 21px;
+    min-height: 16px;
+    font-size: 10px;
+    padding: 1px 4px;
   }
 
   .driverStatusBadge {

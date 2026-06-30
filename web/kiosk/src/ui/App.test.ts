@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { type DriverSnapshot, type LiveSessionSnapshot } from '../tracksideApi';
 import { getViewFromPath, toViewMode } from './App';
 import { stableDriverColor } from './driverColors';
-import { getDriverStatus, getRaceLapProgress } from './liveBoardLogic';
+import { getDriverStatus, getRaceLapProgress, getRacePositionDelta } from './liveBoardLogic';
 
 describe('kiosk route selection', () => {
   it('maps the tracker route to the tracker view', () => {
@@ -30,6 +30,12 @@ describe('live board helpers', () => {
     expect(getDriverStatus(makeDriver({ isInPits: true }), 'Practice')).toEqual({ label: 'PIT', tone: 'pit' });
     expect(getDriverStatus(makeDriver({ completedLaps: 0, bestLapSeconds: null, currentLapSeconds: 18.2 }), 'Qualifying')).toEqual({ label: 'OUT', tone: 'out' });
     expect(getDriverStatus(makeDriver({ completedLaps: 0, bestLapSeconds: null, currentLapSeconds: 18.2 }), 'Race')).toBeNull();
+  });
+
+  it('reports race positions gained or lost from a baseline rank', () => {
+    expect(getRacePositionDelta(2, 5)).toBe(3);
+    expect(getRacePositionDelta(6, 4)).toBe(-2);
+    expect(getRacePositionDelta(4, 4)).toBeNull();
   });
 });
 

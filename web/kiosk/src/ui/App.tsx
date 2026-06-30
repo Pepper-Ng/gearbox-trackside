@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { formatGap, formatLapTime, formatNumber } from '../format';
 import { BestLapBoardResponse, BestLapRow, BestLapWindow, ClientConfiguration, DriverSnapshot, KioskDisplayMode, LastFinishedSessionResponse, LastFinishedSessionRow, LiveSessionConnection, LiveSessionInfo, LiveSessionSnapshot, SectorSnapshot, startLiveSessionFeed, TrackGeometryResponse, TracksideApiClient } from '../tracksideApi';
-import { getDriverStatus, getRaceLapProgress, type DriverStatus } from './liveBoardLogic';
+import { getDriverStatus, getRaceLapProgress, getRacePositionDelta, type DriverStatus } from './liveBoardLogic';
 import { TrackerPage } from './TrackerPage';
 
 type ViewMode = BestLapWindow | 'last' | 'live' | 'tracker';
@@ -299,6 +299,7 @@ interface LeaderboardTableProps {
 function LeaderboardTable({ snapshot }: LeaderboardTableProps) {
   const drivers = snapshot?.drivers ?? [];
   const fastestLapFlashes = useFastestLapFlashes(drivers);
+  const positionDeltas = useRacePositionDeltas(snapshot);
   const setRowRef = useRowSwapAnimation(drivers);
 
   return (
@@ -325,15 +326,20 @@ function LeaderboardTable({ snapshot }: LeaderboardTableProps) {
             ref={element => setRowRef(driver.driverId, element)}
             className={classNames('liveBoardRow', driver.isOverallBestLap ? 'bestLapRow' : undefined, fastestLapFlashes.has(driver.driverId) ? 'fastestLapFlash' : undefined)}
           >
-            <td className="rankCell columnRank">{driver.leaderboardRank || driver.position || '-'}</td>
+            <td className="rankCell columnRank">
+              <span className="rankStack">
+                <span className="rankNumber">{driver.leaderboardRank || driver.position || '-'}</span>
+                <PositionDeltaBadge delta={positionDeltas.get(driver.driverId)} />
+              </span>
+            </td>
             <td className="columnDriver">
               <div className="driverCell">
                 <strong>{driver.displayName}</strong>
                 <span className="driverMetaLine">
+                  <SectorBars driver={driver} />
                   <span>{formatPercent(driver.trackPositionPercent)}</span>
                   <MobileStatusBadge driver={driver} sessionKind={snapshot?.session.kind} />
                 </span>
-                <SectorBars driver={driver} />
               </div>
             </td>
             <td className="columnRig">{driver.rigName}</td>
@@ -363,6 +369,18 @@ function SectorCell({ sector }: SectorCellProps) {
       <span>{formatLapTime(sector?.bestSeconds)}</span>
       <small>{formatLapTime(sector?.currentSeconds ?? sector?.lastSeconds)}</small>
     </td>
+  );
+}
+
+function PositionDeltaBadge({ delta }: { delta: number | null | undefined }) {
+  if (!delta) {
+    return null;
+  }
+
+  return (
+    <span className={classNames('positionDeltaBadge', delta > 0 ? 'positionDeltaBadge-gained' : 'positionDeltaBadge-lost')}>
+      {delta > 0 ? `+${delta}` : delta}
+    </span>
   );
 }
 
@@ -486,6 +504,47 @@ function getBestLapDrivers(drivers: DriverSnapshot[]): { seconds: number; driver
 
 function pruneExpiredFlashes(flashes: Record<string, number>, now: number): Record<string, number> {
   return Object.fromEntries(Object.entries(flashes).filter(([, expiresAt]) => expiresAt > now));
+}
+
+function useRacePositionDeltas(snapshot: LiveSessionSnapshot | null): Map<string, number> {
+  const baselinesRef = useRef<{ sessionKey: string; ranks: Map<string, number> }>({ sessionKey: '', ranks: new Map() });
+  const drivers = snapshot?.drivers ?? [];
+  const driverRankKey = drivers.map(driver => `${driver.driverId}:${getDriverRank(driver) ?? ''}`).join('|');
+
+  return useMemo(() => {
+    if (!snapshot || snapshot.session.kind !== 'Race') {
+      baselinesRef.current = { sessionKey: '', ranks: new Map() };
+      return new Map<string, number>();
+    }
+
+    const sessionKey = `${snapshot.source}:${snapshot.session.trackName}:${snapshot.session.totalLaps ?? ''}`;
+    if (baselinesRef.current.sessionKey !== sessionKey) {
+      baselinesRef.current = { sessionKey, ranks: new Map() };
+    }
+
+    const deltas = new Map<string, number>();
+    for (const driver of drivers) {
+      const currentRank = getDriverRank(driver);
+      if (!currentRank) {
+        continue;
+      }
+
+      if (!baselinesRef.current.ranks.has(driver.driverId)) {
+        baselinesRef.current.ranks.set(driver.driverId, currentRank);
+      }
+
+      const delta = getRacePositionDelta(currentRank, baselinesRef.current.ranks.get(driver.driverId));
+      if (delta) {
+        deltas.set(driver.driverId, delta);
+      }
+    }
+
+    return deltas;
+  }, [snapshot?.source, snapshot?.session.kind, snapshot?.session.trackName, snapshot?.session.totalLaps, driverRankKey]);
+}
+
+function getDriverRank(driver: DriverSnapshot): number | null {
+  return driver.leaderboardRank || driver.position || null;
 }
 
 function useRowSwapAnimation(drivers: DriverSnapshot[]) {
