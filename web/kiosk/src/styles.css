@@ -366,6 +366,45 @@ h2 {
   white-space: nowrap;
 }
 
+.metric strong .compactStatusDots {
+  display: none;
+  align-items: center;
+  gap: 7px;
+  margin-left: 10px;
+  vertical-align: middle;
+}
+
+.metric strong .compactStatusDot {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.compactStatusDot-connected {
+  background: var(--gt-good);
+  box-shadow: 0 0 10px rgba(95, 240, 138, .44);
+}
+
+.compactStatusDot-live {
+  background: var(--gt-red);
+  box-shadow: 0 0 12px rgba(255, 32, 45, .54);
+  animation: recordingPulse 1.15s ease-in-out infinite;
+}
+
+@keyframes recordingPulse {
+  0%,
+  100% {
+    opacity: .42;
+    transform: scale(.86);
+  }
+
+  48% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 .slimMetric {
   display: flex;
   flex-direction: column;
@@ -649,6 +688,10 @@ tbody tr:last-child td {
   padding: 4px 9px;
 }
 
+.driverCell .driverStatusBadge {
+  color: var(--gt-graphite);
+}
+
 .driverStatusBadge-pit {
   background: #f1c40f;
 }
@@ -808,17 +851,38 @@ tbody tr:last-child td {
 
 @media (max-width: 940px) {
   .topbar {
-    grid-template-columns: 1fr;
-    align-items: start;
+    grid-template-columns: minmax(190px, 1fr) auto auto;
+    align-items: center;
+    gap: 14px;
   }
 
   .topbarMeta {
-    justify-items: start;
+    justify-items: end;
+  }
+
+  .topbarPills {
+    justify-content: flex-end;
   }
 
   .topbarMeta p {
     max-width: 100%;
     white-space: normal;
+  }
+
+  .topbarFlag {
+    margin-left: 0;
+  }
+
+  .topbar-live {
+    grid-template-columns: minmax(190px, 1fr) auto;
+  }
+
+  .topbar-live .topbarMeta {
+    display: none;
+  }
+
+  .sessionStrip .metric:first-child .compactStatusDots {
+    display: inline-flex;
   }
 
   .topbarActions {
@@ -863,15 +927,15 @@ tbody tr:last-child td {
 
 @media (max-width: 680px) {
   .topbar {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(170px, 1fr) auto auto;
     align-items: center;
     gap: 10px;
     padding: 12px;
   }
 
   .topbarMeta {
-    grid-column: 1 / -1;
-    justify-items: start;
+    grid-column: auto;
+    justify-items: end;
     gap: 6px;
   }
 
@@ -881,25 +945,41 @@ tbody tr:last-child td {
   }
 
   .topbarFlag {
-    grid-column: 2;
-    grid-row: 1;
+    grid-column: auto;
+    grid-row: auto;
     align-self: center;
     margin-left: 0;
   }
 
   .topbarFlag .flagSwatch {
-    width: 58px;
-    height: 58px;
+    width: clamp(64px, 18vw, 78px);
+    height: clamp(64px, 18vw, 78px);
     border-radius: 12px;
     padding: 5px;
   }
 
   .topbarFlag .flagSwatch span {
-    font-size: 11px;
+    font-size: clamp(11px, 2.5vw, 13px);
   }
 
   .sessionStrip {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .sessionStrip .metric:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .sessionStrip .metric {
+    min-height: 64px;
+    border-radius: 12px;
+    padding: 10px 12px;
+  }
+
+  .sessionStrip .metric strong {
+    font-size: clamp(18px, 4vw, 24px);
   }
 
   .leaderboardTable .columnCurrent {
@@ -908,6 +988,10 @@ tbody tr:last-child td {
 
   .mobileStatusBadge {
     display: inline-flex;
+  }
+
+  .liveDriverCount {
+    display: none;
   }
 
   .leaderboardTable .columnDriver {
@@ -936,11 +1020,22 @@ tbody tr:last-child td {
   }
 
   .topbar {
+    grid-template-columns: minmax(0, 1fr) auto;
     padding: 10px 12px;
   }
 
+  .topbarMeta {
+    grid-column: 1 / -1;
+    justify-items: start;
+  }
+
+  .topbarFlag {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
   .brandLogo {
-    width: min(100%, 210px);
+    width: min(100%, clamp(170px, 52vw, 210px));
     max-height: 72px;
   }
 
@@ -951,7 +1046,7 @@ tbody tr:last-child td {
   }
 
   .sessionStrip {
-    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 6px;
     margin-top: 10px;
   }
@@ -964,6 +1059,11 @@ tbody tr:last-child td {
 
   .sessionStrip .metric span {
     display: none;
+  }
+
+  .sessionStrip .metric:first-child .compactStatusDots,
+  .sessionStrip .metric:first-child .compactStatusDot {
+    display: inline-flex;
   }
 
   .sessionStrip .metric strong {
@@ -995,10 +1095,13 @@ tbody tr:last-child td {
     width: 54px;
   }
 
-  .leaderboardTable .columnBest,
+  .leaderboardTable .columnBest {
+    width: 76px;
+  }
+
   .leaderboardTable .columnInterval,
   .leaderboardTable .columnGap {
-    width: 64px;
+    width: 62px;
   }
 
   .driverCell {
@@ -1028,6 +1131,37 @@ tbody tr:last-child td {
 
   .driverStatusBadge {
     min-width: 40px;
+  }
+}
+
+@media (max-width: 380px) {
+  .leaderboardTable th.columnRank {
+    font-size: 0;
+  }
+
+  .leaderboardTable .columnRank {
+    width: 38px;
+  }
+
+  .leaderboardTable .columnInterval {
+    display: none;
+  }
+
+  .leaderboardTable .columnBest {
+    width: 78px;
+  }
+
+  .leaderboardTable .columnGap {
+    width: 64px;
+  }
+
+  .driverMetaLine {
+    gap: 5px;
+  }
+
+  .mobileStatusBadge {
+    min-width: 36px;
+    padding-inline: 5px;
   }
 }
 

@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { formatGap, formatLapTime, formatNumber } from '../format';
 import { BestLapBoardResponse, BestLapRow, BestLapWindow, ClientConfiguration, DriverSnapshot, KioskDisplayMode, LastFinishedSessionResponse, LastFinishedSessionRow, LiveSessionConnection, LiveSessionInfo, LiveSessionSnapshot, SectorSnapshot, startLiveSessionFeed, TrackGeometryResponse, TracksideApiClient } from '../tracksideApi';
-import { getDriverStatus, getRaceLapProgress, getRacePositionDelta, type DriverStatus } from './liveBoardLogic';
+import { getConnectionIndicators, getDriverStatus, getRaceLapProgress, getRacePositionDelta, type ConnectionIndicators, type DriverStatus } from './liveBoardLogic';
 import { TrackerPage } from './TrackerPage';
 
 type ViewMode = BestLapWindow | 'last' | 'live' | 'tracker';
@@ -155,10 +155,10 @@ export function App() {
 
   return (
     <main className="shell">
-      <ShellHeader status={view === 'live' ? status : view === 'tracker' ? '' : boardStatus} view={view} session={snapshot?.session} />
+      <ShellHeader status={view === 'live' ? status : view === 'tracker' ? '' : boardStatus} view={view} snapshot={snapshot} />
 
       {view === 'live'
-        ? <LiveBoard snapshot={snapshot} />
+        ? <LiveBoard snapshot={snapshot} status={status} />
         : view === 'tracker'
           ? <TrackerPage
               snapshot={snapshot}
@@ -175,9 +175,11 @@ export function App() {
 interface LiveBoardProps {
   /** Current live-session snapshot. */
   snapshot: LiveSessionSnapshot | null;
+  /** Current browser/backend feed status. */
+  status: string;
 }
 
-function LiveBoard({ snapshot }: LiveBoardProps) {
+function LiveBoard({ snapshot, status }: LiveBoardProps) {
   const [clockAnchor, setClockAnchor] = useState({ seconds: 0, timestamp: Date.now() });
   const [tick, setTick] = useState(Date.now());
 
@@ -205,16 +207,17 @@ function LiveBoard({ snapshot }: LiveBoardProps) {
   const interpolatedClockSeconds = snapshot?.session?.currentSessionSeconds != null
     ? clockAnchor.seconds + Math.max(0, (tick - clockAnchor.timestamp) / 1000)
     : undefined;
+  const connectionIndicators = getConnectionIndicators(status, snapshot);
 
   return (
     <>
       <section className="sessionStrip" aria-label="Session summary">
-        <Metric label="Track" value={snapshot?.session.trackName} />
+        <Metric label="Track" value={snapshot?.session.trackName} indicators={<CompactStatusDots indicators={connectionIndicators} />} />
         <Metric label="Session" value={formatSessionValue(snapshot)} />
         <Metric label="Clock" value={formatLapTime(interpolatedClockSeconds)} />
       </section>
 
-      <BoardPanel title="Live Board" meta={`${snapshot?.drivers.length ?? 0} drivers`} live>
+      <BoardPanel title="Live Board" meta={`${snapshot?.drivers.length ?? 0} drivers`} metaClassName="liveDriverCount" live>
         <div className="tableFrame liveBoardFrame" style={{ '--flag-color': getFlagColor(snapshot?.session.overallFlag) } as React.CSSProperties}>
           <LeaderboardTable snapshot={snapshot} />
         </div>
@@ -320,39 +323,38 @@ function LeaderboardTable({ snapshot }: LeaderboardTableProps) {
         </tr>
       </thead>
       <tbody>
-        {drivers.map(driver => (
-          <tr
-            key={driver.driverId}
-            ref={element => setRowRef(driver.driverId, element)}
-            className={classNames('liveBoardRow', driver.isOverallBestLap ? 'bestLapRow' : undefined, fastestLapFlashes.has(driver.driverId) ? 'fastestLapFlash' : undefined)}
-          >
-            <td className="rankCell columnRank">
-              <span className="rankStack">
-                <span className="rankNumber">{driver.leaderboardRank || driver.position || '-'}</span>
-                <PositionDeltaBadge delta={positionDeltas.get(driver.driverId)} />
-              </span>
-            </td>
-            <td className="columnDriver">
-              <div className="driverCell">
-                <strong>{driver.displayName}</strong>
-                <span className="driverMetaLine">
-                  <SectorBars driver={driver} />
-                  <span>{formatPercent(driver.trackPositionPercent)}</span>
-                  <MobileStatusBadge driver={driver} sessionKind={snapshot?.session.kind} />
+        {drivers.map(driver => {
+          const driverStatus = getDriverStatus(driver, snapshot?.session.kind);
+          return (
+            <tr
+              key={driver.driverId}
+              ref={element => setRowRef(driver.driverId, element)}
+              className={classNames('liveBoardRow', driver.isOverallBestLap ? 'bestLapRow' : undefined, fastestLapFlashes.has(driver.driverId) ? 'fastestLapFlash' : undefined)}
+            >
+              <td className="rankCell columnRank">
+                <span className="rankStack">
+                  <span className="rankNumber">{driver.leaderboardRank || driver.position || '-'}</span>
+                  <PositionDeltaBadge delta={positionDeltas.get(driver.driverId)} />
                 </span>
-              </div>
-            </td>
-            <td className="columnRig">{driver.rigName}</td>
-            <td className="columnLaps">{driver.completedLaps}</td>
-            <td className={classNames('columnBest', driver.isOverallBestLap ? 'bestTime' : undefined)}>{formatLapTime(driver.bestLapSeconds)}</td>
-            <CurrentLapCell driver={driver} sessionKind={snapshot?.session.kind} />
-            {[1, 2, 3].map(number => (
-              <SectorCell key={number} sector={driver.sectors.find(candidate => candidate.number === number)} />
-            ))}
-            <td className="columnInterval">{driver.leaderboardRank === 1 ? '-' : formatGap(driver.gapToNextSeconds)}</td>
-            <td className="columnGap">{formatGap(driver.gapToLeaderSeconds, driver.lapsBehindLeader)}</td>
-          </tr>
-        ))}
+              </td>
+              <td className="columnDriver">
+                <div className="driverCell">
+                  <strong>{driver.displayName}</strong>
+                  <DriverMetaLine driver={driver} status={driverStatus} />
+                </div>
+              </td>
+              <td className="columnRig">{driver.rigName}</td>
+              <td className="columnLaps">{driver.completedLaps}</td>
+              <td className={classNames('columnBest', driver.isOverallBestLap ? 'bestTime' : undefined)}>{formatLapTime(driver.bestLapSeconds)}</td>
+              <CurrentLapCell driver={driver} status={driverStatus} />
+              {[1, 2, 3].map(number => (
+                <SectorCell key={number} sector={driver.sectors.find(candidate => candidate.number === number)} />
+              ))}
+              <td className="columnInterval">{driver.leaderboardRank === 1 ? '-' : formatGap(driver.gapToNextSeconds)}</td>
+              <td className="columnGap">{formatGap(driver.gapToLeaderSeconds, driver.lapsBehindLeader)}</td>
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   );
@@ -386,11 +388,10 @@ function PositionDeltaBadge({ delta }: { delta: number | null | undefined }) {
 
 interface CurrentLapCellProps {
   driver: DriverSnapshot;
-  sessionKind: string | null | undefined;
+  status: DriverStatus | null;
 }
 
-function CurrentLapCell({ driver, sessionKind }: CurrentLapCellProps) {
-  const status = getDriverStatus(driver, sessionKind);
+function CurrentLapCell({ driver, status }: CurrentLapCellProps) {
   return (
     <td className="columnCurrent">
       {status ? <StatusBadge label={status.label} tone={status.tone} /> : formatLapTime(driver.currentLapSeconds)}
@@ -398,9 +399,18 @@ function CurrentLapCell({ driver, sessionKind }: CurrentLapCellProps) {
   );
 }
 
-function MobileStatusBadge({ driver, sessionKind }: CurrentLapCellProps) {
-  const status = getDriverStatus(driver, sessionKind);
-  return status ? <StatusBadge label={status.label} tone={status.tone} mobile /> : null;
+interface DriverMetaLineProps {
+  driver: DriverSnapshot;
+  status: DriverStatus | null;
+}
+
+function DriverMetaLine({ driver, status }: DriverMetaLineProps) {
+  return (
+    <span className="driverMetaLine">
+      {status ? <StatusBadge label={status.label} tone={status.tone} mobile /> : <SectorBars driver={driver} />}
+      <span>{formatPercent(driver.trackPositionPercent)}</span>
+    </span>
+  );
 }
 
 interface StatusBadgeProps extends DriverStatus {
@@ -606,6 +616,19 @@ function formatPercent(value: number | null | undefined): string {
   return value === null || value === undefined || !Number.isFinite(value) ? '-' : `${formatNumber(value, 1)}%`;
 }
 
+function CompactStatusDots({ indicators }: { indicators: ConnectionIndicators }) {
+  if (!indicators.backendConnected && !indicators.liveData) {
+    return null;
+  }
+
+  return (
+    <span className="compactStatusDots" aria-label="Connection status">
+      {indicators.backendConnected ? <span className="compactStatusDot compactStatusDot-connected" title="Connected to Trackside service" /> : null}
+      {indicators.liveData ? <span className="compactStatusDot compactStatusDot-live" title="Receiving shared-memory data" /> : null}
+    </span>
+  );
+}
+
 function formatSessionValue(snapshot: LiveSessionSnapshot | null): string | undefined {
   if (!snapshot) {
     return undefined;
@@ -654,15 +677,17 @@ interface MetricProps {
   label: string;
   /** Value rendered for the metric. */
   value: string | number | null | undefined;
+  /** Optional compact inline indicators rendered beside the value. */
+  indicators?: ReactNode;
   /** Feature important metrics with larger text. */
   featured?: boolean;
 }
 
-function Metric({ label, value, featured }: MetricProps) {
+function Metric({ label, value, indicators, featured }: MetricProps) {
   return (
     <div className={`metric${featured ? ' featured' : ''}`}>
       <span>{label}</span>
-      <strong>{value ?? '-'}</strong>
+      <strong>{value ?? '-'}{indicators}</strong>
     </div>
   );
 }
@@ -775,24 +800,24 @@ interface ShellHeaderProps {
   status: string;
   /** Selected display mode. */
   view: ViewMode;
-  /** Current live-session info for live view. */
-  session: LiveSessionInfo | null | undefined;
+  /** Current live-session snapshot for live view. */
+  snapshot: LiveSessionSnapshot | null;
 }
 
-function ShellHeader({ status, view, session }: ShellHeaderProps) {
-  const isConnected = view === 'live' && /^Connected through\b/i.test(status);
+function ShellHeader({ status, view, snapshot }: ShellHeaderProps) {
+  const connectionIndicators = getConnectionIndicators(status, view === 'live' ? snapshot : null);
+  const session = snapshot?.session;
   const sanitized = sanitizeStatus(status);
-  const modeLabel = view === 'live' ? 'LIVE' : view === 'tracker' ? 'Tracker' : 'Leaderboard';
+  const modeLabel = view === 'tracker' ? 'Tracker' : 'Leaderboard';
 
   return (
-    <header className="topbar">
+    <header className={classNames('topbar', view === 'live' ? 'topbar-live' : undefined)}>
       <BrandMark />
       <div className="topbarMeta" aria-live="polite">
         <div className="topbarPills">
-          {isConnected ? <span className="statusPill connection">CONNECTED</span> : null}
-          <span className={view === 'live' ? 'statusPill live' : 'statusPill'}>
-            {modeLabel}
-          </span>
+          {view === 'live' && connectionIndicators.backendConnected ? <span className="statusPill connection">CONNECTED</span> : null}
+          {view === 'live' && connectionIndicators.liveData ? <span className="statusPill live">LIVE</span> : null}
+          {view !== 'live' ? <span className="statusPill">{modeLabel}</span> : null}
         </div>
         {sanitized ? <p>{sanitized}</p> : null}
       </div>
@@ -850,18 +875,20 @@ interface BoardPanelProps {
   title: string;
   /** Compact panel metadata. */
   meta: string;
+  /** Optional class name for the metadata span. */
+  metaClassName?: string;
   /** Panel content. */
   children: ReactNode;
   /** True for live boards to use special styling. */
   live?: boolean;
 }
 
-function BoardPanel({ title, meta, children, live }: BoardPanelProps & { live?: boolean }) {
+function BoardPanel({ title, meta, metaClassName, children, live }: BoardPanelProps & { live?: boolean }) {
   return (
     <section className={`boardPanel${live ? ' live' : ''}`}>
       <div className="sectionHeader">
         <h2>{title}</h2>
-        {meta ? <span>{meta}</span> : null}
+        {meta ? <span className={metaClassName}>{meta}</span> : null}
       </div>
       {children}
     </section>

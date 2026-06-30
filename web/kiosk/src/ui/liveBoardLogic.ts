@@ -5,6 +5,32 @@ export interface DriverStatus {
   tone: 'pit' | 'garage' | 'out';
 }
 
+export interface ConnectionIndicators {
+  backendConnected: boolean;
+  liveData: boolean;
+}
+
+export function getConnectionIndicators(status: string, snapshot: LiveSessionSnapshot | null): ConnectionIndicators {
+  const isUnable = /^Unable to connect\b/i.test(status);
+  const backendConnected = !isUnable && (/^Connected through\b/i.test(status) || snapshot !== null);
+  return {
+    backendConnected,
+    liveData: isLiveSharedMemorySnapshot(snapshot),
+  };
+}
+
+function isLiveSharedMemorySnapshot(snapshot: LiveSessionSnapshot | null): boolean {
+  if (!snapshot || !stringEquals(snapshot.source, 'shared-memory')) {
+    return false;
+  }
+
+  const status = snapshot.status.toLowerCase();
+  return status.includes('connected')
+    && !status.includes('waiting')
+    && !status.includes('unavailable')
+    && !stringEquals(snapshot.session.trackName, 'No live scoring source');
+}
+
 export function getRaceLapProgress(snapshot: LiveSessionSnapshot): { current: number; total: number } | null {
   if (snapshot.session.kind !== 'Race' || !isFiniteNumber(snapshot.session.totalLaps) || snapshot.session.totalLaps <= 0) {
     return null;
@@ -51,4 +77,8 @@ export function getRacePositionDelta(currentRank: number | null | undefined, bas
 
 function isFiniteNumber(value: number | null | undefined): value is number {
   return value !== null && value !== undefined && Number.isFinite(value);
+}
+
+function stringEquals(left: string | null | undefined, right: string): boolean {
+  return (left ?? '').toLowerCase() === right.toLowerCase();
 }

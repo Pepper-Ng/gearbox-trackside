@@ -71,7 +71,62 @@ describe('startLiveSessionFeed', () => {
     expect(receivedGeometry.map(geometry => geometry.isAvailable)).toEqual([false, true]);
     expect(statuses).toEqual(['Connected through REST recovery endpoint', 'Connected through SignalR live updates']);
   });
+
+  it('keeps REST recovery connected when SignalR cannot connect', async () => {
+    const statuses: string[] = [];
+    const receivedSnapshots: LiveSessionSnapshot[] = [];
+    const client = makeFeedClient({
+      async connectLiveSession() {
+        throw new Error('hub unavailable');
+      },
+    });
+
+    const handle = await startLiveSessionFeed(
+      client,
+      snapshot => receivedSnapshots.push(snapshot),
+      status => statuses.push(status),
+    );
+
+    await expect(handle.stop()).resolves.toBeUndefined();
+    expect(receivedSnapshots.map(snapshot => snapshot.updateSequence)).toEqual([1]);
+    expect(statuses).toEqual([
+      'Connected through REST recovery endpoint',
+      'Connected through REST recovery endpoint; SignalR unavailable: hub unavailable',
+    ]);
+  });
 });
+
+function makeFeedClient(overrides: Partial<LiveSessionFeedClient> = {}): LiveSessionFeedClient {
+  return {
+    async getClientConfiguration() {
+      return {
+        currentSessionPath: '/api/live-session/current',
+        liveSessionHubPath: '/hubs/live-session',
+        trackGeometryPath: '/api/track-geometry/current',
+        healthPath: '/api/health',
+        recommendedReconnectSeconds: 2,
+        defaultDisplayMode: 'Monthly',
+        driverTrackerClientRefreshHz: 50,
+      };
+    },
+    async getCurrentSession() {
+      return makeSnapshot(1);
+    },
+    async getBestLaps() {
+      return { window: 'monthly', mode: 'per-driver', rows: [] };
+    },
+    async getLastFinishedSession() {
+      return { isAvailable: false, rows: [] };
+    },
+    async getTrackGeometry() {
+      return makeGeometry(false);
+    },
+    async connectLiveSession() {
+      return { stop: vi.fn(async () => undefined) };
+    },
+    ...overrides,
+  };
+}
 
 function makeGeometry(isAvailable: boolean): TrackGeometryResponse {
   return {

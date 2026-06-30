@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { type DriverSnapshot, type LiveSessionSnapshot } from '../tracksideApi';
 import { getViewFromPath, toViewMode } from './App';
 import { stableDriverColor } from './driverColors';
-import { getDriverStatus, getRaceLapProgress, getRacePositionDelta } from './liveBoardLogic';
+import { getConnectionIndicators, getDriverStatus, getRaceLapProgress, getRacePositionDelta } from './liveBoardLogic';
 
 describe('kiosk route selection', () => {
   it('maps the tracker route to the tracker view', () => {
@@ -37,6 +37,12 @@ describe('live board helpers', () => {
     expect(getRacePositionDelta(6, 4)).toBe(-2);
     expect(getRacePositionDelta(4, 4)).toBeNull();
   });
+
+  it('separates backend connection from shared-memory live data', () => {
+    expect(getConnectionIndicators('Connected through REST recovery endpoint', makeSnapshot({ sessionKind: 'Practice' }))).toEqual({ backendConnected: true, liveData: false });
+    expect(getConnectionIndicators('Connected through SignalR live updates', makeSnapshot({ sessionKind: 'Race', source: 'shared-memory', sourceStatus: 'connected' }))).toEqual({ backendConnected: true, liveData: true });
+    expect(getConnectionIndicators('Unable to connect: 503', null)).toEqual({ backendConnected: false, liveData: false });
+  });
 });
 
 describe('tracker colors', () => {
@@ -48,10 +54,10 @@ describe('tracker colors', () => {
   });
 });
 
-function makeSnapshot(options: { sessionKind: 'Practice' | 'Qualifying' | 'Race'; totalLaps?: number | null }): LiveSessionSnapshot {
+function makeSnapshot(options: { sessionKind: 'Practice' | 'Qualifying' | 'Race'; totalLaps?: number | null; source?: string; sourceStatus?: string }): LiveSessionSnapshot {
   return {
-    source: 'test',
-    status: 'ready',
+    source: options.source ?? 'test',
+    status: options.sourceStatus ?? 'ready',
     timestampUtc: '2026-06-24T12:00:00+00:00',
     updateSequence: 1,
     session: {

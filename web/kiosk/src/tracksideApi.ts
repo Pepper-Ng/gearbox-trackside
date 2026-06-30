@@ -322,10 +322,15 @@ export async function startLiveSessionFeed(
     }
   }
 
-  return client.connectLiveSession(configuration.liveSessionHubPath, pushedSnapshot => {
-    onSnapshot(pushedSnapshot);
-    onStatus('Connected through SignalR live updates');
-  }, onTrackGeometry);
+  try {
+    return await client.connectLiveSession(configuration.liveSessionHubPath, pushedSnapshot => {
+      onSnapshot(pushedSnapshot);
+      onStatus('Connected through SignalR live updates');
+    }, onTrackGeometry);
+  } catch (error) {
+    onStatus(`Connected through REST recovery endpoint; SignalR unavailable: ${error instanceof Error ? error.message : String(error)}`);
+    return { stop: async () => undefined };
+  }
 }
 
 /** Browser API client for REST and SignalR communication with Trackside.Host. */
