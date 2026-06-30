@@ -463,8 +463,22 @@ h2 {
 }
 
 .liveBoardFrame {
+  --flag-stripe-height: 14px;
+  --flag-checker-square: calc(var(--flag-stripe-height) / 2);
+  --flag-checker-tile: calc(var(--flag-checker-square) * 2);
+  position: relative;
   overflow-x: hidden;
-  border-top: 14px solid var(--flag-color, var(--gt-blue));
+  border-top: 0;
+  padding-top: var(--flag-stripe-height);
+}
+
+.liveBoardFrame::before {
+  position: absolute;
+  inset: 0 0 auto;
+  height: var(--flag-stripe-height);
+  background: var(--flag-stripe-background, var(--flag-color, var(--gt-blue)));
+  content: "";
+  pointer-events: none;
 }
 
 table {

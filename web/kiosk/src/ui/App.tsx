@@ -218,7 +218,7 @@ function LiveBoard({ snapshot, status }: LiveBoardProps) {
       </section>
 
       <BoardPanel title="Live Board" meta={`${snapshot?.drivers.length ?? 0} drivers`} metaClassName="liveDriverCount" live>
-        <div className="tableFrame liveBoardFrame" style={{ '--flag-color': getFlagColor(snapshot?.session.overallFlag) } as React.CSSProperties}>
+        <div className="tableFrame liveBoardFrame" style={{ '--flag-color': getFlagColor(snapshot?.session.overallFlag), '--flag-stripe-background': getFlagStripeBackground(snapshot?.session.overallFlag) } as React.CSSProperties}>
           <LeaderboardTable snapshot={snapshot} />
         </div>
       </BoardPanel>
@@ -756,6 +756,14 @@ function getFlagColor(flag: string | null | undefined): string {
     default:
       return 'rgba(255, 255, 255, 0.08)';
   }
+}
+
+function getFlagStripeBackground(flag: string | null | undefined): string {
+  if (isCheckeredFlag(flag)) {
+    return 'conic-gradient(#ffffff 25%, #000000 0 50%, #ffffff 0 75%, #000000 0) 0 0 / var(--flag-checker-tile) var(--flag-checker-tile) repeat';
+  }
+
+  return getFlagColor(flag);
 }
 
 function getFlagDisplayText(session: LiveSessionInfo | null | undefined): string {
