@@ -780,6 +780,17 @@ function formatSessionValue(snapshot: LiveSessionSnapshot | null): string | unde
     return snapshot.session.kind;
   }
 
+  // Formation / countdown phases — flag text is the game-phase name from the backend.
+  const flagNorm = snapshot.session.overallFlag.toLowerCase().replace(/\s+/g, '');
+  if (flagNorm === 'formation' || flagNorm === 'countdown' || flagNorm === 'gridwalk') {
+    return `${snapshot.session.kind} - FORMATION LAP`;
+  }
+
+  // Final lap
+  if (lapProgress.current >= lapProgress.total) {
+    return `${snapshot.session.kind} - FINAL LAP`;
+  }
+
   return `${snapshot.session.kind} - LAP ${lapProgress.current}/${lapProgress.total}`;
 }
 
@@ -951,7 +962,13 @@ export function isCheckeredFlag(flag: string | null | undefined): boolean {
 }
 
 export function shouldShowFlagSwatchText(flag: string | null | undefined, phase?: LiveSessionInfo['phase'] | null): boolean {
-  return !isCheckeredFlag(flag) && phase !== 'SessionOver';
+  if (isCheckeredFlag(flag) || phase === 'SessionOver') {
+    return false;
+  }
+  // Only show text when there is a real flag colour backing the swatch.
+  // States like FORMATION, GARAGE, COUNTDOWN return the transparent default
+  // and the graphite text looks wrong on a near-invisible background.
+  return getFlagColor(flag) !== 'rgba(255, 255, 255, 0.08)';
 }
 
 interface ShellHeaderProps {
