@@ -303,6 +303,7 @@ function LeaderboardTable({ snapshot }: LeaderboardTableProps) {
   const drivers = snapshot?.drivers ?? [];
   const fastestLapFlashes = useFastestLapFlashes(drivers);
   const positionDeltas = useRacePositionDeltas(snapshot);
+  const sectorStripeStates = useSectorStripeStates(drivers);
   const setRowRef = useRowSwapAnimation(drivers);
 
   return (
@@ -340,7 +341,7 @@ function LeaderboardTable({ snapshot }: LeaderboardTableProps) {
               <td className="columnDriver">
                 <div className="driverCell">
                   <strong>{driver.displayName}</strong>
-                  <DriverMetaLine driver={driver} status={driverStatus} />
+                  <DriverMetaLine driver={driver} status={driverStatus} stripes={sectorStripeStates.get(driver.driverId) ?? defaultSectorStripeStates} />
                 </div>
               </td>
               <td className="columnRig">{driver.rigName}</td>
@@ -402,13 +403,15 @@ function CurrentLapCell({ driver, status }: CurrentLapCellProps) {
 interface DriverMetaLineProps {
   driver: DriverSnapshot;
   status: DriverStatus | null;
+  stripes: SectorStripeState[];
 }
 
-function DriverMetaLine({ driver, status }: DriverMetaLineProps) {
+function DriverMetaLine({ driver, status, stripes }: DriverMetaLineProps) {
+  const showPercent = status?.tone !== 'pit' && status?.tone !== 'garage';
   return (
     <span className="driverMetaLine">
-      {status ? <StatusBadge label={status.label} tone={status.tone} mobile /> : <SectorBars driver={driver} />}
-      <span>{formatPercent(driver.trackPositionPercent)}</span>
+      {status ? <StatusBadge label={status.label} tone={status.tone} mobile /> : <SectorBars stripes={stripes} />}
+      {showPercent ? <span>{formatPercent(driver.trackPositionPercent)}</span> : null}
     </span>
   );
 }
@@ -421,31 +424,120 @@ function StatusBadge({ label, tone, mobile }: StatusBadgeProps) {
   return <span className={classNames('driverStatusBadge', `driverStatusBadge-${tone}`, mobile ? 'mobileStatusBadge' : undefined)}>{label}</span>;
 }
 
-function SectorBars({ driver }: { driver: DriverSnapshot }) {
+function SectorBars({ stripes }: { stripes: SectorStripeState[] }) {
   return (
     <span className="sectorBars" aria-label="Sector progress">
-      {[1, 2, 3].map(number => {
-        const sector = driver.sectors.find(candidate => candidate.number === number);
-        return <span key={number} className={classNames('sectorBar', sectorBarTone(sector, driver.currentSector === number - 1))} />;
-      })}
+      {stripes.map(stripe => <span key={stripe.number} className={classNames('sectorBar', `sectorBar-${stripe.tone}`, stripe.stale ? 'sectorBar-stale' : undefined)} />)}
     </span>
   );
 }
 
-function sectorBarTone(sector: SectorSnapshot | undefined, isCurrent: boolean): string {
-  if (sector?.isOverallBest) {
-    return 'sectorBar-fastest';
+type SectorStripeTone = 'pending' | 'regular' | 'personal' | 'overall';
+
+interface SectorStripeState {
+  number: number;
+  tone: SectorStripeTone;
+  stale: boolean;
+}
+
+const defaultSectorStripeStates: SectorStripeState[] = [
+  { number: 1, tone: 'pending', stale: false },
+  { number: 2, tone: 'pending', stale: false },
+  { number: 3, tone: 'pending', stale: false },
+];
+
+interface SectorStripeCacheEntry {
+  completedLaps: number;
+  tones: Map<number, SectorStripeTone>;
+}
+
+function useSectorStripeStates(drivers: DriverSnapshot[]): Map<string, SectorStripeState[]> {
+  const previousRef = useRef<Map<string, SectorStripeCacheEntry>>(new Map());
+  const sectorKey = drivers.map(driver => `${driver.driverId}:${driver.completedLaps}:${driver.currentSector ?? ''}:${driver.sectors.map(sector => `${sector.number}:${sector.currentSeconds ?? ''}:${sector.lastSeconds ?? ''}:${sector.bestSeconds ?? ''}`).join(',')}`).join('|');
+
+  return useMemo(() => {
+    const globalBestBySector = buildGlobalBestSectors(drivers);
+    const previous = previousRef.current;
+    const next = new Map<string, SectorStripeCacheEntry>();
+    const states = new Map<string, SectorStripeState[]>();
+
+    for (const driver of drivers) {
+      const cached = previous.get(driver.driverId);
+      const tones = new Map(cached?.tones ?? []);
+      const lapCompleted = cached !== undefined && driver.completedLaps > cached.completedLaps;
+      const stripes = [1, 2, 3].map(number => {
+        const sector = driver.sectors.find(candidate => candidate.number === number);
+        const completedSeconds = getCompletedSectorSeconds(driver, sector, number, lapCompleted);
+        if (isFiniteNumber(completedSeconds)) {
+          const tone = getSectorStripeTone(completedSeconds, sector, globalBestBySector.get(number));
+          tones.set(number, tone);
+          return { number, tone, stale: false };
+        }
+
+        const staleTone = tones.get(number) ?? getStaleSectorStripeTone(sector, globalBestBySector.get(number));
+        return staleTone ? { number, tone: staleTone, stale: true } : { number, tone: 'pending' as const, stale: false };
+      });
+
+      next.set(driver.driverId, { completedLaps: driver.completedLaps, tones });
+      states.set(driver.driverId, stripes);
+    }
+
+    previousRef.current = next;
+    return states;
+  }, [sectorKey, drivers]);
+}
+
+function buildGlobalBestSectors(drivers: DriverSnapshot[]): Map<number, number> {
+  const best = new Map<number, number>();
+  for (const driver of drivers) {
+    for (const sector of driver.sectors) {
+      if (!isFiniteNumber(sector.bestSeconds) || sector.bestSeconds <= 0) {
+        continue;
+      }
+
+      const existing = best.get(sector.number);
+      if (existing === undefined || sector.bestSeconds < existing) {
+        best.set(sector.number, sector.bestSeconds);
+      }
+    }
   }
 
-  if (isCurrent || sector?.currentSeconds != null) {
-    return 'sectorBar-active';
+  return best;
+}
+
+function getCompletedSectorSeconds(driver: DriverSnapshot, sector: SectorSnapshot | undefined, sectorNumber: number, lapCompleted: boolean): number | null {
+  const currentSector = driver.currentSector ?? 0;
+  if (sectorNumber === 1 && currentSector >= 1 && isFiniteNumber(sector?.currentSeconds)) {
+    return sector.currentSeconds;
   }
 
-  if (sector?.bestSeconds != null || sector?.lastSeconds != null) {
-    return 'sectorBar-complete';
+  if (sectorNumber === 2 && currentSector >= 2 && isFiniteNumber(sector?.currentSeconds)) {
+    return sector.currentSeconds;
   }
 
-  return 'sectorBar-pending';
+  if (sectorNumber === 3 && lapCompleted && isFiniteNumber(sector?.lastSeconds)) {
+    return sector.lastSeconds;
+  }
+
+  return null;
+}
+
+function getSectorStripeTone(seconds: number, sector: SectorSnapshot | undefined, globalBestSeconds: number | undefined): SectorStripeTone {
+  if (isFiniteNumber(globalBestSeconds) && isSameTime(seconds, globalBestSeconds)) {
+    return 'overall';
+  }
+
+  if (isFiniteNumber(sector?.bestSeconds) && seconds <= sector.bestSeconds + 0.0005) {
+    return 'personal';
+  }
+
+  return 'regular';
+}
+
+function getStaleSectorStripeTone(sector: SectorSnapshot | undefined, globalBestSeconds: number | undefined): SectorStripeTone | null {
+  return isFiniteNumber(sector?.lastSeconds)
+    ? getSectorStripeTone(sector.lastSeconds, sector, globalBestSeconds)
+    : null;
 }
 
 function useFastestLapFlashes(drivers: DriverSnapshot[]): Set<string> {
@@ -581,7 +673,7 @@ function useRowSwapAnimation(drivers: DriverSnapshot[]) {
     }
 
     previousTopsRef.current = nextTops;
-  }, [drivers, orderKey]);
+  }, [orderKey]);
 
   return (driverId: string, element: HTMLTableRowElement | null) => {
     if (element) {
@@ -846,6 +938,10 @@ function sanitizeStatus(status: string): string {
 
 function isFiniteNumber(value: number | null | undefined): value is number {
   return value !== null && value !== undefined && Number.isFinite(value);
+}
+
+function isSameTime(left: number, right: number): boolean {
+  return Math.abs(left - right) < 0.0005;
 }
 
 function classNames(...values: Array<string | false | null | undefined>): string {

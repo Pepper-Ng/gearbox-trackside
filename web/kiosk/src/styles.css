@@ -506,7 +506,7 @@ th {
 }
 
 tbody tr {
-  transition: background .16s ease, box-shadow .16s ease, transform .72s cubic-bezier(.18, .82, .2, 1);
+  transition: background .16s ease, box-shadow .16s ease;
 }
 
 tbody tr:hover {
@@ -670,19 +670,24 @@ tbody tr:last-child td {
   opacity: .5;
 }
 
-.sectorBar-active {
-  background: var(--gt-blue);
-  box-shadow: 0 0 10px rgba(0, 176, 255, .38);
+.sectorBar-regular {
+  background: #f1c40f;
+  box-shadow: 0 0 10px rgba(241, 196, 15, .3);
 }
 
-.sectorBar-complete {
+.sectorBar-personal {
   background: var(--gt-good);
-  opacity: .75;
+  box-shadow: 0 0 10px rgba(95, 240, 138, .36);
 }
 
-.sectorBar-fastest {
+.sectorBar-overall {
   background: var(--gt-fastest);
   box-shadow: 0 0 10px rgba(216, 107, 255, .42);
+}
+
+.sectorBar-stale {
+  filter: grayscale(.35) saturate(.7);
+  opacity: .38;
 }
 
 .driverStatusBadge {
@@ -752,6 +757,8 @@ tbody tr:last-child td {
   position: relative;
   background: linear-gradient(90deg, rgba(0, 176, 255, .16), rgba(255, 255, 255, .04), transparent 64%);
   box-shadow: 0 0 28px rgba(0, 176, 255, .18);
+  transition: transform .72s cubic-bezier(.18, .82, .2, 1), background .16s ease, box-shadow .16s ease;
+  will-change: transform;
 }
 
 @keyframes fastestLapPulse {
