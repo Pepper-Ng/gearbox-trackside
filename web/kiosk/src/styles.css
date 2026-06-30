@@ -642,6 +642,12 @@ tbody tr:last-child td {
   font-size: 12px;
 }
 
+/* Override muted colour when the sector small carries bestTime — needs higher specificity */
+.sectorCell small.bestTime {
+  color: var(--gt-fastest);
+  font-weight: 800;
+}
+
 .driverMetaLine {
   display: flex;
   align-items: center;
@@ -798,7 +804,7 @@ tbody tr:last-child td {
 
 .combinedLayout {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 0.85fr);
   align-items: start;
   gap: 18px;
   margin-top: 18px;
@@ -822,7 +828,8 @@ tbody tr:last-child td {
 /* Coloured left stripe on the rank cell — inherits --driver-color from the <tr> */
 .combinedLayout .rankCell {
   box-shadow: inset 10px 0 0 var(--driver-color, transparent);
-  padding-left: 20px;
+  padding-left: 22px;
+  padding-right: 10px;
 }
 
 /* Rank number coloured to match the stripe */
@@ -835,6 +842,56 @@ tbody tr:last-child td {
   flex-direction: column;
   align-items: center;
   gap: 1px;
+}
+
+/* Scale up the leaderboard table for distant readability in combined view */
+.combinedLayout .leaderboardTable {
+  font-size: 17px;
+}
+
+.combinedLayout .leaderboardTable th {
+  font-size: 14px;
+}
+
+.combinedLayout th,
+.combinedLayout td {
+  padding: 14px 16px;
+}
+
+/* Rank column is narrower — delta chevron stacks below the number anyway */
+.combinedLayout .leaderboardTable .columnRank {
+  width: 64px;
+}
+
+.combinedLayout .leaderboardTable .columnLaps {
+  width: 88px;
+}
+
+.combinedLayout .leaderboardTable .columnBest,
+.combinedLayout .leaderboardTable .columnCurrent {
+  width: 132px;
+}
+
+.combinedLayout .leaderboardTable .columnSector {
+  width: 116px;
+}
+
+.combinedLayout .leaderboardTable .columnInterval,
+.combinedLayout .leaderboardTable .columnGap {
+  width: 108px;
+}
+
+.combinedLayout .sectorCell small,
+.combinedLayout .driverCell span {
+  font-size: 15px;
+}
+
+/* Status pills (PIT / GARAGE / OUT) scaled up slightly more than the rest */
+.combinedLayout .driverStatusBadge {
+  font-size: 15px;
+  min-width: 68px;
+  min-height: 28px;
+  padding: 5px 11px;
 }
 
 @media (max-width: 1200px) {
@@ -886,7 +943,7 @@ tbody tr:last-child td {
 .driverMarker text {
   fill: var(--gt-graphite);
   font-family: "Rajdhani", "Bahnschrift", "Segoe UI", sans-serif;
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 800;
   text-anchor: middle;
 }

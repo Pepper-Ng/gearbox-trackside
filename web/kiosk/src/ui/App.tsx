@@ -352,8 +352,8 @@ function CombinedPage({ snapshot, geometry, status, clientRefreshHz }: CombinedP
                 style={{ '--marker-color': markerColors.get(marker.driverId) ?? stableDriverColor(marker.driverId, marker.label) } as React.CSSProperties}
                 transform={`translate(${marker.x} ${marker.y})`}
               >
-                <circle r="12" />
-                <text y="4">{marker.rank}</text>
+                <circle r="14" />
+                <text y="5">{marker.rank}</text>
                 <title>{marker.label}</title>
               </g>
             ))}

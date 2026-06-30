@@ -55,8 +55,8 @@ export function TrackerPage({ snapshot, geometry, clientRefreshHz }: TrackerPage
         {geometry?.isAvailable && pathPoints ? <polyline className="trackGeometryLine" points={pathPoints} /> : null}
         {markers.map(marker => (
           <g key={marker.driverId} className="driverMarker" style={{ '--marker-color': markerColors.get(marker.driverId) ?? stableDriverColor(marker.driverId, marker.label) } as CSSProperties} transform={`translate(${marker.x} ${marker.y})`}>
-            <circle r="12" />
-            <text y="4">{marker.rank}</text>
+            <circle r="14" />
+            <text y="5">{marker.rank}</text>
             <title>{marker.label}</title>
           </g>
         ))}
