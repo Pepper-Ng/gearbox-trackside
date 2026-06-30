@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState }
 import { formatGap, formatLapTime, formatNumber } from '../format';
 import { BestLapBoardResponse, BestLapRow, BestLapWindow, ClientConfiguration, DriverSnapshot, KioskDisplayMode, LastFinishedSessionResponse, LastFinishedSessionRow, LiveSessionConnection, LiveSessionInfo, LiveSessionSnapshot, SectorSnapshot, startLiveSessionFeed, TrackGeometryResponse, TracksideApiClient } from '../tracksideApi';
 import { getConnectionIndicators, getDriverStatus, getRaceLapProgress, getRacePositionDelta, type ConnectionIndicators, type DriverStatus } from './liveBoardLogic';
+import { buildSectorStripeStates, createEmptySectorStripeCache, defaultSectorStripeStates, type SectorStripeCache, type SectorStripeState } from './sectorStripeLogic';
 import { TrackerPage } from './TrackerPage';
 
 type ViewMode = BestLapWindow | 'last' | 'live' | 'tracker';
@@ -303,7 +304,7 @@ function LeaderboardTable({ snapshot }: LeaderboardTableProps) {
   const drivers = snapshot?.drivers ?? [];
   const fastestLapFlashes = useFastestLapFlashes(drivers);
   const positionDeltas = useRacePositionDeltas(snapshot);
-  const sectorStripeStates = useSectorStripeStates(drivers);
+  const sectorStripeStates = useSectorStripeStates(snapshot);
   const setRowRef = useRowSwapAnimation(drivers);
 
   return (
@@ -437,130 +438,14 @@ function SectorBars({ stripes }: { stripes: SectorStripeState[] }) {
   );
 }
 
-type SectorStripeTone = 'pending' | 'regular' | 'personal' | 'overall';
-
-interface SectorStripeState {
-  number: number;
-  tone: SectorStripeTone;
-  stale: boolean;
-}
-
-const defaultSectorStripeStates: SectorStripeState[] = [
-  { number: 1, tone: 'pending', stale: false },
-  { number: 2, tone: 'pending', stale: false },
-  { number: 3, tone: 'pending', stale: false },
-];
-
-interface SectorStripeCacheEntry {
-  activeThrough: number;
-  completedLaps: number;
-  tones: Map<number, SectorStripeTone>;
-}
-
-function useSectorStripeStates(drivers: DriverSnapshot[]): Map<string, SectorStripeState[]> {
-  const previousRef = useRef<Map<string, SectorStripeCacheEntry>>(new Map());
-  const sectorKey = drivers.map(driver => `${driver.driverId}:${driver.completedLaps}:${driver.currentSector ?? ''}:${driver.sectors.map(sector => `${sector.number}:${sector.currentSeconds ?? ''}:${sector.lastSeconds ?? ''}:${sector.bestSeconds ?? ''}`).join(',')}`).join('|');
+function useSectorStripeStates(snapshot: LiveSessionSnapshot | null): Map<string, SectorStripeState[]> {
+  const cacheRef = useRef<SectorStripeCache>(createEmptySectorStripeCache());
 
   return useMemo(() => {
-    const globalBestBySector = buildGlobalBestSectors(drivers);
-    const previous = previousRef.current;
-    const next = new Map<string, SectorStripeCacheEntry>();
-    const states = new Map<string, SectorStripeState[]>();
-
-    for (const driver of drivers) {
-      const cached = previous.get(driver.driverId);
-      const tones = new Map(cached?.tones ?? []);
-      const lapCompleted = cached !== undefined && driver.completedLaps > cached.completedLaps;
-      const activeThrough = getActiveSectorCount(driver, cached, lapCompleted);
-      const stripes = [1, 2, 3].map(number => {
-        const sector = driver.sectors.find(candidate => candidate.number === number);
-        const completedSeconds = getCompletedSectorSeconds(sector, number, activeThrough, lapCompleted);
-        if (isFiniteNumber(completedSeconds)) {
-          const tone = getSectorStripeTone(completedSeconds, sector, globalBestBySector.get(number));
-          tones.set(number, tone);
-          return { number, tone, stale: false };
-        }
-
-        const staleTone = tones.get(number) ?? getStaleSectorStripeTone(sector, globalBestBySector.get(number));
-        return staleTone ? { number, tone: staleTone, stale: true } : { number, tone: 'pending' as const, stale: false };
-      });
-
-      next.set(driver.driverId, { activeThrough, completedLaps: driver.completedLaps, tones });
-      states.set(driver.driverId, stripes);
-    }
-
-    previousRef.current = next;
-    return states;
-  }, [sectorKey, drivers]);
-}
-
-function buildGlobalBestSectors(drivers: DriverSnapshot[]): Map<number, number> {
-  const best = new Map<number, number>();
-  for (const driver of drivers) {
-    for (const sector of driver.sectors) {
-      if (!isFiniteNumber(sector.bestSeconds) || sector.bestSeconds <= 0) {
-        continue;
-      }
-
-      const existing = best.get(sector.number);
-      if (existing === undefined || sector.bestSeconds < existing) {
-        best.set(sector.number, sector.bestSeconds);
-      }
-    }
-  }
-
-  return best;
-}
-
-function getActiveSectorCount(driver: DriverSnapshot, cached: SectorStripeCacheEntry | undefined, lapCompleted: boolean): number {
-  if (lapCompleted) {
-    return 3;
-  }
-
-  const currentSector = driver.currentSector ?? 0;
-  if (currentSector >= 2) {
-    return 2;
-  }
-
-  if (currentSector >= 1) {
-    return 1;
-  }
-
-  return cached?.activeThrough === 3 ? 3 : 0;
-}
-
-function getCompletedSectorSeconds(sector: SectorSnapshot | undefined, sectorNumber: number, activeThrough: number, lapCompleted: boolean): number | null {
-  if (sectorNumber > activeThrough) {
-    return null;
-  }
-
-  if ((lapCompleted || activeThrough === 3) && isFiniteNumber(sector?.lastSeconds)) {
-    return sector.lastSeconds;
-  }
-
-  if (isFiniteNumber(sector?.currentSeconds)) {
-    return sector.currentSeconds;
-  }
-
-  return isFiniteNumber(sector?.lastSeconds) ? sector.lastSeconds : null;
-}
-
-function getSectorStripeTone(seconds: number, sector: SectorSnapshot | undefined, globalBestSeconds: number | undefined): SectorStripeTone {
-  if (isFiniteNumber(globalBestSeconds) && isSameTime(seconds, globalBestSeconds)) {
-    return 'overall';
-  }
-
-  if (isFiniteNumber(sector?.bestSeconds) && seconds <= sector.bestSeconds + 0.0005) {
-    return 'personal';
-  }
-
-  return 'regular';
-}
-
-function getStaleSectorStripeTone(sector: SectorSnapshot | undefined, globalBestSeconds: number | undefined): SectorStripeTone | null {
-  return isFiniteNumber(sector?.lastSeconds)
-    ? getSectorStripeTone(sector.lastSeconds, sector, globalBestSeconds)
-    : null;
+    const result = buildSectorStripeStates(snapshot, cacheRef.current);
+    cacheRef.current = result.cache;
+    return result.states;
+  }, [snapshot]);
 }
 
 function useFastestLapFlashes(drivers: DriverSnapshot[]): Set<string> {
@@ -823,16 +708,25 @@ interface FlagMetricProps {
 }
 
 function FlagMetric({ flag }: FlagMetricProps) {
+  const showText = shouldShowFlagSwatchText(flag);
   return (
     <div className="flagSwatch" aria-label="Flag" role="img" style={{ background: getFlagColor(flag) }}>
-      <span>{flag ?? '-'}</span>
+      {showText ? <span>{flag ?? '-'}</span> : null}
     </div>
   );
 }
 
-function getFlagColor(flag: string | null | undefined): string {
+function getCheckeredFlagBackground(): string {
+  return 'conic-gradient(#ffffff 25%, #000000 0 50%, #ffffff 0 75%, #000000 0) 0 0 / var(--flag-checker-tile, 18px) var(--flag-checker-tile, 18px) repeat';
+}
+
+export function getFlagColor(flag: string | null | undefined): string {
   if (!flag) {
     return 'rgba(255, 255, 255, 0.08)';
+  }
+
+  if (isCheckeredFlag(flag)) {
+    return getCheckeredFlagBackground();
   }
 
   switch (flag.toLowerCase()) {
@@ -860,11 +754,6 @@ function getFlagColor(flag: string | null | undefined): string {
     case 'black':
     case 'blackflag':
       return '#2f3640';
-    case 'checker':
-    case 'checkered':
-    case 'checkeredflag':
-    case 'session over':
-      return 'linear-gradient(135deg, #ffffff 25%, #000000 25%, #000000 50%, #ffffff 50%, #ffffff 75%, #000000 75%, #000000)';
     default:
       return 'rgba(255, 255, 255, 0.08)';
   }
@@ -872,13 +761,13 @@ function getFlagColor(flag: string | null | undefined): string {
 
 function getFlagStripeBackground(flag: string | null | undefined): string {
   if (isCheckeredFlag(flag)) {
-    return 'conic-gradient(#ffffff 25%, #000000 0 50%, #ffffff 0 75%, #000000 0) 0 0 / var(--flag-checker-tile) var(--flag-checker-tile) repeat';
+    return getCheckeredFlagBackground();
   }
 
   return getFlagColor(flag);
 }
 
-function getFlagDisplayText(session: LiveSessionInfo | null | undefined): string {
+export function getFlagDisplayText(session: LiveSessionInfo | null | undefined): string {
   if (!session?.overallFlag) {
     return '-';
   }
@@ -906,13 +795,17 @@ function getLocalYellowSectors(session: LiveSessionInfo): number[] {
     .map(item => item.sector);
 }
 
-function isCheckeredFlag(flag: string | null | undefined): boolean {
+export function isCheckeredFlag(flag: string | null | undefined): boolean {
   if (!flag) {
     return false;
   }
 
   const normalized = flag.toLowerCase().replace(/\s+/g, '');
   return normalized.includes('checker') || normalized.includes('sessionover');
+}
+
+export function shouldShowFlagSwatchText(flag: string | null | undefined, phase?: LiveSessionInfo['phase'] | null): boolean {
+  return !isCheckeredFlag(flag) && phase !== 'SessionOver';
 }
 
 interface ShellHeaderProps {
@@ -927,6 +820,7 @@ interface ShellHeaderProps {
 function ShellHeader({ status, view, snapshot }: ShellHeaderProps) {
   const connectionIndicators = getConnectionIndicators(status, view === 'live' ? snapshot : null);
   const session = snapshot?.session;
+  const showFlagText = shouldShowFlagSwatchText(session?.overallFlag, session?.phase);
   const sanitized = sanitizeStatus(status);
   const modeLabel = view === 'tracker' ? 'Tracker' : 'Leaderboard';
 
@@ -943,8 +837,8 @@ function ShellHeader({ status, view, snapshot }: ShellHeaderProps) {
       </div>
       {view === 'live' && session?.overallFlag ? (
         <div className="topbarFlag">
-          <div className="flagSwatch" style={{ background: getFlagColor(session.overallFlag) }}>
-            <span>{getFlagDisplayText(session)}</span>
+          <div className="flagSwatch" aria-label={getFlagDisplayText(session)} role="img" style={{ background: showFlagText ? getFlagColor(session.overallFlag) : getCheckeredFlagBackground() }}>
+            {showFlagText ? <span>{getFlagDisplayText(session)}</span> : null}
           </div>
         </div>
       ) : null}

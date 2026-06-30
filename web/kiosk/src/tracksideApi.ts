@@ -111,7 +111,7 @@ export interface DriverSnapshot {
   gapToNextSeconds?: number | null;
   /** Laps behind the leader. */
   lapsBehindLeader?: number | null;
-  /** Current zero-based rFactor 2 sector index. */
+  /** Current rFactor 2 sector marker: 1 = S1, 2 = S2, 0 = S3. */
   currentSector?: number | null;
   /** Approximate lap progress percentage. */
   trackPositionPercent?: number | null;

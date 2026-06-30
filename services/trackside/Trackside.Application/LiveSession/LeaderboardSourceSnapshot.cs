@@ -160,7 +160,7 @@ public sealed record LeaderboardDriverSource
     public double? CurrentLapSeconds { get; init; }
 
     /// <summary>
-    /// Current zero-based rFactor 2 sector index.
+    /// Current rFactor 2 sector marker: 1 = S1, 2 = S2, 0 = S3.
     /// </summary>
     public int? CurrentSector { get; init; }
 

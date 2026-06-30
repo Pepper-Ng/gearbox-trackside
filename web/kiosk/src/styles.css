@@ -187,6 +187,7 @@ h2 {
 }
 
 .flagSwatch {
+  --flag-checker-tile: 24px;
   display: grid;
   place-items: center;
   width: 92px;
