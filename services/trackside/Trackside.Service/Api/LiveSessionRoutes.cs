@@ -91,6 +91,11 @@ public static class LiveSessionRoutes
     public const string AdminPersistencePath = "/api/admin/persistence";
 
     /// <summary>
+    /// Admin endpoint for live shared-memory diagnostics.
+    /// </summary>
+    public const string AdminSharedMemoryDebugPath = "/api/admin/shared-memory/debug";
+
+    /// <summary>
     /// REST endpoint for editable source and shared-memory discovery configuration.
     /// </summary>
     public const string SourceConfigurationPath = "/api/configuration/source";

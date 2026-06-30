@@ -34,6 +34,7 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
     private static readonly TimeSpan PersistInterval = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan ScoringContextRetention = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan CandidateLapRetention = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan TelemetryFallbackThreshold = TimeSpan.FromSeconds(2);
 
     private readonly object _gate = new();
     private readonly TimeProvider _timeProvider;
@@ -42,6 +43,7 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
     private readonly ILiveDataPublisher _liveDataPublisher;
     private readonly Dictionary<string, TrackGeometryState> _tracks = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Dictionary<string, DriverSampleContext>> _scoringContexts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, DateTimeOffset> _lastTelemetryUtcByTrack = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Creates a geometry cache.
@@ -117,6 +119,7 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
 
             var contexts = new Dictionary<string, DriverSampleContext>(StringComparer.OrdinalIgnoreCase);
             var changed = false;
+            var useScoringPositions = ShouldUseScoringPositions(snapshot.Source, trackName, now);
             foreach (var driver in snapshot.Drivers)
             {
                 var context = TryCreateSampleContext(driver, snapshot.Session, now);
@@ -127,9 +130,9 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
 
                 var sampleContext = context.Value;
                 contexts[driver.DriverId] = sampleContext;
-                if (!string.Equals(snapshot.Source, "shared-memory", StringComparison.OrdinalIgnoreCase) && IsFinite(driver.PosX) && IsFinite(driver.PosZ))
+                if (useScoringPositions && IsFinite(driver.PosX) && IsFinite(driver.PosZ))
                 {
-                    // Fixture and recorded snapshots do not have a separate telemetry frame, so their X/Z positions stand in as geometry samples.
+                    // Fixture/recorded snapshots have no telemetry frame, and live scoring is the fallback when telemetry is unavailable.
                     changed |= state.Add(new WorldSample(driver.PosX!.Value, driver.PosZ!.Value, sampleContext.ProgressFraction, sampleContext.LapKey, 1), now);
                 }
             }
@@ -174,6 +177,7 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
             var trackName = frame.TrackName.Trim();
             var state = GetOrLoadState(trackName);
             var now = _timeProvider.GetUtcNow();
+            _lastTelemetryUtcByTrack[trackName] = now;
             PruneVolatileState(now);
             if (state.SeenUtc == default)
             {
@@ -583,6 +587,22 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
         {
             state.PruneVolatileState(now, CandidateLapRetention);
         }
+
+        foreach (var pair in _lastTelemetryUtcByTrack.Where(pair => now - pair.Value > ScoringContextRetention).ToList())
+        {
+            _lastTelemetryUtcByTrack.Remove(pair.Key);
+        }
+    }
+
+    private bool ShouldUseScoringPositions(string source, string trackName, DateTimeOffset now)
+    {
+        if (!string.Equals(source, "shared-memory", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return !_lastTelemetryUtcByTrack.TryGetValue(trackName, out var lastTelemetryUtc)
+            || now - lastTelemetryUtc > TelemetryFallbackThreshold;
     }
 
     private static DriverSampleContext? TryCreateSampleContext(DriverSnapshot driver, LiveSessionInfo session, DateTimeOffset updatedUtc)

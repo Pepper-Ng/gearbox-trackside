@@ -161,6 +161,15 @@ public sealed class ApiContractTests
     }
 
     /// <summary>
+    /// Keeps shared-memory debug endpoint stable for admin diagnostics.
+    /// </summary>
+    [Fact]
+    public void AdminSharedMemoryDebugPathIsStable()
+    {
+        Assert.Equal("/api/admin/shared-memory/debug", LiveSessionRoutes.AdminSharedMemoryDebugPath);
+    }
+
+    /// <summary>
     /// Keeps the admin session endpoint stable for the admin dashboard.
     /// </summary>
     [Fact]

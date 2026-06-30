@@ -108,6 +108,58 @@ public sealed class TrackGeometryRecorderTests
     }
 
     /// <summary>
+    /// Shared-memory scoring positions are used when telemetry frames are not available.
+    /// </summary>
+    [Fact]
+    public void SharedMemoryScoringPositionsProduceFallbackGeometryWhenTelemetryIsUnavailable()
+    {
+        var cache = CreateCache(out var tempRoot);
+        try
+        {
+            RecordScoringLap(cache, "1", completedLaps: 0, startIndex: 0, endIndex: 100);
+
+            var geometry = cache.Get("Loch Drummond - Short");
+
+            Assert.True(geometry.IsAvailable);
+            Assert.Equal("shared-memory", geometry.Source);
+            Assert.True(geometry.SampleCount >= 90);
+        }
+        finally
+        {
+            DeleteTempRoot(tempRoot);
+        }
+    }
+
+    /// <summary>
+    /// Recent telemetry keeps scoring positions as context only, avoiding mixed duplicate geometry sources.
+    /// </summary>
+    [Fact]
+    public void RecentTelemetrySuppressesSharedMemoryScoringPositionFallback()
+    {
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-06-30T12:00:00Z"));
+        var cache = CreateCache(out var tempRoot, timeProvider: timeProvider);
+        try
+        {
+            cache.UpdateTelemetry(new TelemetryPositionFrame
+            {
+                TrackName = "Loch Drummond - Short",
+                Source = "telemetry",
+                Vehicles = [new TelemetryPositionVehicle { DriverId = "1", PosX = 10.0, PosZ = 20.0 }],
+            });
+            RecordScoringLap(cache, "1", completedLaps: 0, startIndex: 0, endIndex: 100, emitLapTransition: false);
+
+            var geometry = cache.Get("Loch Drummond - Short");
+
+            Assert.False(geometry.IsAvailable);
+            Assert.Equal(0, geometry.SampleCount);
+        }
+        finally
+        {
+            DeleteTempRoot(tempRoot);
+        }
+    }
+
+    /// <summary>
     /// Admin catalog shows seen tracks and can start a fresh improvement recording target.
     /// </summary>
     [Fact]
@@ -421,6 +473,44 @@ public sealed class TrackGeometryRecorderTests
                         PosZ = Math.Sin(0.0) * (80.0 + radiusOffset),
                     },
                 ],
+            });
+        }
+    }
+
+    private static void RecordScoringLap(
+        TrackGeometryRecorder cache,
+        string driverId,
+        int completedLaps,
+        int startIndex,
+        int endIndex,
+        bool emitLapTransition = true)
+    {
+        for (var index = startIndex; index <= endIndex; index++)
+        {
+            var progress = index / 100.0;
+            cache.UpdateScoringSnapshot(new LiveSessionSnapshot
+            {
+                Source = "shared-memory",
+                Session = new LiveSessionInfo
+                {
+                    TrackName = "Loch Drummond - Short",
+                    LapDistanceMeters = 1000.0,
+                },
+                Drivers = [Driver(driverId, progress * 100.0, Math.Cos(progress * Math.Tau) * 100.0, Math.Sin(progress * Math.Tau) * 80.0) with { CompletedLaps = completedLaps }],
+            });
+        }
+
+        if (emitLapTransition)
+        {
+            cache.UpdateScoringSnapshot(new LiveSessionSnapshot
+            {
+                Source = "shared-memory",
+                Session = new LiveSessionInfo
+                {
+                    TrackName = "Loch Drummond - Short",
+                    LapDistanceMeters = 1000.0,
+                },
+                Drivers = [Driver(driverId, progressPercent: 0.0, worldX: 100.0, worldZ: 0.0) with { CompletedLaps = completedLaps + 1 }],
             });
         }
     }

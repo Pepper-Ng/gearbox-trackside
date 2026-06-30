@@ -175,6 +175,11 @@ public static class TracksideApiEndpoints
             .WithName("EnforceRetention")
             .WithSummary("Runs persistence retention cleanup using configured policy.");
 
+        endpoints.MapGet(LiveSessionRoutes.AdminSharedMemoryDebugPath, GetSharedMemoryDebug)
+            .RequireAuthorization()
+            .WithName("GetSharedMemoryDebug")
+            .WithSummary("Returns realtime scoring and telemetry shared-memory diagnostics.");
+
         endpoints.MapGet(LiveSessionRoutes.AdminSessionSetupPath, GetSessionSetupAsync)
             .RequireAuthorization()
             .WithName("GetSessionSetup")
@@ -541,6 +546,143 @@ public static class TracksideApiEndpoints
     {
         var result = await store.EnforceRetentionAsync(options.CurrentValue.Persistence.Retention, timeProvider.GetUtcNow(), cancellationToken);
         return Results.Ok(RetentionCleanupResponse.From(result));
+    }
+
+    private static IResult GetSharedMemoryDebug(
+        IOptionsMonitor<TracksideOptions> options,
+        IRf2SharedMemoryMapDiscovery mapDiscovery,
+        Rf2ScoringMapResolver mapResolver,
+        Rf2SharedMemoryMapReader mapReader,
+        IRf2ScoringPayloadParser scoringParser,
+        IRf2TelemetryPayloadParser telemetryParser,
+        MappedBufferPayloadLocator payloadLocator,
+        TimeProvider timeProvider)
+    {
+        var source = options.CurrentValue.Source;
+        var sharedMemory = source.SharedMemory;
+        var discovered = sharedMemory.AutoDiscover ? mapDiscovery.DiscoverScoringMaps(sharedMemory) : [];
+        var resolution = mapResolver.Resolve(sharedMemory, discovered);
+        var scoring = BuildScoringDebug(resolution, mapReader, scoringParser, payloadLocator);
+        var telemetryCandidateSource = scoring.MapName ?? resolution.CandidateMapNames.FirstOrDefault();
+        var telemetryCandidates = Rf2SharedMemoryMapReader.CandidateMapNames(
+            Rf2SharedMemoryMapReader.TelemetryMapName,
+            DeriveTelemetryMapName(telemetryCandidateSource),
+            sharedMemory.ProcessId);
+
+        return Results.Ok(new SharedMemoryDebugResponse
+        {
+            TimestampUtc = timeProvider.GetUtcNow(),
+            SourceMode = source.Mode,
+            TelemetryEnabled = sharedMemory.Telemetry.Enabled,
+            DiscoveryStatus = resolution.Status,
+            DiscoveredScoringMaps = discovered,
+            Scoring = scoring,
+            Telemetry = BuildTelemetryDebug(sharedMemory.Telemetry.Enabled, telemetryCandidates, mapReader, telemetryParser, payloadLocator),
+        });
+    }
+
+    private static SharedMemoryMapDebugResponse BuildScoringDebug(
+        Rf2ScoringMapResolution resolution,
+        Rf2SharedMemoryMapReader mapReader,
+        IRf2ScoringPayloadParser parser,
+        MappedBufferPayloadLocator payloadLocator)
+    {
+        if (resolution.IsAmbiguous)
+        {
+            return SharedMemoryMapDebugResponse.Unavailable("scoring", resolution.Status, [], null);
+        }
+
+        if (!mapReader.TryReadFirstAvailable(resolution.CandidateMapNames, parser.PayloadSize, out var read, out var status))
+        {
+            return SharedMemoryMapDebugResponse.Unavailable("scoring", status, resolution.CandidateMapNames, null);
+        }
+
+        try
+        {
+            var location = payloadLocator.Locate(read.Buffer, parser.PayloadSize, parser.ScorePayload);
+            var payload = read.Buffer.AsSpan(location.Offset, location.PayloadSize);
+            var stable = parser.IsStablePayload(payload);
+            var source = stable ? parser.ParseSource(payload, "shared-memory", status) : null;
+            return new SharedMemoryMapDebugResponse
+            {
+                Kind = "scoring",
+                IsAvailable = true,
+                Status = status,
+                CandidateMapNames = resolution.CandidateMapNames,
+                MapName = read.MapName,
+                BytesRead = read.Buffer.Length,
+                DecodeOffset = location.Offset,
+                PayloadSize = location.PayloadSize,
+                Score = location.Score,
+                IsStable = stable,
+                TrackName = source?.Session.TrackName,
+                VehicleCount = source?.Drivers.Count,
+                Vehicles = source?.Drivers.Take(12).Select(SharedMemoryDebugVehicle.FromScoring).ToList() ?? [],
+            };
+        }
+        catch (Exception ex) when (ex is InvalidDataException or InvalidOperationException or ArgumentException)
+        {
+            return SharedMemoryMapDebugResponse.Unavailable("scoring", status, resolution.CandidateMapNames, ex.Message) with { MapName = read.MapName, BytesRead = read.Buffer.Length };
+        }
+    }
+
+    private static SharedMemoryMapDebugResponse BuildTelemetryDebug(
+        bool telemetryEnabled,
+        IReadOnlyList<string> candidateMapNames,
+        Rf2SharedMemoryMapReader mapReader,
+        IRf2TelemetryPayloadParser parser,
+        MappedBufferPayloadLocator payloadLocator)
+    {
+        if (!telemetryEnabled)
+        {
+            return SharedMemoryMapDebugResponse.Unavailable("telemetry", "telemetry loop disabled", candidateMapNames, null);
+        }
+
+        if (!mapReader.TryReadFirstAvailable(candidateMapNames, parser.PayloadSize, out var read, out var status))
+        {
+            return SharedMemoryMapDebugResponse.Unavailable("telemetry", status, candidateMapNames, null);
+        }
+
+        try
+        {
+            var location = payloadLocator.Locate(read.Buffer, parser.PayloadSize, parser.ScorePayload);
+            var payload = read.Buffer.AsSpan(location.Offset, location.PayloadSize);
+            var stable = parser.IsStablePayload(payload);
+            var frame = stable ? parser.ParsePositionFrame(payload, "telemetry") : null;
+            return new SharedMemoryMapDebugResponse
+            {
+                Kind = "telemetry",
+                IsAvailable = true,
+                Status = status,
+                CandidateMapNames = candidateMapNames,
+                MapName = read.MapName,
+                BytesRead = read.Buffer.Length,
+                DecodeOffset = location.Offset,
+                PayloadSize = location.PayloadSize,
+                Score = location.Score,
+                IsStable = stable,
+                TrackName = frame?.TrackName,
+                VehicleCount = frame?.Vehicles.Count,
+                Vehicles = frame?.Vehicles.Take(12).Select(SharedMemoryDebugVehicle.FromTelemetry).ToList() ?? [],
+            };
+        }
+        catch (Exception ex) when (ex is InvalidDataException or InvalidOperationException or ArgumentException)
+        {
+            return SharedMemoryMapDebugResponse.Unavailable("telemetry", status, candidateMapNames, ex.Message) with { MapName = read.MapName, BytesRead = read.Buffer.Length };
+        }
+    }
+
+    private static string? DeriveTelemetryMapName(string? scoringMapName)
+    {
+        if (string.IsNullOrWhiteSpace(scoringMapName))
+        {
+            return null;
+        }
+
+        var telemetryMapName = scoringMapName.Replace("Scoring", "Telemetry", StringComparison.OrdinalIgnoreCase);
+        return string.Equals(telemetryMapName, scoringMapName, StringComparison.OrdinalIgnoreCase)
+            ? null
+            : telemetryMapName;
     }
 
     private static async Task<IResult> GetSessionSetupAsync(ITracksideStore store, CancellationToken cancellationToken)
@@ -1318,6 +1460,212 @@ public sealed record DriverTrackerRecordingRequest
     /// True to replace existing generated geometry before recording.
     /// </summary>
     public bool ResetExistingGeometry { get; init; } = true;
+}
+
+/// <summary>
+/// Realtime shared-memory diagnostic response for admin troubleshooting.
+/// </summary>
+public sealed record SharedMemoryDebugResponse
+{
+    /// <summary>
+    /// Time the diagnostic snapshot was produced.
+    /// </summary>
+    public DateTimeOffset TimestampUtc { get; init; }
+
+    /// <summary>
+    /// Configured live source mode.
+    /// </summary>
+    public LiveSessionSourceMode SourceMode { get; init; }
+
+    /// <summary>
+    /// True when the telemetry loop is enabled in configuration.
+    /// </summary>
+    public bool TelemetryEnabled { get; init; }
+
+    /// <summary>
+    /// Scoring map discovery status.
+    /// </summary>
+    public string DiscoveryStatus { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Discovered scoring map candidates.
+    /// </summary>
+    public IReadOnlyList<Rf2ScoringMapCandidate> DiscoveredScoringMaps { get; init; } = [];
+
+    /// <summary>
+    /// Current scoring map read result.
+    /// </summary>
+    public SharedMemoryMapDebugResponse Scoring { get; init; } = SharedMemoryMapDebugResponse.Unavailable("scoring", "not read", [], null);
+
+    /// <summary>
+    /// Current telemetry map read result.
+    /// </summary>
+    public SharedMemoryMapDebugResponse Telemetry { get; init; } = SharedMemoryMapDebugResponse.Unavailable("telemetry", "not read", [], null);
+}
+
+/// <summary>
+/// One shared-memory map diagnostic read result.
+/// </summary>
+public sealed record SharedMemoryMapDebugResponse
+{
+    /// <summary>
+    /// Map kind: scoring or telemetry.
+    /// </summary>
+    public string Kind { get; init; } = string.Empty;
+
+    /// <summary>
+    /// True when a map was opened and read.
+    /// </summary>
+    public bool IsAvailable { get; init; }
+
+    /// <summary>
+    /// Read or discovery status.
+    /// </summary>
+    public string Status { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Candidate map names tried in order.
+    /// </summary>
+    public IReadOnlyList<string> CandidateMapNames { get; init; } = [];
+
+    /// <summary>
+    /// Map name that was read.
+    /// </summary>
+    public string? MapName { get; init; }
+
+    /// <summary>
+    /// Number of bytes copied from the map.
+    /// </summary>
+    public int? BytesRead { get; init; }
+
+    /// <summary>
+    /// Payload decode offset inside the mapped buffer.
+    /// </summary>
+    public int? DecodeOffset { get; init; }
+
+    /// <summary>
+    /// Expected parser payload size.
+    /// </summary>
+    public int? PayloadSize { get; init; }
+
+    /// <summary>
+    /// Payload plausibility score.
+    /// </summary>
+    public int? Score { get; init; }
+
+    /// <summary>
+    /// True when begin/end update counters match.
+    /// </summary>
+    public bool? IsStable { get; init; }
+
+    /// <summary>
+    /// Parsed track name, when available.
+    /// </summary>
+    public string? TrackName { get; init; }
+
+    /// <summary>
+    /// Parsed vehicle count, when available.
+    /// </summary>
+    public int? VehicleCount { get; init; }
+
+    /// <summary>
+    /// Small preview of parsed vehicle values.
+    /// </summary>
+    public IReadOnlyList<SharedMemoryDebugVehicle> Vehicles { get; init; } = [];
+
+    /// <summary>
+    /// Parser or read error, when available.
+    /// </summary>
+    public string? Error { get; init; }
+
+    /// <summary>
+    /// Creates an unavailable read result.
+    /// </summary>
+    public static SharedMemoryMapDebugResponse Unavailable(string kind, string status, IReadOnlyList<string> candidateMapNames, string? error) => new()
+    {
+        Kind = kind,
+        Status = status,
+        CandidateMapNames = candidateMapNames,
+        Error = error,
+    };
+}
+
+/// <summary>
+/// Small vehicle preview for shared-memory diagnostics.
+/// </summary>
+public sealed record SharedMemoryDebugVehicle
+{
+    /// <summary>
+    /// Vehicle/scoring id.
+    /// </summary>
+    public string DriverId { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Display or rig name when available.
+    /// </summary>
+    public string? Name { get; init; }
+
+    /// <summary>
+    /// Lap progress percent from scoring.
+    /// </summary>
+    public double? TrackPositionPercent { get; init; }
+
+    /// <summary>
+    /// X coordinate.
+    /// </summary>
+    public double? PosX { get; init; }
+
+    /// <summary>
+    /// Y coordinate.
+    /// </summary>
+    public double? PosY { get; init; }
+
+    /// <summary>
+    /// Z coordinate.
+    /// </summary>
+    public double? PosZ { get; init; }
+
+    /// <summary>
+    /// True when scoring reports the vehicle in pits.
+    /// </summary>
+    public bool? IsInPits { get; init; }
+
+    /// <summary>
+    /// True when scoring reports the vehicle in a garage stall.
+    /// </summary>
+    public bool? IsInGarageStall { get; init; }
+
+    /// <summary>
+    /// Valid lap flag from scoring.
+    /// </summary>
+    public int? ValidLapFlag { get; init; }
+
+    /// <summary>
+    /// Maps a scoring driver to a debug vehicle preview.
+    /// </summary>
+    public static SharedMemoryDebugVehicle FromScoring(LeaderboardDriverSource driver) => new()
+    {
+        DriverId = driver.DriverId,
+        Name = driver.RigName,
+        TrackPositionPercent = driver.TrackPositionPercent,
+        PosX = driver.PosX,
+        PosY = driver.PosY,
+        PosZ = driver.PosZ,
+        IsInPits = driver.IsInPits,
+        IsInGarageStall = driver.IsInGarageStall,
+        ValidLapFlag = driver.ValidLapFlag,
+    };
+
+    /// <summary>
+    /// Maps a telemetry position vehicle to a debug vehicle preview.
+    /// </summary>
+    public static SharedMemoryDebugVehicle FromTelemetry(TelemetryPositionVehicle vehicle) => new()
+    {
+        DriverId = vehicle.DriverId,
+        PosX = vehicle.PosX,
+        PosY = vehicle.PosY,
+        PosZ = vehicle.PosZ,
+    };
 }
 
 /// <summary>
