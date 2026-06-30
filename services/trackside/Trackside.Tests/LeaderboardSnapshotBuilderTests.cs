@@ -72,6 +72,18 @@ public sealed class LeaderboardSnapshotBuilderTests
         Assert.Equal("Setup1", setup1.RigName);
     }
 
+    /// <summary>
+    /// Race distance and sector flags are retained for kiosk lap and local-yellow display.
+    /// </summary>
+    [Fact]
+    public void CarriesLiveSessionRaceAndFlagMetadata()
+    {
+        var snapshot = BuildSnapshot(SessionKind.Race);
+
+        Assert.Equal(7, snapshot.Session.TotalLaps);
+        Assert.Equal(["Green", "Yellow", "Green"], snapshot.Session.SectorFlags);
+    }
+
     private static LiveSessionSnapshot BuildSnapshot(SessionKind kind, IReadOnlyDictionary<string, string>? aliases = null)
     {
         var source = new LeaderboardSourceSnapshot
@@ -83,8 +95,10 @@ public sealed class LeaderboardSnapshotBuilderTests
                 TrackName = "Loch Drummond - Short",
                 Kind = kind,
                 Phase = SessionPhase.GreenFlag,
+                TotalLaps = 7,
                 LapDistanceMeters = 3200.0,
                 OverallFlag = "GREEN",
+                SectorFlags = ["Green", "Yellow", "Green"],
             },
             Drivers =
             [

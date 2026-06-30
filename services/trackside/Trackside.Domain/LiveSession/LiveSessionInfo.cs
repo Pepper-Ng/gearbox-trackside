@@ -31,6 +31,11 @@ public sealed record LiveSessionInfo
     public double? ScheduledDurationSeconds { get; init; }
 
     /// <summary>
+    /// Scheduled race distance in laps when known.
+    /// </summary>
+    public int? TotalLaps { get; init; }
+
+    /// <summary>
     /// Full lap distance in meters when known.
     /// </summary>
     public double? LapDistanceMeters { get; init; }
@@ -69,6 +74,11 @@ public sealed record LiveSessionInfo
     /// Concise flag state suitable for kiosk display.
     /// </summary>
     public string OverallFlag { get; init; } = "Unknown";
+
+    /// <summary>
+    /// Per-sector flag states from the scoring source, ordered S1 through S3 when known.
+    /// </summary>
+    public IReadOnlyList<string> SectorFlags { get; init; } = [];
 }
 
 /// <summary>

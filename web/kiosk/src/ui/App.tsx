@@ -1,6 +1,7 @@
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { formatGap, formatLapTime, formatNumber } from '../format';
-import { BestLapBoardResponse, BestLapRow, BestLapWindow, ClientConfiguration, DriverSnapshot, KioskDisplayMode, LastFinishedSessionResponse, LastFinishedSessionRow, LiveSessionConnection, LiveSessionSnapshot, SectorSnapshot, startLiveSessionFeed, TrackGeometryResponse, TracksideApiClient } from '../tracksideApi';
+import { BestLapBoardResponse, BestLapRow, BestLapWindow, ClientConfiguration, DriverSnapshot, KioskDisplayMode, LastFinishedSessionResponse, LastFinishedSessionRow, LiveSessionConnection, LiveSessionInfo, LiveSessionSnapshot, SectorSnapshot, startLiveSessionFeed, TrackGeometryResponse, TracksideApiClient } from '../tracksideApi';
+import { getDriverStatus, getRaceLapProgress, type DriverStatus } from './liveBoardLogic';
 import { TrackerPage } from './TrackerPage';
 
 type ViewMode = BestLapWindow | 'last' | 'live' | 'tracker';
@@ -154,7 +155,7 @@ export function App() {
 
   return (
     <main className="shell">
-      <ShellHeader status={view === 'live' ? status : view === 'tracker' ? '' : boardStatus} view={view} flag={snapshot?.session.overallFlag} />
+      <ShellHeader status={view === 'live' ? status : view === 'tracker' ? '' : boardStatus} view={view} session={snapshot?.session} />
 
       {view === 'live'
         ? <LiveBoard snapshot={snapshot} />
@@ -209,13 +210,13 @@ function LiveBoard({ snapshot }: LiveBoardProps) {
     <>
       <section className="sessionStrip" aria-label="Session summary">
         <Metric label="Track" value={snapshot?.session.trackName} />
-        <Metric label="Session" value={snapshot?.session.kind} />
+        <Metric label="Session" value={formatSessionValue(snapshot)} />
         <Metric label="Clock" value={formatLapTime(interpolatedClockSeconds)} />
       </section>
 
       <BoardPanel title="Live Board" meta={`${snapshot?.drivers.length ?? 0} drivers`} live>
         <div className="tableFrame liveBoardFrame" style={{ '--flag-color': getFlagColor(snapshot?.session.overallFlag) } as React.CSSProperties}>
-          <LeaderboardTable drivers={snapshot?.drivers ?? []} />
+          <LeaderboardTable snapshot={snapshot} />
         </div>
       </BoardPanel>
     </>
@@ -291,45 +292,59 @@ function BestLapTable({ rows, showTrack }: BestLapTableProps) {
 }
 
 interface LeaderboardTableProps {
-  /** Driver rows already sorted by the backend leaderboard rules. */
-  drivers: DriverSnapshot[];
+  /** Current live-session snapshot. */
+  snapshot: LiveSessionSnapshot | null;
 }
 
-function LeaderboardTable({ drivers }: LeaderboardTableProps) {
+function LeaderboardTable({ snapshot }: LeaderboardTableProps) {
+  const drivers = snapshot?.drivers ?? [];
+  const fastestLapFlashes = useFastestLapFlashes(drivers);
+  const setRowRef = useRowSwapAnimation(drivers);
+
   return (
     <table className="leaderboardTable">
       <thead>
         <tr>
-          <th>Rank</th>
-          <th>Driver</th>
-          <th>Rig</th>
-          <th>Laps</th>
-          <th>Best</th>
-          <th>Current</th>
-          <th>S1</th>
-          <th>S2</th>
-          <th>S3</th>
-          <th>Gap</th>
+          <th className="columnRank">Rank</th>
+          <th className="columnDriver">Driver</th>
+          <th className="columnRig">Rig</th>
+          <th className="columnLaps">Laps</th>
+          <th className="columnBest">Best</th>
+          <th className="columnCurrent">Current</th>
+          <th className="columnSector">S1</th>
+          <th className="columnSector">S2</th>
+          <th className="columnSector">S3</th>
+          <th className="columnInterval">Int</th>
+          <th className="columnGap">Gap</th>
         </tr>
       </thead>
       <tbody>
         {drivers.map(driver => (
-          <tr key={driver.driverId} className={driver.isOverallBestLap ? 'bestLapRow' : undefined}>
-            <td className="rankCell">{driver.leaderboardRank || driver.position || '-'}</td>
-            <td>
+          <tr
+            key={driver.driverId}
+            ref={element => setRowRef(driver.driverId, element)}
+            className={classNames('liveBoardRow', driver.isOverallBestLap ? 'bestLapRow' : undefined, fastestLapFlashes.has(driver.driverId) ? 'fastestLapFlash' : undefined)}
+          >
+            <td className="rankCell columnRank">{driver.leaderboardRank || driver.position || '-'}</td>
+            <td className="columnDriver">
               <div className="driverCell">
                 <strong>{driver.displayName}</strong>
-                <span>{formatPercent(driver.trackPositionPercent)}</span>
+                <span className="driverMetaLine">
+                  <span>{formatPercent(driver.trackPositionPercent)}</span>
+                  <MobileStatusBadge driver={driver} sessionKind={snapshot?.session.kind} />
+                </span>
+                <SectorBars driver={driver} />
               </div>
             </td>
-            <td>{driver.rigName}</td>
-            <td>{driver.completedLaps}</td>
-            <td className={driver.isOverallBestLap ? 'bestTime' : undefined}>{formatLapTime(driver.bestLapSeconds)}</td>
-            <td>{formatLapTime(driver.currentLapSeconds)}</td>
+            <td className="columnRig">{driver.rigName}</td>
+            <td className="columnLaps">{driver.completedLaps}</td>
+            <td className={classNames('columnBest', driver.isOverallBestLap ? 'bestTime' : undefined)}>{formatLapTime(driver.bestLapSeconds)}</td>
+            <CurrentLapCell driver={driver} sessionKind={snapshot?.session.kind} />
             {[1, 2, 3].map(number => (
               <SectorCell key={number} sector={driver.sectors.find(candidate => candidate.number === number)} />
             ))}
-            <td>{formatGap(driver.gapToLeaderSeconds, driver.lapsBehindLeader)}</td>
+            <td className="columnInterval">{driver.leaderboardRank === 1 ? '-' : formatGap(driver.gapToNextSeconds)}</td>
+            <td className="columnGap">{formatGap(driver.gapToLeaderSeconds, driver.lapsBehindLeader)}</td>
           </tr>
         ))}
       </tbody>
@@ -344,15 +359,205 @@ interface SectorCellProps {
 
 function SectorCell({ sector }: SectorCellProps) {
   return (
-    <td className={sector?.isOverallBest ? 'bestTime sectorCell' : 'sectorCell'}>
+    <td className={classNames('columnSector', 'sectorCell', sector?.isOverallBest ? 'bestTime' : undefined)}>
       <span>{formatLapTime(sector?.bestSeconds)}</span>
       <small>{formatLapTime(sector?.currentSeconds ?? sector?.lastSeconds)}</small>
     </td>
   );
 }
 
+interface CurrentLapCellProps {
+  driver: DriverSnapshot;
+  sessionKind: string | null | undefined;
+}
+
+function CurrentLapCell({ driver, sessionKind }: CurrentLapCellProps) {
+  const status = getDriverStatus(driver, sessionKind);
+  return (
+    <td className="columnCurrent">
+      {status ? <StatusBadge label={status.label} tone={status.tone} /> : formatLapTime(driver.currentLapSeconds)}
+    </td>
+  );
+}
+
+function MobileStatusBadge({ driver, sessionKind }: CurrentLapCellProps) {
+  const status = getDriverStatus(driver, sessionKind);
+  return status ? <StatusBadge label={status.label} tone={status.tone} mobile /> : null;
+}
+
+interface StatusBadgeProps extends DriverStatus {
+  mobile?: boolean;
+}
+
+function StatusBadge({ label, tone, mobile }: StatusBadgeProps) {
+  return <span className={classNames('driverStatusBadge', `driverStatusBadge-${tone}`, mobile ? 'mobileStatusBadge' : undefined)}>{label}</span>;
+}
+
+function SectorBars({ driver }: { driver: DriverSnapshot }) {
+  return (
+    <span className="sectorBars" aria-label="Sector progress">
+      {[1, 2, 3].map(number => {
+        const sector = driver.sectors.find(candidate => candidate.number === number);
+        return <span key={number} className={classNames('sectorBar', sectorBarTone(sector, driver.currentSector === number - 1))} />;
+      })}
+    </span>
+  );
+}
+
+function sectorBarTone(sector: SectorSnapshot | undefined, isCurrent: boolean): string {
+  if (sector?.isOverallBest) {
+    return 'sectorBar-fastest';
+  }
+
+  if (isCurrent || sector?.currentSeconds != null) {
+    return 'sectorBar-active';
+  }
+
+  if (sector?.bestSeconds != null || sector?.lastSeconds != null) {
+    return 'sectorBar-complete';
+  }
+
+  return 'sectorBar-pending';
+}
+
+function useFastestLapFlashes(drivers: DriverSnapshot[]): Set<string> {
+  const [flashes, setFlashes] = useState<Record<string, number>>({});
+  const previousBestRef = useRef<number | null>(null);
+  const initializedRef = useRef(false);
+
+  useEffect(() => {
+    const best = getBestLapDrivers(drivers);
+    const now = Date.now();
+
+    if (!best) {
+      previousBestRef.current = null;
+      initializedRef.current = false;
+      setFlashes({});
+      return;
+    }
+
+    const previousBest = previousBestRef.current;
+    const shouldFlash = initializedRef.current && previousBest !== null && best.seconds < previousBest - 0.0005;
+    previousBestRef.current = best.seconds;
+    initializedRef.current = true;
+
+    setFlashes(current => {
+      const next = pruneExpiredFlashes(current, now);
+      if (shouldFlash) {
+        const expiresAt = now + 4500;
+        for (const driverId of best.driverIds) {
+          next[driverId] = expiresAt;
+        }
+      }
+
+      return next;
+    });
+  }, [drivers.map(driver => `${driver.driverId}:${driver.bestLapSeconds ?? ''}`).join('|')]);
+
+  useEffect(() => {
+    const expiries = Object.values(flashes);
+    if (expiries.length === 0) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setFlashes(current => pruneExpiredFlashes(current, Date.now()));
+    }, Math.max(0, Math.min(...expiries) - Date.now()) + 50);
+
+    return () => window.clearTimeout(timeout);
+  }, [flashes]);
+
+  const now = Date.now();
+  return new Set(Object.entries(flashes).filter(([, expiresAt]) => expiresAt > now).map(([driverId]) => driverId));
+}
+
+function getBestLapDrivers(drivers: DriverSnapshot[]): { seconds: number; driverIds: string[] } | null {
+  const usable = drivers.filter(driver => isFiniteNumber(driver.bestLapSeconds) && driver.bestLapSeconds > 0);
+  if (usable.length === 0) {
+    return null;
+  }
+
+  const seconds = Math.min(...usable.map(driver => driver.bestLapSeconds!));
+  return {
+    seconds,
+    driverIds: usable.filter(driver => Math.abs(driver.bestLapSeconds! - seconds) < 0.0005).map(driver => driver.driverId),
+  };
+}
+
+function pruneExpiredFlashes(flashes: Record<string, number>, now: number): Record<string, number> {
+  return Object.fromEntries(Object.entries(flashes).filter(([, expiresAt]) => expiresAt > now));
+}
+
+function useRowSwapAnimation(drivers: DriverSnapshot[]) {
+  const rowsRef = useRef(new Map<string, HTMLTableRowElement>());
+  const previousTopsRef = useRef<Map<string, number> | null>(null);
+  const orderKey = drivers.map(driver => driver.driverId).join('|');
+
+  useLayoutEffect(() => {
+    const previousTops = previousTopsRef.current;
+    const nextTops = new Map<string, number>();
+
+    for (const driver of drivers) {
+      const row = rowsRef.current.get(driver.driverId);
+      if (!row) {
+        continue;
+      }
+
+      const top = row.getBoundingClientRect().top;
+      nextTops.set(driver.driverId, top);
+      const previousTop = previousTops?.get(driver.driverId);
+      if (previousTop !== undefined) {
+        animateRowShift(row, previousTop - top);
+      }
+    }
+
+    previousTopsRef.current = nextTops;
+  }, [drivers, orderKey]);
+
+  return (driverId: string, element: HTMLTableRowElement | null) => {
+    if (element) {
+      rowsRef.current.set(driverId, element);
+    } else {
+      rowsRef.current.delete(driverId);
+    }
+  };
+}
+
+function animateRowShift(row: HTMLTableRowElement, shift: number) {
+  if (Math.abs(shift) < 2 || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    return;
+  }
+
+  row.style.transition = 'none';
+  row.style.transform = `translateY(${shift}px)`;
+  row.style.zIndex = shift > 0 ? '3' : '2';
+  row.getBoundingClientRect();
+  window.requestAnimationFrame(() => {
+    row.classList.add('rowSwapping');
+    row.style.transition = '';
+    row.style.transform = '';
+    window.setTimeout(() => {
+      row.classList.remove('rowSwapping');
+      row.style.zIndex = '';
+    }, 760);
+  });
+}
+
 function formatPercent(value: number | null | undefined): string {
   return value === null || value === undefined || !Number.isFinite(value) ? '-' : `${formatNumber(value, 1)}%`;
+}
+
+function formatSessionValue(snapshot: LiveSessionSnapshot | null): string | undefined {
+  if (!snapshot) {
+    return undefined;
+  }
+
+  const lapProgress = getRaceLapProgress(snapshot);
+  if (!lapProgress) {
+    return snapshot.session.kind;
+  }
+
+  return `${snapshot.session.kind} - LAP ${lapProgress.current}/${lapProgress.total}`;
 }
 
 function formatDate(value: string | null | undefined): string {
@@ -440,6 +645,12 @@ function getFlagColor(flag: string | null | undefined): string {
       return '#2ecc71';
     case 'yellow':
     case 'yellowflag':
+    case 'local yellow':
+    case 'localyellow':
+    case 'safety car / full course yellow':
+    case 'full course yellow':
+    case 'fullcourseyellow':
+    case 'caution':
       return '#f1c40f';
     case 'red':
     case 'redflag':
@@ -456,10 +667,48 @@ function getFlagColor(flag: string | null | undefined): string {
     case 'checker':
     case 'checkered':
     case 'checkeredflag':
+    case 'session over':
       return 'linear-gradient(135deg, #ffffff 25%, #000000 25%, #000000 50%, #ffffff 50%, #ffffff 75%, #000000 75%, #000000)';
     default:
       return 'rgba(255, 255, 255, 0.08)';
   }
+}
+
+function getFlagDisplayText(session: LiveSessionInfo | null | undefined): string {
+  if (!session?.overallFlag) {
+    return '-';
+  }
+
+  if (isCheckeredFlag(session.overallFlag) || session.phase === 'SessionOver') {
+    return 'CHECKERED';
+  }
+
+  const yellowSectors = getLocalYellowSectors(session);
+  if (yellowSectors.length > 0) {
+    return yellowSectors.map(sector => `S${sector}`).join(' ');
+  }
+
+  return session.overallFlag;
+}
+
+function getLocalYellowSectors(session: LiveSessionInfo): number[] {
+  if (!session.overallFlag.toLowerCase().includes('local')) {
+    return [];
+  }
+
+  return (session.sectorFlags ?? [])
+    .map((flag, index) => ({ flag: flag.toLowerCase(), sector: index + 1 }))
+    .filter(item => item.flag.includes('yellow') || item.flag.includes('caution'))
+    .map(item => item.sector);
+}
+
+function isCheckeredFlag(flag: string | null | undefined): boolean {
+  if (!flag) {
+    return false;
+  }
+
+  const normalized = flag.toLowerCase().replace(/\s+/g, '');
+  return normalized.includes('checker') || normalized.includes('sessionover');
 }
 
 interface ShellHeaderProps {
@@ -467,11 +716,11 @@ interface ShellHeaderProps {
   status: string;
   /** Selected display mode. */
   view: ViewMode;
-  /** Current session flag for live view. */
-  flag: string | null | undefined;
+  /** Current live-session info for live view. */
+  session: LiveSessionInfo | null | undefined;
 }
 
-function ShellHeader({ status, view, flag }: ShellHeaderProps) {
+function ShellHeader({ status, view, session }: ShellHeaderProps) {
   const isConnected = view === 'live' && /^Connected through\b/i.test(status);
   const sanitized = sanitizeStatus(status);
   const modeLabel = view === 'live' ? 'LIVE' : view === 'tracker' ? 'Tracker' : 'Leaderboard';
@@ -488,10 +737,10 @@ function ShellHeader({ status, view, flag }: ShellHeaderProps) {
         </div>
         {sanitized ? <p>{sanitized}</p> : null}
       </div>
-      {view === 'live' && flag ? (
+      {view === 'live' && session?.overallFlag ? (
         <div className="topbarFlag">
-          <div className="flagSwatch" style={{ background: getFlagColor(flag) }}>
-            <span>{flag}</span>
+          <div className="flagSwatch" style={{ background: getFlagColor(session.overallFlag) }}>
+            <span>{getFlagDisplayText(session)}</span>
           </div>
         </div>
       ) : null}
@@ -501,6 +750,14 @@ function ShellHeader({ status, view, flag }: ShellHeaderProps) {
 
 function sanitizeStatus(status: string): string {
   return status.replace(/\b(?:shared[- ]memory\b.*|Connected through\b.*)$/i, '').trim();
+}
+
+function isFiniteNumber(value: number | null | undefined): value is number {
+  return value !== null && value !== undefined && Number.isFinite(value);
+}
+
+function classNames(...values: Array<string | false | null | undefined>): string {
+  return values.filter(Boolean).join(' ');
 }
 
 function BrandMark() {

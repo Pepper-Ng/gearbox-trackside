@@ -59,6 +59,11 @@ public sealed record LeaderboardSessionSource
     public double? ScheduledDurationSeconds { get; init; }
 
     /// <summary>
+    /// Scheduled race distance in laps when known.
+    /// </summary>
+    public int? TotalLaps { get; init; }
+
+    /// <summary>
     /// Number of visible scoring rows when known.
     /// </summary>
     public int? VehicleCount { get; init; }
@@ -97,6 +102,11 @@ public sealed record LeaderboardSessionSource
     /// Concise overall flag text.
     /// </summary>
     public string OverallFlag { get; init; } = "Unknown";
+
+    /// <summary>
+    /// Per-sector flag states from the source, ordered S1 through S3 when known.
+    /// </summary>
+    public IReadOnlyList<string> SectorFlags { get; init; } = [];
 }
 
 /// <summary>

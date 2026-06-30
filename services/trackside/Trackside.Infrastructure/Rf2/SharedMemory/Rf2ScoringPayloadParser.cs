@@ -138,6 +138,7 @@ public sealed class Rf2ScoringPayloadParser : IRf2ScoringPayloadParser
                 Phase = SessionPhaseFromGamePhase(info.GamePhase),
                 CurrentSessionSeconds = NonNegative(info.CurrentET),
                 ScheduledDurationSeconds = NonNegative(info.EndET),
+                TotalLaps = info.MaxLaps > 0 ? info.MaxLaps : null,
                 VehicleCount = drivers.Count,
                 LapDistanceMeters = sessionLapDistance,
                 AirTemperatureCelsius = ReasonableTemperature(info.AmbientTemp),
@@ -146,6 +147,7 @@ public sealed class Rf2ScoringPayloadParser : IRf2ScoringPayloadParser
                 CloudIntensity = Clamp01(info.DarkCloud),
                 TrackWetness = Clamp01(info.AvgPathWetness),
                 OverallFlag = OverallFlagName(info.GamePhase, info.YellowFlagState, sectorFlags),
+                SectorFlags = sectorFlags.Select(SectorFlagName).ToList(),
             },
             Drivers = drivers,
         };
@@ -293,7 +295,7 @@ public sealed class Rf2ScoringPayloadParser : IRf2ScoringPayloadParser
     {
         if (gamePhase == 8)
         {
-            return "SESSION OVER";
+            return "CHECKERED";
         }
 
         if (gamePhase == 7 || yellowFlagState == 7)
@@ -318,6 +320,23 @@ public sealed class Rf2ScoringPayloadParser : IRf2ScoringPayloadParser
 
         return gamePhase == 5 ? "GREEN" : GamePhaseName(gamePhase).ToUpperInvariant();
     }
+
+    private static string SectorFlagName(sbyte sectorFlag) => sectorFlag switch
+    {
+        -1 or 0 => "Green",
+        1 => "Yellow",
+        2 => "LastLap",
+        3 => "PitLeadLap",
+        4 => "PitsClosed",
+        5 => "PitPenalty",
+        6 => "FullCourseYellow",
+        7 => "Red",
+        8 => "SafetyCar",
+        9 => "Caution",
+        10 => "CautionWaving",
+        11 => "Unknown",
+        _ => $"Unknown ({sectorFlag})",
+    };
 
     private static string GamePhaseName(byte gamePhase) => gamePhase switch
     {

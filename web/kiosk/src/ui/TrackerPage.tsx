@@ -1,5 +1,6 @@
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
 import { type DriverSnapshot, type LiveSessionSnapshot, type TrackGeometryBounds, type TrackGeometryResponse } from '../tracksideApi';
+import { stableDriverColor } from './driverColors';
 
 interface TrackerPageProps {
   snapshot: LiveSessionSnapshot | null;
@@ -51,8 +52,8 @@ export function TrackerPage({ snapshot, geometry, clientRefreshHz }: TrackerPage
       <svg className="trackerMap" viewBox={`0 0 ${mapMetrics.width} ${mapMetrics.height}`} role="img" aria-label={trackerSnapshot?.session.trackName ?? 'Track map'}>
         <rect className="trackerMapBackground" x="0" y="0" width={mapMetrics.width} height={mapMetrics.height} rx="18" />
         {geometry?.isAvailable && pathPoints ? <polyline className="trackGeometryLine" points={pathPoints} /> : null}
-        {markers.map((marker, index) => (
-          <g key={marker.driverId} className="driverMarker" style={{ '--marker-color': markerColor(index) } as CSSProperties} transform={`translate(${marker.x} ${marker.y})`}>
+        {markers.map(marker => (
+          <g key={marker.driverId} className="driverMarker" style={{ '--marker-color': stableDriverColor(marker.driverId, marker.label) } as CSSProperties} transform={`translate(${marker.x} ${marker.y})`}>
             <circle r="12" />
             <text y="4">{marker.rank}</text>
             <title>{marker.label}</title>
@@ -61,8 +62,8 @@ export function TrackerPage({ snapshot, geometry, clientRefreshHz }: TrackerPage
       </svg>
 
       <div className="trackerRoster" aria-label="Driver positions">
-        {markers.map((marker, index) => (
-          <div key={marker.driverId} className="trackerRosterItem" style={{ '--marker-color': markerColor(index) } as CSSProperties}>
+        {markers.map(marker => (
+          <div key={marker.driverId} className="trackerRosterItem" style={{ '--marker-color': stableDriverColor(marker.driverId, marker.label) } as CSSProperties}>
             <span>{marker.rank}</span>
             <strong>{marker.label}</strong>
             <small>{marker.rigName}</small>
@@ -147,9 +148,4 @@ function clampRefreshHz(value: number | null | undefined): number {
 
 function isFiniteNumber(value: number | null | undefined): value is number {
   return value !== null && value !== undefined && Number.isFinite(value);
-}
-
-function markerColor(index: number): string {
-  const colors = ['#00b0ff', '#ff202d', '#ff8a00', '#5ff08a', '#d86bff', '#f1c40f'];
-  return colors[index % colors.length];
 }

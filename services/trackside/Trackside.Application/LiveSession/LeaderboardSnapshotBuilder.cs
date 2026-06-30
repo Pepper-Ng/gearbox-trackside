@@ -44,6 +44,7 @@ public sealed class LeaderboardSnapshotBuilder : ILeaderboardSnapshotBuilder
             Phase = source.Session.Phase,
             CurrentSessionSeconds = source.Session.CurrentSessionSeconds,
             ScheduledDurationSeconds = source.Session.ScheduledDurationSeconds,
+            TotalLaps = source.Session.TotalLaps,
             LapDistanceMeters = source.Session.LapDistanceMeters,
             VehicleCount = source.Session.VehicleCount ?? source.Drivers.Count,
             AirTemperatureCelsius = source.Session.AirTemperatureCelsius,
@@ -52,6 +53,10 @@ public sealed class LeaderboardSnapshotBuilder : ILeaderboardSnapshotBuilder
             CloudIntensity = source.Session.CloudIntensity,
             TrackWetness = source.Session.TrackWetness,
             OverallFlag = string.IsNullOrWhiteSpace(source.Session.OverallFlag) ? "Unknown" : source.Session.OverallFlag,
+            SectorFlags = source.Session.SectorFlags
+                .Where(flag => !string.IsNullOrWhiteSpace(flag))
+                .Take(3)
+                .ToList(),
         };
 
         var drivers = source.Drivers

@@ -45,6 +45,8 @@ export interface LiveSessionInfo {
   currentSessionSeconds?: number | null;
   /** Scheduled session duration in seconds. */
   scheduledDurationSeconds?: number | null;
+  /** Scheduled race distance in laps. */
+  totalLaps?: number | null;
   /** Full lap distance in meters. */
   lapDistanceMeters?: number | null;
   /** Number of visible driver rows. */
@@ -61,6 +63,8 @@ export interface LiveSessionInfo {
   trackWetness?: number | null;
   /** Concise overall flag text. */
   overallFlag: string;
+  /** Per-sector flag states ordered S1 through S3. */
+  sectorFlags?: string[];
 }
 
 /** One sector's timing values for a driver. */
