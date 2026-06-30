@@ -26,11 +26,35 @@
   </ItemGroup>
 
   <PropertyGroup>
-    <KioskDistDir>$(MSBuildProjectDirectory)\..\..\..\web\kiosk\dist</KioskDistDir>
+    <KioskProjectDir>$(MSBuildProjectDirectory)\..\..\..\web\kiosk</KioskProjectDir>
+    <KioskDistDir>$(KioskProjectDir)\dist</KioskDistDir>
     <KioskWwwRoot>$(MSBuildProjectDirectory)\wwwroot</KioskWwwRoot>
+    <KioskNpmCommand Condition="'$(KioskNpmCommand)' == ''">npm</KioskNpmCommand>
+    <SkipKioskBuild Condition="'$(SkipKioskBuild)' == ''">false</SkipKioskBuild>
   </PropertyGroup>
 
-  <Target Name="CopyKioskDistToWwwRoot" BeforeTargets="ResolveCurrentProjectStaticWebAssetsInputs;Build;Publish" Condition="Exists('$(KioskDistDir)')">
+  <ItemGroup>
+    <KioskBuildInputs Include="$(KioskProjectDir)\package.json;$(KioskProjectDir)\package-lock.json;$(KioskProjectDir)\vite.config.ts" />
+    <KioskBuildInputs Include="$(KioskProjectDir)\tsconfig.json;$(KioskProjectDir)\tsconfig.app.json;$(KioskProjectDir)\tsconfig.node.json" />
+    <KioskBuildInputs Include="$(KioskProjectDir)\public\**\*;$(KioskProjectDir)\src\**\*" />
+  </ItemGroup>
+
+  <Target Name="RestoreKioskDependencies" Condition="'$(DesignTimeBuild)' != 'true' and '$(SkipKioskBuild)' != 'true' and !Exists('$(KioskProjectDir)\node_modules')">
+    <Message Text="Restoring kiosk npm dependencies in $(KioskProjectDir)" Importance="high" />
+    <Exec Command="$(KioskNpmCommand) --prefix &quot;$(KioskProjectDir)&quot; ci" WorkingDirectory="$(MSBuildProjectDirectory)\..\..\.." />
+  </Target>
+
+  <Target Name="BuildKioskDist"
+          DependsOnTargets="RestoreKioskDependencies"
+      BeforeTargets="ResolveCurrentProjectStaticWebAssetsInputs;Build;Publish"
+          Inputs="@(KioskBuildInputs)"
+          Outputs="$(KioskDistDir)\index.html"
+          Condition="'$(DesignTimeBuild)' != 'true' and '$(SkipKioskBuild)' != 'true' and Exists('$(KioskProjectDir)\package.json')">
+    <Message Text="Building kiosk assets from $(KioskProjectDir)" Importance="high" />
+    <Exec Command="$(KioskNpmCommand) --prefix &quot;$(KioskProjectDir)&quot; run build" WorkingDirectory="$(MSBuildProjectDirectory)\..\..\.." />
+  </Target>
+
+  <Target Name="CopyKioskDistToWwwRoot" DependsOnTargets="BuildKioskDist" BeforeTargets="ResolveCurrentProjectStaticWebAssetsInputs;Build;Publish" Condition="Exists('$(KioskDistDir)')">
     <Message Text="Copying kiosk build output from $(KioskDistDir) to $(KioskWwwRoot) while preserving admin static files" Importance="high" />
     <RemoveDir Directories="$(KioskWwwRoot)\assets" Condition="Exists('$(KioskWwwRoot)\assets')" />
     <RemoveDir Directories="$(KioskWwwRoot)\brand" Condition="Exists('$(KioskWwwRoot)\brand')" />
@@ -46,8 +70,8 @@
     </ItemGroup>
   </Target>
 
-  <Target Name="RequireKioskDistForPublish" BeforeTargets="Publish" Condition="!Exists('$(KioskDistDir)\index.html')">
-    <Error Text="Kiosk dist is missing. Run npm --prefix web\kiosk run build before publishing Trackside.Service." />
+  <Target Name="RequireKioskDistForPublish" DependsOnTargets="BuildKioskDist" BeforeTargets="Publish" Condition="!Exists('$(KioskDistDir)\index.html')">
+    <Error Text="Kiosk dist is missing. The Trackside.Service build normally runs npm automatically; check npm/node availability or run dotnet publish with -p:SkipKioskBuild=false." />
   </Target>
 
   <Target Name="CopyWwwRootToOutput" AfterTargets="Build" Condition="Exists('$(KioskWwwRoot)')">

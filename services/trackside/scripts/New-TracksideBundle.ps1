@@ -106,7 +106,8 @@ $updaterOut = Join-Path $appRoot 'updater'
 
 $publishProperties = @(
     "-p:Version=$AppVersion",
-    "-p:InformationalVersion=$BundleVersion"
+    "-p:InformationalVersion=$BundleVersion",
+    "-p:SkipKioskBuild=true"
 )
 
 $servicePublishArguments = @('publish', (Join-Path $tracksideRoot 'Trackside.Service\Trackside.Service.csproj'), '-c', $Configuration, '-r', $Runtime, '--self-contained', 'false', '-o', $serviceOut) + $publishProperties

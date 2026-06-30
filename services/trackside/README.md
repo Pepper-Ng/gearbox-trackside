@@ -45,6 +45,8 @@ dotnet test services\trackside\Trackside.slnx
 dotnet run --project services\trackside\Trackside.Service -- --console --source fixture --fixture Fixtures\scoring-leaderboard-practice.json
 ```
 
+Building `Trackside.Service` also builds the React kiosk assets from `web\kiosk` when the frontend inputs changed, then copies the generated `dist` output into the service `wwwroot`. Visual Studio builds therefore do not require a separate `npm --prefix web\kiosk run build` step. Pass `-p:SkipKioskBuild=true` only when you intentionally want to reuse an existing kiosk `dist`.
+
 Open `http://127.0.0.1:8877` for the packaged/static kiosk shell.
 Open `http://127.0.0.1:8877/config` for the admin dashboard. On a new install, the installer should create the first admin user; if no admin store exists, the dashboard shows a first-run setup form. After login, admins can edit source/alias/shared-memory discovery settings, prepare rig/session assignments, browse persisted sessions and participants, correct/exclude participants, invalidate laps, toggle whether a session counts for historical boards, configure the default kiosk display mode, run retention cleanup, create admin users, change passwords, and view advanced service status.
 

@@ -15,6 +15,8 @@ npm --prefix web\kiosk run build
 npm --prefix web\kiosk test
 ```
 
+`npm --prefix web\kiosk run build` is only needed when working on the frontend in isolation. Normal `Trackside.Service` builds and publishes run the kiosk build through MSBuild and copy the generated assets into the service automatically.
+
 The Vite dev server proxies `/api` and `/hubs` to `http://127.0.0.1:8877`, so run the backend alongside it:
 
 ```powershell
