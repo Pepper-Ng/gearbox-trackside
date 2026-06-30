@@ -367,10 +367,15 @@ interface SectorCellProps {
 }
 
 function SectorCell({ sector }: SectorCellProps) {
+  const primarySeconds = sector?.currentSeconds ?? sector?.lastSeconds;
+  const isOverallBestPrimary = isFiniteNumber(primarySeconds)
+    && isFiniteNumber(sector?.bestSeconds)
+    && sector?.isOverallBest === true
+    && isSameTime(primarySeconds, sector.bestSeconds);
   return (
-    <td className={classNames('columnSector', 'sectorCell', sector?.isOverallBest ? 'bestTime' : undefined)}>
-      <span>{formatLapTime(sector?.bestSeconds)}</span>
-      <small>{formatLapTime(sector?.currentSeconds ?? sector?.lastSeconds)}</small>
+    <td className={classNames('columnSector', 'sectorCell', isOverallBestPrimary ? 'bestTime' : undefined)}>
+      <span>{formatLapTime(primarySeconds)}</span>
+      <small>{formatLapTime(sector?.bestSeconds)}</small>
     </td>
   );
 }
@@ -447,6 +452,7 @@ const defaultSectorStripeStates: SectorStripeState[] = [
 ];
 
 interface SectorStripeCacheEntry {
+  activeThrough: number;
   completedLaps: number;
   tones: Map<number, SectorStripeTone>;
 }
@@ -465,9 +471,10 @@ function useSectorStripeStates(drivers: DriverSnapshot[]): Map<string, SectorStr
       const cached = previous.get(driver.driverId);
       const tones = new Map(cached?.tones ?? []);
       const lapCompleted = cached !== undefined && driver.completedLaps > cached.completedLaps;
+      const activeThrough = getActiveSectorCount(driver, cached, lapCompleted);
       const stripes = [1, 2, 3].map(number => {
         const sector = driver.sectors.find(candidate => candidate.number === number);
-        const completedSeconds = getCompletedSectorSeconds(driver, sector, number, lapCompleted);
+        const completedSeconds = getCompletedSectorSeconds(sector, number, activeThrough, lapCompleted);
         if (isFiniteNumber(completedSeconds)) {
           const tone = getSectorStripeTone(completedSeconds, sector, globalBestBySector.get(number));
           tones.set(number, tone);
@@ -478,7 +485,7 @@ function useSectorStripeStates(drivers: DriverSnapshot[]): Map<string, SectorStr
         return staleTone ? { number, tone: staleTone, stale: true } : { number, tone: 'pending' as const, stale: false };
       });
 
-      next.set(driver.driverId, { completedLaps: driver.completedLaps, tones });
+      next.set(driver.driverId, { activeThrough, completedLaps: driver.completedLaps, tones });
       states.set(driver.driverId, stripes);
     }
 
@@ -505,21 +512,37 @@ function buildGlobalBestSectors(drivers: DriverSnapshot[]): Map<number, number> 
   return best;
 }
 
-function getCompletedSectorSeconds(driver: DriverSnapshot, sector: SectorSnapshot | undefined, sectorNumber: number, lapCompleted: boolean): number | null {
+function getActiveSectorCount(driver: DriverSnapshot, cached: SectorStripeCacheEntry | undefined, lapCompleted: boolean): number {
+  if (lapCompleted) {
+    return 3;
+  }
+
   const currentSector = driver.currentSector ?? 0;
-  if (sectorNumber === 1 && currentSector >= 1 && isFiniteNumber(sector?.currentSeconds)) {
-    return sector.currentSeconds;
+  if (currentSector >= 2) {
+    return 2;
   }
 
-  if (sectorNumber === 2 && currentSector >= 2 && isFiniteNumber(sector?.currentSeconds)) {
-    return sector.currentSeconds;
+  if (currentSector >= 1) {
+    return 1;
   }
 
-  if (sectorNumber === 3 && lapCompleted && isFiniteNumber(sector?.lastSeconds)) {
+  return cached?.activeThrough === 3 ? 3 : 0;
+}
+
+function getCompletedSectorSeconds(sector: SectorSnapshot | undefined, sectorNumber: number, activeThrough: number, lapCompleted: boolean): number | null {
+  if (sectorNumber > activeThrough) {
+    return null;
+  }
+
+  if ((lapCompleted || activeThrough === 3) && isFiniteNumber(sector?.lastSeconds)) {
     return sector.lastSeconds;
   }
 
-  return null;
+  if (isFiniteNumber(sector?.currentSeconds)) {
+    return sector.currentSeconds;
+  }
+
+  return isFiniteNumber(sector?.lastSeconds) ? sector.lastSeconds : null;
 }
 
 function getSectorStripeTone(seconds: number, sector: SectorSnapshot | undefined, globalBestSeconds: number | undefined): SectorStripeTone {
@@ -562,15 +585,12 @@ function useFastestLapFlashes(drivers: DriverSnapshot[]): Set<string> {
     initializedRef.current = true;
 
     setFlashes(current => {
-      const next = pruneExpiredFlashes(current, now);
       if (shouldFlash) {
         const expiresAt = now + 4500;
-        for (const driverId of best.driverIds) {
-          next[driverId] = expiresAt;
-        }
+        return Object.fromEntries(best.driverIds.map(driverId => [driverId, expiresAt]));
       }
 
-      return next;
+      return pruneExpiredFlashes(current, now);
     });
   }, [drivers.map(driver => `${driver.driverId}:${driver.bestLapSeconds ?? ''}`).join('|')]);
 
