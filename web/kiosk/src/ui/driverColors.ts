@@ -1,8 +1,13 @@
+export const trackerDriverPalette = ['#ff202d', '#ff8a00', '#00b0ff', '#5ff08a', '#d86bff', '#f1c40f', '#f6f8fb', '#00d5c8', '#ff5e9f', '#a6ff4d', '#6f8cff', '#ffcf5a'];
+
+export function trackerDriverColorByIndex(index: number): string {
+  return trackerDriverPalette[Math.max(0, index) % trackerDriverPalette.length];
+}
+
 export function stableDriverColor(driverId: string, label?: string): string {
-  const colors = ['#00d26a', '#ff202d', '#00a8ff', '#f1c40f', '#b65cff', '#ff8a00', '#f6f8fb', '#00d5c8', '#ff5e9f', '#a6ff4d', '#6f8cff', '#ffcf5a'];
   const numericId = Number.parseInt(driverId, 10);
   if (Number.isFinite(numericId) && numericId > 0) {
-    return colors[(numericId - 1) % colors.length];
+    return trackerDriverColorByIndex(numericId - 1);
   }
 
   const key = `${driverId || ''}:${label || ''}`;
@@ -11,5 +16,5 @@ export function stableDriverColor(driverId: string, label?: string): string {
     hash = ((hash << 5) - hash + key.charCodeAt(index)) | 0;
   }
 
-  return colors[Math.abs(hash) % colors.length];
+  return trackerDriverColorByIndex(Math.abs(hash));
 }

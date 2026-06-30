@@ -1,6 +1,6 @@
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
 import { type DriverSnapshot, type LiveSessionSnapshot, type TrackGeometryBounds, type TrackGeometryResponse } from '../tracksideApi';
-import { stableDriverColor } from './driverColors';
+import { stableDriverColor, trackerDriverColorByIndex } from './driverColors';
 
 interface TrackerPageProps {
   snapshot: LiveSessionSnapshot | null;
@@ -46,6 +46,7 @@ export function TrackerPage({ snapshot, geometry, clientRefreshHz }: TrackerPage
     .map(point => `${point.x},${point.y}`)
     .join(' '), [geometry?.points, mapMetrics]);
   const markers = useMemo(() => buildDriverMarkers(trackerSnapshot?.drivers ?? [], geometry?.bounds, mapMetrics), [trackerSnapshot?.drivers, geometry?.bounds, mapMetrics]);
+  const markerColors = useStableDriverColors(markers);
 
   return (
     <section className="trackerPage" aria-label="Driver tracker">
@@ -53,7 +54,7 @@ export function TrackerPage({ snapshot, geometry, clientRefreshHz }: TrackerPage
         <rect className="trackerMapBackground" x="0" y="0" width={mapMetrics.width} height={mapMetrics.height} rx="18" />
         {geometry?.isAvailable && pathPoints ? <polyline className="trackGeometryLine" points={pathPoints} /> : null}
         {markers.map(marker => (
-          <g key={marker.driverId} className="driverMarker" style={{ '--marker-color': stableDriverColor(marker.driverId, marker.label) } as CSSProperties} transform={`translate(${marker.x} ${marker.y})`}>
+          <g key={marker.driverId} className="driverMarker" style={{ '--marker-color': markerColors.get(marker.driverId) ?? stableDriverColor(marker.driverId, marker.label) } as CSSProperties} transform={`translate(${marker.x} ${marker.y})`}>
             <circle r="12" />
             <text y="4">{marker.rank}</text>
             <title>{marker.label}</title>
@@ -63,7 +64,7 @@ export function TrackerPage({ snapshot, geometry, clientRefreshHz }: TrackerPage
 
       <div className="trackerRoster" aria-label="Driver positions">
         {markers.map(marker => (
-          <div key={marker.driverId} className="trackerRosterItem" style={{ '--marker-color': stableDriverColor(marker.driverId, marker.label) } as CSSProperties}>
+          <div key={marker.driverId} className="trackerRosterItem" style={{ '--marker-color': markerColors.get(marker.driverId) ?? stableDriverColor(marker.driverId, marker.label) } as CSSProperties}>
             <span>{marker.rank}</span>
             <strong>{marker.label}</strong>
             <small>{marker.rigName}</small>
@@ -86,6 +87,23 @@ interface DriverMarker {
   rank: number;
   x: number;
   y: number;
+}
+
+function useStableDriverColors(markers: DriverMarker[]): Map<string, string> {
+  const assignments = useRef(new Map<string, string>());
+  const nextIndex = useRef(0);
+  const markerKey = markers.map(marker => marker.driverId).join('|');
+
+  return useMemo(() => {
+    for (const marker of markers) {
+      if (!assignments.current.has(marker.driverId)) {
+        assignments.current.set(marker.driverId, trackerDriverColorByIndex(nextIndex.current));
+        nextIndex.current += 1;
+      }
+    }
+
+    return new Map(assignments.current);
+  }, [markerKey, markers]);
 }
 
 function buildMapMetrics(bounds: TrackGeometryBounds | null | undefined): MapMetrics {

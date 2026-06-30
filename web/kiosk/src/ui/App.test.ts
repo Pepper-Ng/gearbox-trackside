@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { type DriverSnapshot, type LiveSessionSnapshot } from '../tracksideApi';
 import { getViewFromPath, toViewMode } from './App';
-import { stableDriverColor } from './driverColors';
+import { stableDriverColor, trackerDriverColorByIndex } from './driverColors';
 import { getConnectionIndicators, getDriverStatus, getRaceLapProgress, getRacePositionDelta } from './liveBoardLogic';
 
 describe('kiosk route selection', () => {
@@ -46,6 +46,10 @@ describe('live board helpers', () => {
 });
 
 describe('tracker colors', () => {
+  it('starts stable tracker assignments with venue colors', () => {
+    expect([0, 1, 2].map(trackerDriverColorByIndex)).toEqual(['#ff202d', '#ff8a00', '#00b0ff']);
+  });
+
   it('keeps a driver color stable regardless of row order', () => {
     const niko = stableDriverColor('7', 'Niko');
 
