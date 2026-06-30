@@ -529,7 +529,7 @@ tbody tr:last-child td {
 }
 
 .leaderboardTable .columnRank {
-  width: 64px;
+  width: 70px;
 }
 
 .leaderboardTable .columnDriver {
@@ -594,15 +594,22 @@ tbody tr:last-child td {
 .positionDeltaBadge {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  min-width: 24px;
-  min-height: 18px;
-  border: 1px solid currentColor;
-  border-radius: 999px;
+  gap: 2px;
   font-size: 11px;
   font-weight: 800;
   line-height: 1;
-  padding: 2px 5px;
+}
+
+.positionDeltaChevron {
+  width: 10px;
+  height: 6px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  overflow: visible;
 }
 
 .positionDeltaBadge-gained {
@@ -781,6 +788,63 @@ tbody tr:last-child td {
   padding: 28px 20px;
 }
 
+/* ============================================================
+   Combined (live board + tracker) layout
+   ============================================================ */
+
+.shell.shellWide {
+  width: min(1920px, calc(100vw - 24px));
+}
+
+.combinedLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 18px;
+  margin-top: 18px;
+}
+
+/* Tracker map inside combined panel — height auto to maintain viewBox aspect ratio.
+   Uses compound selector for specificity over .trackerMap single-class rules. */
+.combinedTrackerMap.trackerMap {
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  display: block;
+  filter: none;
+}
+
+/* Compact scrollable roster inside the combined tracker panel */
+.combinedTrackerRoster {
+  padding: 10px 12px;
+}
+
+/* Coloured left stripe on the rank cell — inherits --driver-color from the <tr> */
+.combinedLayout .rankCell {
+  box-shadow: inset 10px 0 0 var(--driver-color, transparent);
+  padding-left: 20px;
+}
+
+/* Rank number coloured to match the stripe */
+.combinedLayout .rankNumber {
+  color: var(--driver-color, var(--gt-soft));
+}
+
+/* Stack rank number above delta chevron to fit the narrow column */
+.combinedLayout .rankStack {
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+@media (max-width: 1200px) {
+  .combinedLayout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================================ */
+
 .trackerPage {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
@@ -807,6 +871,10 @@ tbody tr:last-child td {
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 12;
+}
+
+.driverMarker {
+  transition: transform 200ms linear;
 }
 
 .driverMarker circle {
@@ -1157,10 +1225,6 @@ tbody tr:last-child td {
 }
 
 @media (max-width: 380px) {
-  .leaderboardTable th.columnRank {
-    font-size: 0;
-  }
-
   .leaderboardTable .columnRank {
     width: 38px;
   }

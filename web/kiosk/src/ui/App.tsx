@@ -3,9 +3,10 @@ import { formatGap, formatLapTime, formatNumber } from '../format';
 import { BestLapBoardResponse, BestLapRow, BestLapWindow, ClientConfiguration, DriverSnapshot, KioskDisplayMode, LastFinishedSessionResponse, LastFinishedSessionRow, LiveSessionConnection, LiveSessionInfo, LiveSessionSnapshot, SectorSnapshot, startLiveSessionFeed, TrackGeometryResponse, TracksideApiClient } from '../tracksideApi';
 import { getConnectionIndicators, getDriverStatus, getRaceLapProgress, getRacePositionDelta, type ConnectionIndicators, type DriverStatus } from './liveBoardLogic';
 import { buildSectorStripeStates, createEmptySectorStripeCache, defaultSectorStripeStates, type SectorStripeCache, type SectorStripeState } from './sectorStripeLogic';
-import { TrackerPage } from './TrackerPage';
+import { buildDriverMarkers, buildMapMetrics, clampRefreshHz, toSvgPoint, TrackerPage, type DriverMarker, useStableDriverColors } from './TrackerPage';
+import { stableDriverColor } from './driverColors';
 
-type ViewMode = BestLapWindow | 'last' | 'live' | 'tracker';
+type ViewMode = BestLapWindow | 'last' | 'live' | 'tracker' | 'combined';
 
 const supportedPaths: Record<string, ViewMode> = {
   '/monthly': 'monthly',
@@ -14,6 +15,7 @@ const supportedPaths: Record<string, ViewMode> = {
   '/last-session': 'last',
   '/live': 'live',
   '/tracker': 'tracker',
+  '/combined': 'combined',
 };
 
 export function getViewFromPath(path: string): ViewMode | null {
@@ -92,7 +94,7 @@ export function App() {
   }, [client]);
 
   useEffect(() => {
-    if (view === 'live' || view === 'last' || view === 'tracker') {
+    if (view === 'live' || view === 'last' || view === 'tracker' || view === 'combined') {
       return;
     }
 
@@ -155,8 +157,8 @@ export function App() {
   }, [client, view]);
 
   return (
-    <main className="shell">
-      <ShellHeader status={view === 'live' ? status : view === 'tracker' ? '' : boardStatus} view={view} snapshot={snapshot} />
+    <main className={classNames('shell', view === 'combined' ? 'shellWide' : undefined)}>
+      <ShellHeader status={view === 'live' || view === 'combined' ? status : view === 'tracker' ? '' : boardStatus} view={view} snapshot={snapshot} />
 
       {view === 'live'
         ? <LiveBoard snapshot={snapshot} status={status} />
@@ -166,9 +168,16 @@ export function App() {
               geometry={trackGeometry}
               clientRefreshHz={clientConfiguration?.driverTrackerClientRefreshHz}
             />
-          : view === 'last'
-            ? <LastSessionBoard result={lastSession} />
-            : <BestLapBoard board={board} view={view} />}
+          : view === 'combined'
+            ? <CombinedPage
+                snapshot={snapshot}
+                geometry={trackGeometry}
+                status={status}
+                clientRefreshHz={clientConfiguration?.driverTrackerClientRefreshHz}
+              />
+            : view === 'last'
+              ? <LastSessionBoard result={lastSession} />
+              : <BestLapBoard board={board} view={view} />}
     </main>
   );
 }
@@ -223,6 +232,134 @@ function LiveBoard({ snapshot, status }: LiveBoardProps) {
           <LeaderboardTable snapshot={snapshot} />
         </div>
       </BoardPanel>
+    </>
+  );
+}
+
+interface CombinedPageProps {
+  snapshot: LiveSessionSnapshot | null;
+  geometry: TrackGeometryResponse | null;
+  status: string;
+  clientRefreshHz: number | null | undefined;
+}
+
+function CombinedPage({ snapshot, geometry, status, clientRefreshHz }: CombinedPageProps) {
+  const [clockAnchor, setClockAnchor] = useState({ seconds: 0, timestamp: Date.now() });
+  const [clockTick, setClockTick] = useState(Date.now());
+
+  useEffect(() => {
+    const currentSeconds = snapshot?.session?.currentSessionSeconds;
+    if (currentSeconds == null) {
+      return;
+    }
+
+    setClockAnchor({ seconds: currentSeconds, timestamp: Date.now() });
+  }, [snapshot?.session?.currentSessionSeconds]);
+
+  useEffect(() => {
+    if (snapshot?.session?.currentSessionSeconds == null) {
+      return;
+    }
+
+    const interval = window.setInterval(() => setClockTick(Date.now()), 50);
+    return () => window.clearInterval(interval);
+  }, [snapshot?.session?.currentSessionSeconds]);
+
+  const [trackerSnapshot, setTrackerSnapshot] = useState<LiveSessionSnapshot | null>(snapshot);
+  const latestSnapshotRef = useRef<LiveSessionSnapshot | null>(snapshot);
+  const refreshHz = clampRefreshHz(clientRefreshHz);
+
+  useEffect(() => {
+    latestSnapshotRef.current = snapshot;
+  }, [snapshot]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer = 0;
+
+    function scheduleTick() {
+      setTrackerSnapshot(latestSnapshotRef.current);
+      if (!cancelled) {
+        timer = window.setTimeout(scheduleTick, 1000 / refreshHz);
+      }
+    }
+
+    scheduleTick();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [refreshHz]);
+
+  const mapMetrics = useMemo(() => buildMapMetrics(geometry?.bounds), [geometry?.bounds]);
+  const pathPoints = useMemo(
+    () => (geometry?.points ?? [])
+      .map(point => toSvgPoint(point.x, point.y, mapMetrics))
+      .map(point => `${point.x},${point.y}`)
+      .join(' '),
+    [geometry?.points, mapMetrics],
+  );
+  const markers = useMemo(
+    () => buildDriverMarkers(trackerSnapshot?.drivers ?? [], geometry?.bounds, mapMetrics),
+    [trackerSnapshot?.drivers, geometry?.bounds, mapMetrics],
+  );
+  const markerColors = useStableDriverColors(markers);
+
+  const driverColorMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const driver of (trackerSnapshot?.drivers ?? [])) {
+      map.set(driver.driverId, markerColors.get(driver.driverId) ?? stableDriverColor(driver.driverId, driver.displayName || driver.rigName));
+    }
+    return map;
+  }, [trackerSnapshot?.drivers, markerColors]);
+
+  const interpolatedClockSeconds = snapshot?.session?.currentSessionSeconds != null
+    ? clockAnchor.seconds + Math.max(0, (clockTick - clockAnchor.timestamp) / 1000)
+    : undefined;
+  const connectionIndicators = getConnectionIndicators(status, snapshot);
+
+  return (
+    <>
+      <section className="sessionStrip" aria-label="Session summary">
+        <Metric label="Track" value={snapshot?.session.trackName} indicators={<CompactStatusDots indicators={connectionIndicators} />} />
+        <Metric label="Session" value={formatSessionValue(snapshot)} />
+        <Metric label="Clock" value={formatLapTime(interpolatedClockSeconds)} />
+      </section>
+
+      <div className="combinedLayout">
+        <BoardPanel title="Live Board" meta={`${snapshot?.drivers.length ?? 0} drivers`} metaClassName="liveDriverCount" live>
+          <div
+            className="tableFrame liveBoardFrame"
+            style={{ '--flag-color': getFlagColor(snapshot?.session.overallFlag), '--flag-stripe-background': getFlagStripeBackground(snapshot?.session.overallFlag) } as React.CSSProperties}
+          >
+            <LeaderboardTable snapshot={snapshot} hideRig driverColors={driverColorMap} />
+          </div>
+        </BoardPanel>
+
+        <BoardPanel title="Tracker" meta="">
+          <svg
+            className="trackerMap combinedTrackerMap"
+            viewBox={`0 0 ${mapMetrics.width} ${mapMetrics.height}`}
+            role="img"
+            aria-label={trackerSnapshot?.session.trackName ?? 'Track map'}
+          >
+            <rect className="trackerMapBackground" x="0" y="0" width={mapMetrics.width} height={mapMetrics.height} rx="18" />
+            {geometry?.isAvailable && pathPoints ? <polyline className="trackGeometryLine" points={pathPoints} /> : null}
+            {markers.map(marker => (
+              <g
+                key={marker.driverId}
+                className="driverMarker"
+                style={{ '--marker-color': markerColors.get(marker.driverId) ?? stableDriverColor(marker.driverId, marker.label) } as React.CSSProperties}
+                transform={`translate(${marker.x} ${marker.y})`}
+              >
+                <circle r="12" />
+                <text y="4">{marker.rank}</text>
+                <title>{marker.label}</title>
+              </g>
+            ))}
+          </svg>
+        </BoardPanel>
+      </div>
     </>
   );
 }
@@ -298,9 +435,13 @@ function BestLapTable({ rows, showTrack }: BestLapTableProps) {
 interface LeaderboardTableProps {
   /** Current live-session snapshot. */
   snapshot: LiveSessionSnapshot | null;
+  /** When true, omit the Rig column to save horizontal space. */
+  hideRig?: boolean;
+  /** Driver colour map (driverId → CSS colour) for the coloured left stripe in the combined view. */
+  driverColors?: Map<string, string>;
 }
 
-function LeaderboardTable({ snapshot }: LeaderboardTableProps) {
+function LeaderboardTable({ snapshot, hideRig, driverColors }: LeaderboardTableProps) {
   const drivers = snapshot?.drivers ?? [];
   const fastestLapFlashes = useFastestLapFlashes(drivers);
   const positionDeltas = useRacePositionDeltas(snapshot);
@@ -311,9 +452,9 @@ function LeaderboardTable({ snapshot }: LeaderboardTableProps) {
     <table className="leaderboardTable">
       <thead>
         <tr>
-          <th className="columnRank">Rank</th>
+          <th className="columnRank" aria-label="Rank"></th>
           <th className="columnDriver">Driver</th>
-          <th className="columnRig">Rig</th>
+          {!hideRig ? <th className="columnRig">Rig</th> : null}
           <th className="columnLaps">Laps</th>
           <th className="columnBest">Best</th>
           <th className="columnCurrent">Current</th>
@@ -332,6 +473,7 @@ function LeaderboardTable({ snapshot }: LeaderboardTableProps) {
               key={driver.driverId}
               ref={element => setRowRef(driver.driverId, element)}
               className={classNames('liveBoardRow', driver.isOverallBestLap ? 'bestLapRow' : undefined, fastestLapFlashes.has(driver.driverId) ? 'fastestLapFlash' : undefined)}
+              style={driverColors?.has(driver.driverId) ? { '--driver-color': driverColors.get(driver.driverId) } as React.CSSProperties : undefined}
             >
               <td className="rankCell columnRank">
                 <span className="rankStack">
@@ -345,7 +487,7 @@ function LeaderboardTable({ snapshot }: LeaderboardTableProps) {
                   <DriverMetaLine driver={driver} status={driverStatus} stripes={sectorStripeStates.get(driver.driverId) ?? defaultSectorStripeStates} />
                 </div>
               </td>
-              <td className="columnRig">{driver.rigName}</td>
+              {!hideRig ? <td className="columnRig">{driver.rigName}</td> : null}
               <td className="columnLaps">{driver.completedLaps}</td>
               <td className={classNames('columnBest', driver.isOverallBestLap ? 'bestTime' : undefined)}>{formatLapTime(driver.bestLapSeconds)}</td>
               <CurrentLapCell driver={driver} status={driverStatus} />
@@ -368,15 +510,10 @@ interface SectorCellProps {
 }
 
 function SectorCell({ sector }: SectorCellProps) {
-  const primarySeconds = sector?.currentSeconds ?? sector?.lastSeconds;
-  const isOverallBestPrimary = isFiniteNumber(primarySeconds)
-    && isFiniteNumber(sector?.bestSeconds)
-    && sector?.isOverallBest === true
-    && isSameTime(primarySeconds, sector.bestSeconds);
   return (
-    <td className={classNames('columnSector', 'sectorCell', isOverallBestPrimary ? 'bestTime' : undefined)}>
-      <span>{formatLapTime(primarySeconds)}</span>
-      <small>{formatLapTime(sector?.bestSeconds)}</small>
+    <td className="columnSector sectorCell">
+      <span>{formatLapTime(sector?.lastSeconds)}</span>
+      <small className={sector?.isOverallBest ? 'bestTime' : undefined}>{formatLapTime(sector?.bestSeconds)}</small>
     </td>
   );
 }
@@ -386,9 +523,16 @@ function PositionDeltaBadge({ delta }: { delta: number | null | undefined }) {
     return null;
   }
 
+  const gained = delta > 0;
   return (
-    <span className={classNames('positionDeltaBadge', delta > 0 ? 'positionDeltaBadge-gained' : 'positionDeltaBadge-lost')}>
-      {delta > 0 ? `+${delta}` : delta}
+    <span className={classNames('positionDeltaBadge', gained ? 'positionDeltaBadge-gained' : 'positionDeltaBadge-lost')}>
+      <svg className="positionDeltaChevron" viewBox="0 0 10 6" aria-hidden="true">
+        {gained
+          ? <polyline points="1,5 5,1 9,5" />
+          : <polyline points="1,1 5,5 9,1" />
+        }
+      </svg>
+      {Math.abs(delta)}
     </span>
   );
 }
@@ -664,6 +808,8 @@ export function toViewMode(displayMode: KioskDisplayMode | string): ViewMode {
       return 'live';
     case 'tracker':
       return 'tracker';
+    case 'combined':
+      return 'combined';
     default:
       return 'monthly';
   }
@@ -818,24 +964,25 @@ interface ShellHeaderProps {
 }
 
 function ShellHeader({ status, view, snapshot }: ShellHeaderProps) {
-  const connectionIndicators = getConnectionIndicators(status, view === 'live' ? snapshot : null);
+  const isLiveView = view === 'live' || view === 'combined';
+  const connectionIndicators = getConnectionIndicators(status, isLiveView ? snapshot : null);
   const session = snapshot?.session;
   const showFlagText = shouldShowFlagSwatchText(session?.overallFlag, session?.phase);
   const sanitized = sanitizeStatus(status);
-  const modeLabel = view === 'tracker' ? 'Tracker' : 'Leaderboard';
+  const modeLabel = view === 'tracker' ? 'Tracker' : view === 'combined' ? 'Combined' : 'Leaderboard';
 
   return (
-    <header className={classNames('topbar', view === 'live' ? 'topbar-live' : undefined)}>
+    <header className={classNames('topbar', isLiveView ? 'topbar-live' : undefined)}>
       <BrandMark />
       <div className="topbarMeta" aria-live="polite">
         <div className="topbarPills">
-          {view === 'live' && connectionIndicators.backendConnected ? <span className="statusPill connection">CONNECTED</span> : null}
-          {view === 'live' && connectionIndicators.liveData ? <span className="statusPill live">LIVE</span> : null}
-          {view !== 'live' ? <span className="statusPill">{modeLabel}</span> : null}
+          {isLiveView && connectionIndicators.backendConnected ? <span className="statusPill connection">CONNECTED</span> : null}
+          {isLiveView && connectionIndicators.liveData ? <span className="statusPill live">LIVE</span> : null}
+          {!isLiveView ? <span className="statusPill">{modeLabel}</span> : null}
         </div>
         {sanitized ? <p>{sanitized}</p> : null}
       </div>
-      {view === 'live' && session?.overallFlag ? (
+      {isLiveView && session?.overallFlag ? (
         <div className="topbarFlag">
           <div className="flagSwatch" aria-label={getFlagDisplayText(session)} role="img" style={{ background: showFlagText ? getFlagColor(session.overallFlag) : getCheckeredFlagBackground() }}>
             {showFlagText ? <span>{getFlagDisplayText(session)}</span> : null}

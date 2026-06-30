@@ -75,12 +75,12 @@ export function TrackerPage({ snapshot, geometry, clientRefreshHz }: TrackerPage
   );
 }
 
-interface MapMetrics {
+export interface MapMetrics {
   width: number;
   height: number;
 }
 
-interface DriverMarker {
+export interface DriverMarker {
   driverId: string;
   rigName: string;
   label: string;
@@ -89,7 +89,7 @@ interface DriverMarker {
   y: number;
 }
 
-function useStableDriverColors(markers: DriverMarker[]): Map<string, string> {
+export function useStableDriverColors(markers: DriverMarker[]): Map<string, string> {
   const assignments = useRef(new Map<string, string>());
   const nextIndex = useRef(0);
   const markerKey = markers.map(marker => marker.driverId).join('|');
@@ -106,7 +106,7 @@ function useStableDriverColors(markers: DriverMarker[]): Map<string, string> {
   }, [markerKey, markers]);
 }
 
-function buildMapMetrics(bounds: TrackGeometryBounds | null | undefined): MapMetrics {
+export function buildMapMetrics(bounds: TrackGeometryBounds | null | undefined): MapMetrics {
   if (!bounds) {
     return { width: mapWidth, height: 640 };
   }
@@ -119,7 +119,7 @@ function buildMapMetrics(bounds: TrackGeometryBounds | null | undefined): MapMet
   };
 }
 
-function buildDriverMarkers(drivers: DriverSnapshot[], bounds: TrackGeometryBounds | null | undefined, metrics: MapMetrics): DriverMarker[] {
+export function buildDriverMarkers(drivers: DriverSnapshot[], bounds: TrackGeometryBounds | null | undefined, metrics: MapMetrics): DriverMarker[] {
   if (!bounds) {
     return [];
   }
@@ -149,14 +149,14 @@ function buildDriverMarkers(drivers: DriverSnapshot[], bounds: TrackGeometryBoun
     });
 }
 
-function toSvgPoint(normalizedX: number, normalizedY: number, metrics: MapMetrics): { x: number; y: number } {
+export function toSvgPoint(normalizedX: number, normalizedY: number, metrics: MapMetrics): { x: number; y: number } {
   return {
     x: mapPadding + (Math.min(1, Math.max(0, normalizedX)) * (metrics.width - (mapPadding * 2))),
     y: mapPadding + (Math.min(1, Math.max(0, normalizedY)) * (metrics.height - (mapPadding * 2))),
   };
 }
 
-function clampRefreshHz(value: number | null | undefined): number {
+export function clampRefreshHz(value: number | null | undefined): number {
   if (!isFiniteNumber(value)) {
     return 50;
   }
