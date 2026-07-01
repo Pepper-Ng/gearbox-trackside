@@ -1001,7 +1001,7 @@ function ShellHeader({ status, view, snapshot }: ShellHeaderProps) {
       </div>
       {isLiveView && session?.overallFlag ? (
         <div className="topbarFlag">
-          <div className="flagSwatch" aria-label={getFlagDisplayText(session)} role="img" style={{ background: showFlagText ? getFlagColor(session.overallFlag) : getCheckeredFlagBackground() }}>
+          <div className="flagSwatch" aria-label={getFlagDisplayText(session)} role="img" style={{ background: (isCheckeredFlag(session.overallFlag) || session.phase === 'SessionOver') ? getCheckeredFlagBackground() : getFlagColor(session.overallFlag) }}>
             {showFlagText ? <span>{getFlagDisplayText(session)}</span> : null}
           </div>
         </div>
