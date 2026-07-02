@@ -737,6 +737,571 @@ tbody tr:last-child td {
   padding: 8px;
 }
 
+.sessionsWorkspaceShell {
+  --session-app-surface: #d9e1ea;
+  --session-app-panel: #e9eef4;
+  --session-app-panel-soft: #dde5ee;
+  --session-app-border: #a9b6c7;
+  --session-app-border-strong: #8797ab;
+  --session-app-text: #142133;
+  --session-app-muted: #5d6b7b;
+  --session-app-accent: #2b6e98;
+  --session-app-accent-soft: #cfdceb;
+  --session-app-live: #e8dbde;
+  --session-app-shadow: 0 10px 24px rgba(16, 30, 46, .1);
+}
+
+.sessionsWorkspaceShell .configurationPanel,
+.sessionsWorkspaceShell .sessionWorkspaceDock {
+  border-color: var(--session-app-border);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(221, 228, 238, .95), rgba(204, 214, 226, .96));
+  box-shadow: var(--session-app-shadow);
+}
+
+.sessionsWorkspaceShell h2,
+.sessionsWorkspaceShell h3,
+.sessionsWorkspaceShell th,
+.sessionsWorkspaceShell td,
+.sessionsWorkspaceShell strong,
+.sessionsWorkspaceShell summary,
+.sessionsWorkspaceShell label span {
+  color: var(--session-app-text);
+}
+
+.sessionsWorkspaceShell .configurationPanel > p,
+.sessionsWorkspaceShell .sessionWorkspaceHeader p,
+.sessionsWorkspaceShell #sessionsStatus,
+.sessionsWorkspaceShell .sessionWorkspaceEmpty,
+.sessionsWorkspaceShell .sessionSummaryFactLabel,
+.sessionsWorkspaceShell .sessionSummaryRowTitle p {
+  color: var(--session-app-muted);
+}
+
+.sessionWorkspaceSection {
+  grid-column: 1 / -1;
+  border: 1px solid var(--session-app-border);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(223, 230, 239, .9), rgba(214, 223, 234, .95));
+  padding: 14px;
+}
+
+.sessionWorkspaceHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.sessionWorkspaceHeader p {
+  max-width: 72ch;
+  line-height: 1.45;
+  margin-top: 6px;
+}
+
+.sessionCardGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+#liveSessionSurface {
+  grid-template-columns: 1fr;
+}
+
+.sessionSummaryCard,
+.participantDetailPanel,
+.sessionCompareSurface {
+  border: 1px solid var(--session-app-border);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(239, 243, 248, .96), rgba(227, 234, 242, .98));
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .5), 0 4px 10px rgba(20, 33, 51, .05);
+}
+
+.sessionSummaryCard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  padding: 10px 12px;
+}
+
+.sessionSummaryRowTitle {
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) minmax(200px, 1.3fr);
+  align-items: baseline;
+  gap: 6px 14px;
+  min-width: 0;
+}
+
+.sessionSummaryCard h4 {
+  margin: 0;
+  font-family: "Rajdhani", "Bahnschrift", "Segoe UI", sans-serif;
+  font-size: 18px;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  color: #142133;
+}
+
+.sessionSummaryRowTitle p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.25;
+  text-align: left;
+}
+
+.sessionSummaryCard.selectedRow,
+.sessionArchiveGroup .sessionSummaryCard.selectedRow {
+  border-color: var(--session-app-accent);
+  box-shadow: 0 0 0 2px rgba(31, 111, 178, .18);
+}
+
+.liveSessionCard {
+  border-color: #b9a8ae;
+  background: linear-gradient(90deg, rgba(237, 241, 246, .96) 0, var(--session-app-live) 100%);
+}
+
+.sessionMetrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+}
+
+.sessionSummaryCard .sessionMetrics {
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  gap: 8px 10px;
+}
+
+.sessionMetricCard {
+  min-height: 86px;
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .035);
+  padding: 12px;
+}
+
+.sessionMetricCard span {
+  display: block;
+  color: var(--gt-muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.sessionMetricCard strong {
+  display: block;
+  margin-top: 10px;
+  color: var(--gt-text);
+  font-family: "Rajdhani", "Bahnschrift", "Segoe UI", sans-serif;
+  font-size: 24px;
+  line-height: 1.05;
+}
+
+.sessionSummaryCard .sessionMetricCard {
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.sessionSummaryCard .sessionMetricCard span {
+  font-size: 10px;
+  letter-spacing: .1em;
+}
+
+.sessionSummaryCard .sessionMetricCard strong {
+  margin-top: 3px;
+  font-size: 18px;
+}
+
+.sessionSummaryRowMeta {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(140px, 1fr) minmax(180px, 1.4fr) max-content;
+  align-items: center;
+  gap: 8px 16px;
+  min-width: 0;
+}
+
+.sessionSummaryFact {
+  display: grid;
+  grid-template-columns: minmax(100px, max-content) minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sessionSummaryFactLabel {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.sessionSummaryFact strong {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.sessionCardTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sessionTag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .05);
+  color: var(--gt-soft);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  padding: 0 8px;
+  text-transform: uppercase;
+}
+
+.sessionTag.good {
+  border-color: rgba(95, 240, 138, .28);
+  color: var(--gt-good);
+}
+
+.sessionTag.warning {
+  border-color: rgba(255, 179, 107, .28);
+  color: var(--gt-warning);
+}
+
+.sessionTag.neutral {
+  border-color: rgba(0, 176, 255, .24);
+  color: var(--gt-blue);
+}
+
+.sessionArchive {
+  display: grid;
+  gap: 12px;
+}
+
+.sessionArchiveGroup {
+  border: 1px solid var(--session-app-border);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(224, 231, 240, .94), rgba(214, 223, 234, .98));
+  overflow: hidden;
+}
+
+.sessionArchiveGroup summary {
+  cursor: pointer;
+  position: relative;
+  font-family: "Rajdhani", "Bahnschrift", "Segoe UI", sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  list-style: none;
+  padding: 12px 14px 12px 36px;
+  text-transform: uppercase;
+}
+
+.sessionArchiveGroup summary::before {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid var(--session-app-muted);
+  border-bottom: 2px solid var(--session-app-muted);
+  content: "";
+  transform: translateY(-60%) rotate(45deg);
+  transition: transform .14s ease;
+}
+
+.sessionArchiveGroup[open] summary::before {
+  transform: translateY(-35%) rotate(45deg);
+}
+
+.sessionArchiveGroup summary::-webkit-details-marker {
+  display: none;
+}
+
+.sessionArchiveGroup .sessionCardGrid {
+  padding: 0 14px 14px;
+}
+
+.sessionSummaryCard .buttonRow {
+  margin-top: 0;
+  margin-left: 0;
+  justify-self: end;
+  width: max-content;
+  grid-column: 4;
+}
+
+.sessionSummaryCard .buttonRow button {
+  min-height: 28px;
+  border-color: var(--session-app-border-strong);
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(227, 234, 242, .98), rgba(212, 222, 233, .98));
+  color: var(--session-app-text);
+  font-size: 11px;
+  letter-spacing: .08em;
+  padding: 0 10px;
+}
+
+.sessionsWorkspaceShell .buttonRow button,
+.sessionsWorkspaceShell .tableButton,
+.sessionsWorkspaceShell .sessionWorkspaceTab,
+.sessionsWorkspaceShell .sessionWorkspaceTabAction {
+  border-color: var(--session-app-border-strong);
+  color: var(--session-app-text);
+}
+
+.sessionsWorkspaceShell .buttonRow button,
+.sessionsWorkspaceShell .tableButton {
+  background: linear-gradient(180deg, rgba(226, 233, 241, .98), rgba(210, 220, 231, .98));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45);
+}
+
+.sessionsWorkspaceShell .buttonRow button:first-child,
+.sessionsWorkspaceShell #refreshSessions,
+.sessionsWorkspaceShell #compareDriversButton,
+.sessionsWorkspaceShell #openTelemetryButton,
+.sessionsWorkspaceShell #toggleManageResultsButton,
+.sessionsWorkspaceShell #closeSelectedSessionButton {
+  background: linear-gradient(180deg, rgba(219, 229, 239, .98), rgba(201, 214, 228, .98));
+}
+
+.sessionsWorkspaceShell #deleteEmptySessions,
+.sessionsWorkspaceShell .dangerButton {
+  background: linear-gradient(180deg, rgba(233, 220, 223, .96), rgba(224, 208, 212, .98));
+  border-color: #b9989f;
+  color: #7a2e39;
+}
+
+.sessionsWorkspaceShell .buttonRow button:hover,
+.sessionsWorkspaceShell .buttonRow button:focus-visible,
+.sessionsWorkspaceShell .tableButton:hover,
+.sessionsWorkspaceShell .tableButton:focus-visible {
+  border-color: var(--session-app-accent);
+  box-shadow: 0 0 0 3px rgba(43, 110, 152, .12);
+}
+
+.sessionWorkspaceDock {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.sessionWorkspaceCanvas[hidden],
+.sessionWorkspaceOverviewPanel[hidden],
+.sessionWorkspaceTab[hidden],
+.sessionWorkspaceTabAction[hidden],
+.sessionWorkspaceUtilityRow[hidden] {
+  display: none;
+}
+
+.sessionWorkspaceOverviewPanel {
+  grid-template-columns: 1fr;
+}
+
+.sessionWorkspaceTabs {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 1px;
+  border-bottom: 1px solid var(--session-app-border);
+  background: linear-gradient(180deg, rgba(218, 226, 236, .96) 0, rgba(206, 216, 228, .98) 100%);
+  padding: 10px 12px 0;
+}
+
+.sessionWorkspaceTab,
+.sessionWorkspaceTabAction {
+  min-height: 38px;
+  cursor: pointer;
+  border: 1px solid var(--session-app-border);
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  background: linear-gradient(180deg, rgba(215, 224, 234, .98), rgba(202, 213, 225, .98));
+  color: var(--session-app-muted);
+  font-weight: 700;
+  padding: 0 14px;
+}
+
+.sessionWorkspaceTabs > .sessionWorkspaceTab:not(.sessionWorkspaceTabTemporary) {
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
+}
+
+.sessionWorkspaceTab.active {
+  background: linear-gradient(180deg, rgba(236, 241, 247, .98), rgba(229, 236, 244, .98));
+  color: var(--session-app-text);
+}
+
+.sessionWorkspaceTabTemporary {
+  margin-left: 16px;
+  border-color: #8c9db2;
+  background: linear-gradient(180deg, rgba(201, 214, 228, .98), rgba(188, 202, 219, .98));
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sessionWorkspaceTabTemporary.active {
+  background: linear-gradient(180deg, rgba(226, 235, 245, .98), rgba(214, 225, 238, .98));
+  box-shadow: inset 0 2px 0 rgba(71, 116, 158, .24);
+}
+
+.sessionWorkspaceTabTemporary + .sessionWorkspaceTabClose {
+  margin-left: -1px;
+  border-top-left-radius: 0;
+  border-left-color: transparent;
+}
+
+.sessionWorkspaceTabAction {
+  border-bottom: 1px solid var(--session-app-border);
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+}
+
+.sessionWorkspaceTabClose {
+  min-width: 34px;
+  border-color: #8c9db2;
+  background: linear-gradient(180deg, rgba(208, 219, 232, .98), rgba(193, 207, 223, .98));
+  color: #38506a;
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 0 10px;
+}
+
+.sessionWorkspaceTabClose:hover,
+.sessionWorkspaceTabClose:focus-visible {
+  border-color: #6e87a1;
+  box-shadow: 0 0 0 3px rgba(43, 110, 152, .12);
+}
+
+.sessionWorkspaceUtilityRow {
+  border-top: 1px solid var(--session-app-border);
+  background: linear-gradient(180deg, rgba(221, 228, 237, .92), rgba(210, 219, 230, .96));
+  margin: 0;
+  padding: 12px 16px;
+}
+
+.sessionWorkspaceCanvas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px 18px;
+  padding: 18px;
+  background: linear-gradient(180deg, rgba(232, 238, 245, .98), rgba(224, 231, 240, .98));
+}
+
+.sessionWorkspaceCanvas h2,
+.sessionWorkspaceCanvas h3,
+.sessionWorkspaceCanvas strong,
+.sessionWorkspaceCanvas th,
+.sessionWorkspaceCanvas td {
+  color: var(--session-app-text);
+}
+
+.sessionWorkspaceCanvas p,
+.sessionWorkspaceCanvas .wideField,
+.sessionWorkspaceCanvas label span {
+  color: var(--session-app-muted);
+}
+
+.sessionWorkspaceCanvas .tableFrame {
+  border: 1px solid var(--session-app-border);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(231, 237, 244, .98), rgba(221, 229, 238, .98));
+}
+
+.sessionWorkspaceEmptyState {
+  min-height: 180px;
+  align-content: start;
+}
+
+.sessionDetailHeader {
+  grid-column: 1 / -1;
+  align-items: start;
+}
+
+.sessionDetailActions {
+  justify-content: flex-end;
+}
+
+.sessionDetailActions button.active {
+  border-color: var(--session-app-accent);
+  background: var(--session-app-accent-soft);
+  box-shadow: inset 0 -2px 0 var(--session-app-accent);
+}
+
+.compactParticipantsTable {
+  min-width: 760px;
+}
+
+.compactParticipantsTable th:first-child,
+.compactParticipantsTable td:first-child {
+  width: 70px;
+}
+
+.compactParticipantsTable th:last-child,
+.compactParticipantsTable td:last-child {
+  width: 120px;
+}
+
+.sessionCompareSurface,
+.sessionParticipantDetailSurface {
+  grid-column: 1 / -1;
+}
+
+.sessionCompareSurface {
+  margin-top: 2px;
+  padding: 16px;
+}
+
+.sessionCompareSurface > p {
+  color: var(--session-app-muted);
+  margin-top: 8px;
+}
+
+.sessionParticipantDetailSurface {
+  display: grid;
+  gap: 14px;
+}
+
+.participantDetailPanel {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.sessionManagePanel {
+  border-color: #c5b18a;
+  background: linear-gradient(180deg, rgba(237, 231, 213, .92), rgba(231, 223, 202, .96));
+}
+
+.sessionManageForm {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.sessionManageForm .buttonRow {
+  margin-top: 0;
+}
+
+.sessionWorkspaceEmpty {
+  border: 1px dashed var(--session-app-border-strong);
+  border-radius: 8px;
+  margin: 0;
+  padding: 16px;
+}
+
 @media (max-width: 980px) {
   .topbar {
     grid-template-columns: 1fr;
@@ -759,6 +1324,43 @@ tbody tr:last-child td {
   .viewTabs,
   .adminTabs {
     position: static;
+  }
+
+  .sessionWorkspaceHeader,
+  .sessionDetailHeader {
+    flex-direction: column;
+  }
+
+  .sessionSummaryRowTitle,
+  .sessionSummaryRowMeta {
+    grid-template-columns: 1fr;
+  }
+
+  .sessionSummaryRowMeta {
+    align-items: flex-start;
+  }
+
+  .sessionSummaryFact {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .sessionSummaryFactLabel {
+    white-space: normal;
+  }
+
+  .sessionSummaryCard .buttonRow {
+    justify-self: start;
+    grid-column: 1 / -1;
+    width: auto;
+  }
+
+  .sessionManageForm {
+    grid-template-columns: 1fr;
+  }
+
+  .sessionDetailActions {
+    justify-content: flex-start;
   }
 }
 
