@@ -467,6 +467,7 @@ Agent implementation tasks:
 * Create reusable visual tokens for color, spacing, typography, borders, focus states, table density, alerts, and buttons in the service-hosted static UI and React kiosk app.
 * Redesign the kiosk as a presentable race timing display: dark/high-contrast board, clear mode hierarchy, large readable driver names and lap times, strong best-lap/sector states, and intentional empty/error states.
 * Redesign the admin shell as a calm operational dashboard: consistent tabs, panels, forms, tables, correction controls, status messages, and safe destructive/invalidating actions.
+* Treat the admin Sessions refactor as a dedicated staff-workspace redesign rather than a table tidy-up. The detailed product and implementation brief lives in `docs/session-results-workspace-plan.md` and should guide the Sessions surface during Phase 3.
 * Keep UI modular: data fetching, formatting, table rendering, correction controls, and layout/styling should remain separable so future React/admin routing or branding can replace the visual layer without rewriting backend logic.
 * Avoid adding new product behavior unless the styling pass reveals a small usability gap that is cheap and local.
 * Add fixture screenshots or browser smoke checks where practical so the kiosk/admin layouts do not regress into default tables or unreadable states.
@@ -707,10 +708,11 @@ Validation:
 If an implementation agent starts from this document after Phase 2, begin with Phase 3:
 
 1. Build the reusable UI foundation and venue-preview styling for the service-hosted kiosk/admin pages and the React kiosk app.
-2. Keep UI work modular: do not mix data fetching, business rules, and layout styling in ways that would make later telemetry/report pages expensive to add.
-3. Use fixture data first and add screenshot/browser smoke checks where practical so the design can be validated locally.
-4. After the UI foundation is in place, move to Phase 4 local rFactor 2 integration validation using the modular shared-memory source boundary.
-5. Carry forward telemetry source requirements from `docs/telemetry-report-poc-plan.md` for Phase 5; high-cadence shared-memory robustness belongs with telemetry/report work, not the low-cadence live timing board.
+2. Use `docs/session-results-workspace-plan.md` as the product and implementation brief for the admin Sessions refactor. The page should be treated as a staff workspace backed by session data, not as a raw session-history editor.
+3. Keep UI work modular: do not mix data fetching, business rules, and layout styling in ways that would make later telemetry/report pages expensive to add.
+4. Use fixture data first and add screenshot/browser smoke checks where practical so the design can be validated locally.
+5. After the UI foundation is in place, move to Phase 4 local rFactor 2 integration validation using the modular shared-memory source boundary.
+6. Carry forward telemetry source requirements from `docs/telemetry-report-poc-plan.md` for Phase 5; high-cadence shared-memory robustness belongs with telemetry/report work, not the low-cadence live timing board.
 
 Do not restart Phase 0A, Steam setup, venue setup, printer setup, or camera plugin work unless the user explicitly provides those prerequisites and asks for that phase. Venue-specific host/install decisions belong in Phase 6, and optional camera/printing/replay work belongs in Phase 10.
 

@@ -29,9 +29,29 @@ const discoveredMapsElement = document.querySelector('#discoveredMaps');
 const ambiguousMapsElement = document.querySelector('#ambiguousMaps');
 const adminUsersElement = document.querySelector('#adminUsers');
 const sessionsStatusElement = document.querySelector('#sessionsStatus');
-const sessionRowsElement = document.querySelector('#sessionRows');
+const sessionOverviewLiveTabButtonElement = document.querySelector('#sessionOverviewLiveTabButton');
+const sessionOverviewRecentTabButtonElement = document.querySelector('#sessionOverviewRecentTabButton');
+const sessionOverviewOlderTabButtonElement = document.querySelector('#sessionOverviewOlderTabButton');
+const sessionOverviewLivePanelElement = document.querySelector('#sessionOverviewLivePanel');
+const sessionOverviewRecentPanelElement = document.querySelector('#sessionOverviewRecentPanel');
+const sessionOverviewOlderPanelElement = document.querySelector('#sessionOverviewOlderPanel');
+const sessionWorkspaceUtilityRowElement = document.querySelector('#sessionWorkspaceUtilityRow');
+const liveSessionSurfaceElement = document.querySelector('#liveSessionSurface');
+const recentSessionsSurfaceElement = document.querySelector('#recentSessionsSurface');
+const olderSessionsSurfaceElement = document.querySelector('#olderSessionsSurface');
+const selectedSessionPanelElement = document.querySelector('#selectedSessionPanel');
 const selectedSessionTitleElement = document.querySelector('#selectedSessionTitle');
+const selectedSessionSummaryElement = document.querySelector('#selectedSessionSummary');
+const selectedSessionMetricsElement = document.querySelector('#selectedSessionMetrics');
+const selectedSessionTabButtonElement = document.querySelector('#selectedSessionTabButton');
+const selectedSessionTabLabelElement = document.querySelector('#selectedSessionTabLabel');
+const closeSelectedSessionButton = document.querySelector('#closeSelectedSessionButton');
 const sessionParticipantRowsElement = document.querySelector('#sessionParticipantRows');
+const sessionParticipantDetailSurfaceElement = document.querySelector('#sessionParticipantDetailSurface');
+const sessionCompareSurfaceElement = document.querySelector('#sessionCompareSurface');
+const compareDriversButton = document.querySelector('#compareDriversButton');
+const openTelemetryButton = document.querySelector('#openTelemetryButton');
+const toggleManageResultsButton = document.querySelector('#toggleManageResultsButton');
 const refreshSessionsButton = document.querySelector('#refreshSessions');
 const deleteEmptySessionsButton = document.querySelector('#deleteEmptySessions');
 const sessionSetupRowsElement = document.querySelector('#sessionSetupRows');
@@ -73,6 +93,11 @@ let sessionSetupSaveSequence = 0;
 let isRenderingSessionSetup = false;
 let driverProfiles = [];
 let selectedSessionId = null;
+let selectedSessionDetail = null;
+let selectedParticipantId = null;
+let isManageResultsMode = false;
+let isCompareVisible = false;
+let activeSessionWorkspaceTab = 'recent';
 
 const languageStorageKey = 'trackside.admin.language';
 const tabStorageKey = 'trackside.admin.tab';
@@ -206,8 +231,14 @@ const translations = {
     'profiles.email': 'Email',
     'profiles.notes': 'Notes',
     'profiles.create': 'Create Profile',
-    'sessions.title': 'Session History',
-    'sessions.description': 'Stored sessions used for historical boards. This is not the live-session monitor.',
+    'sessions.title': 'Session Workspace',
+    'sessions.description': 'This workspace helps staff inspect recent results, compare drivers, and only rarely manage stored results.',
+    'sessions.liveTitle': 'In Progress',
+    'sessions.liveDescription': 'Active sessions stay visible here without taking over the results workspace.',
+    'sessions.recentTitle': 'Recently Completed',
+    'sessions.recentDescription': 'Up to 4 completed sessions from the last 3 hours stay ready for staff and customer follow-up.',
+    'sessions.olderTitle': 'Older Results',
+    'sessions.olderDescription': 'Earlier results stay grouped below so archive browsing does not crowd the latest sessions.',
     'sessions.boards': 'Boards',
     'sessions.track': 'Track',
     'sessions.kind': 'Session',
@@ -218,16 +249,53 @@ const translations = {
     'sessions.refresh': 'Refresh Sessions',
     'sessions.deleteEmpty': 'Delete Empty Sessions',
     'sessions.view': 'View',
+    'sessions.openResults': 'Open Results',
     'sessions.include': 'Include',
     'sessions.exclude': 'Exclude',
     'sessions.delete': 'Delete',
     'sessions.included': 'Included',
     'sessions.excluded': 'Excluded',
-    'sessions.detailTitle': 'Session Detail',
+    'sessions.detailTitle': 'Driver Results',
+    'sessions.detailDescription': 'Select a session to reveal detailed information without disrupting the list.',
+    'sessions.emptyDetail': 'Select a session from the workspace to inspect driver results and open follow-up actions.',
+    'sessions.closeResults': 'Close Results',
     'sessions.includedMessage': 'Session included in historical boards.',
     'sessions.excludedMessage': 'Session excluded from historical boards.',
     'sessions.correction': 'Correction',
     'sessions.exclude': 'Exclude',
+    'sessions.manage': 'Manage Results',
+    'sessions.manageClose': 'Close Manage Results',
+    'sessions.telemetry': 'Telemetry / Report',
+    'sessions.compare': 'Compare Drivers',
+    'sessions.rank': 'Rank',
+    'sessions.driver': 'Driver',
+    'sessions.best': 'Best',
+    'sessions.lastLap': 'Last Lap',
+    'sessions.laps': 'Laps',
+    'sessions.position': 'Result',
+    'sessions.inspectDriver': 'Inspect',
+    'sessions.hideDriver': 'Hide',
+    'sessions.counted': 'Counted',
+    'sessions.observed': 'Observed',
+    'sessions.invalid': 'Invalid',
+    'sessions.reason': 'Reason',
+    'sessions.selectDriver': 'Select a driver row to inspect laps and follow-up actions.',
+    'sessions.compareEmpty': 'Compare Drivers shows the selected session as a compact timing comparison view.',
+    'sessions.telemetryPending': 'Telemetry / report workflow is not wired into this workspace yet.',
+    'sessions.groupToday': 'Earlier Today',
+    'sessions.groupYesterday': 'Yesterday',
+    'sessions.groupOlder': 'Older',
+    'sessions.noLive': 'No active session is visible right now.',
+    'sessions.noRecent': 'No recently completed sessions in the last 3 hours.',
+    'sessions.noOlder': 'No older stored results match the current view.',
+    'sessions.topDriver': 'Top Driver',
+    'sessions.bestLap': 'Best Lap',
+    'sessions.driverCount': 'Drivers',
+    'sessions.boardStatus': 'Leaderboards',
+    'sessions.lastUpdated': 'Updated',
+    'sessions.compareDelta': 'Delta',
+    'sessions.readOnly': 'Normal workspace mode keeps result management hidden until explicitly requested.',
+    'sessions.manageHint': 'Manage Results is active. Corrections and destructive actions are now visible for this selected session.',
     'status.adminCreated': 'Admin user created.',
     'status.passwordChanged': 'Admin password changed.',
     'monthlyBests.empty': 'No counted timed laps yet.',
@@ -382,8 +450,14 @@ const translations = {
     'profiles.email': 'E-mail',
     'profiles.notes': 'Notities',
     'profiles.create': 'Profiel aanmaken',
-    'sessions.title': 'Sessiegeschiedenis',
-    'sessions.description': 'Opgeslagen sessies worden gebruikt voor historische klassementen. Dit is niet de live-sessie monitor.',
+    'sessions.title': 'Sessiewerkruimte',
+    'sessions.description': 'Deze werkruimte helpt personeel recente resultaten te bekijken, bestuurders te vergelijken en alleen zelden opgeslagen resultaten te beheren.',
+    'sessions.liveTitle': 'Bezig',
+    'sessions.liveDescription': 'Actieve sessies blijven hier zichtbaar zonder de resultatenwerkruimte over te nemen.',
+    'sessions.recentTitle': 'Recent voltooid',
+    'sessions.recentDescription': 'Tot 4 voltooide sessies uit de laatste 3 uur blijven direct beschikbaar voor personeel en klanten.',
+    'sessions.olderTitle': 'Oudere resultaten',
+    'sessions.olderDescription': 'Eerdere resultaten blijven hieronder gegroepeerd zodat archiefgebruik de nieuwste sessies niet verdringt.',
     'sessions.boards': 'Klassementen',
     'sessions.track': 'Circuit',
     'sessions.kind': 'Sessie',
@@ -394,16 +468,53 @@ const translations = {
     'sessions.refresh': 'Sessies vernieuwen',
     'sessions.deleteEmpty': 'Lege sessies verwijderen',
     'sessions.view': 'Bekijken',
+    'sessions.openResults': 'Resultaat openen',
     'sessions.include': 'Inclusief',
     'sessions.exclude': 'Uitsluiten',
     'sessions.delete': 'Verwijderen',
     'sessions.included': 'Inbegrepen',
     'sessions.excluded': 'Uitgesloten',
-    'sessions.detailTitle': 'Sessie detail',
+    'sessions.detailTitle': 'Rijdersresultaten',
+    'sessions.detailDescription': 'Selecteer een sessie om detailinformatie te tonen zonder de lijst te verstoren.',
+    'sessions.emptyDetail': 'Selecteer een sessie uit de werkruimte om rijdersresultaten en vervolgstappen te bekijken.',
+    'sessions.closeResults': 'Resultaten sluiten',
     'sessions.includedMessage': 'Sessie opgenomen in historische klassementen.',
     'sessions.excludedMessage': 'Sessie uitgesloten van historische klassementen.',
     'sessions.correction': 'Correctie',
     'sessions.exclude': 'Uitsluiten',
+    'sessions.manage': 'Resultaten beheren',
+    'sessions.manageClose': 'Resultatenbeheer sluiten',
+    'sessions.telemetry': 'Telemetrie / rapport',
+    'sessions.compare': 'Bestuurders vergelijken',
+    'sessions.rank': 'Positie',
+    'sessions.driver': 'Bestuurder',
+    'sessions.best': 'Beste',
+    'sessions.lastLap': 'Laatste ronde',
+    'sessions.laps': 'Ronden',
+    'sessions.position': 'Resultaat',
+    'sessions.inspectDriver': 'Bekijken',
+    'sessions.hideDriver': 'Verbergen',
+    'sessions.counted': 'Geteld',
+    'sessions.observed': 'Gezien',
+    'sessions.invalid': 'Ongeldig',
+    'sessions.reason': 'Reden',
+    'sessions.selectDriver': 'Selecteer een rijderrij om ronden en vervolgstappen te bekijken.',
+    'sessions.compareEmpty': 'Bestuurders vergelijken toont de geselecteerde sessie als compacte timingvergelijking.',
+    'sessions.telemetryPending': 'Telemetrie- / rapportworkflow is nog niet gekoppeld aan deze werkruimte.',
+    'sessions.groupToday': 'Eerder vandaag',
+    'sessions.groupYesterday': 'Gisteren',
+    'sessions.groupOlder': 'Ouder',
+    'sessions.noLive': 'Er is momenteel geen actieve sessie zichtbaar.',
+    'sessions.noRecent': 'Geen recent voltooide sessies in de laatste 3 uur.',
+    'sessions.noOlder': 'Geen oudere opgeslagen resultaten voor deze weergave.',
+    'sessions.topDriver': 'Toprijder',
+    'sessions.bestLap': 'Beste ronde',
+    'sessions.driverCount': 'Bestuurders',
+    'sessions.boardStatus': 'Klassementen',
+    'sessions.lastUpdated': 'Bijgewerkt',
+    'sessions.compareDelta': 'Verschil',
+    'sessions.readOnly': 'Normale werkruimtemodus houdt resultatenbeheer verborgen totdat dit expliciet wordt geopend.',
+    'sessions.manageHint': 'Resultatenbeheer is actief. Correcties en destructieve acties zijn nu zichtbaar voor deze geselecteerde sessie.',
     'status.adminCreated': 'Beheerder aangemaakt.',
     'status.passwordChanged': 'Wachtwoord gewijzigd.',
     'monthlyBests.empty': 'Nog geen getelde tijdige ronden.',
@@ -470,6 +581,14 @@ languageSelectElement.addEventListener('change', () => saveLocalizationChoice(la
 refreshElement.addEventListener('click', () => loadConfiguration().catch(showError));
 refreshSessionsButton.addEventListener('click', () => loadSessions().catch(showError));
 deleteEmptySessionsButton.addEventListener('click', () => deleteEmptyHistoricalSessions().catch(showError));
+sessionOverviewLiveTabButtonElement.addEventListener('click', () => activateSessionWorkspaceTab('live'));
+sessionOverviewRecentTabButtonElement.addEventListener('click', () => activateSessionWorkspaceTab('recent'));
+sessionOverviewOlderTabButtonElement.addEventListener('click', () => activateSessionWorkspaceTab('older'));
+selectedSessionTabButtonElement.addEventListener('click', () => activateSessionWorkspaceTab('results'));
+compareDriversButton.addEventListener('click', () => toggleCompareDrivers());
+openTelemetryButton.addEventListener('click', () => openTelemetryWorkspace());
+toggleManageResultsButton.addEventListener('click', () => toggleManageResults());
+closeSelectedSessionButton.addEventListener('click', () => closeSelectedSession());
 addSetupRowButton.addEventListener('click', () => {
   appendSessionSetupRow({ rigName: nextRigName(), displayName: '', driverProfileId: null });
   scheduleSessionSetupAutoSave(0);
@@ -485,6 +604,7 @@ runRetentionCleanupButton.addEventListener('click', () => runRetentionCleanup().
 createAdminButton.addEventListener('click', () => createAdmin().catch(showError));
 changePasswordButton.addEventListener('click', () => changePassword().catch(showError));
 refreshStatusButton.addEventListener('click', () => loadAdvancedStatus().catch(showError));
+renderSessionWorkspaceNavigation();
 bindSourceAutoSave();
 loadLanguageChoice().catch(showError);
 
@@ -569,29 +689,54 @@ async function loadUsers() {
 }
 
 async function loadSessions() {
-  const sessions = await fetchJson('/api/admin/sessions?limit=50');
-  renderSessions(sessions);
-  if (sessions.length === 0) {
+  const [sessions, liveSession] = await Promise.all([
+    fetchJson('/api/admin/sessions?limit=50'),
+    loadLiveSessionSnapshot(),
+  ]);
+  const workspace = buildSessionWorkspace(sessions, liveSession);
+  renderLiveSessionSurface(workspace.liveSession, workspace.activeSessionSummary);
+  renderSessionCollection(recentSessionsSurfaceElement, workspace.recentSessions, t('sessions.noRecent'));
+  renderOlderSessionGroups(workspace.olderGroups);
+
+  const selectableSessions = [...workspace.recentSessions, ...workspace.olderSessions];
+  if (selectableSessions.length === 0) {
     selectedSessionId = null;
-    selectedSessionTitleElement.textContent = t('sessions.detailTitle');
-    renderSessionParticipants([]);
+    selectedSessionDetail = null;
+    selectedParticipantId = null;
+    isManageResultsMode = false;
+    isCompareVisible = false;
+    renderSelectedSessionWorkspace();
     sessionsStatusElement.textContent = t('sessions.empty');
     return;
   }
 
-  const selectedStillExists = sessions.some(session => session.sessionId === selectedSessionId);
-  const nextSessionId = selectedStillExists ? selectedSessionId : sessions[0].sessionId;
-  await loadSessionDetail(nextSessionId);
-  sessionsStatusElement.textContent = `${sessions.length} stored sessions loaded for historical boards.`;
+  const selectedStillExists = selectableSessions.some(session => session.sessionId === selectedSessionId);
+  if (selectedSessionId && selectedStillExists) {
+    await loadSessionDetail(selectedSessionId, { activateTab: false, updateStatus: false });
+  } else if (selectedSessionId && !selectedStillExists) {
+    closeSelectedSession();
+  } else {
+    renderSelectedSessionWorkspace();
+  }
+
+  sessionsStatusElement.textContent = `${workspace.recentSessions.length} recent and ${workspace.olderSessions.length} older stored sessions loaded.`;
 }
 
-async function loadSessionDetail(sessionId) {
+async function loadSessionDetail(sessionId, { activateTab = true, updateStatus = true } = {}) {
   const session = await fetchJson(`/api/admin/sessions/${encodeURIComponent(sessionId)}`);
   selectedSessionId = session.sessionId;
-  selectedSessionTitleElement.textContent = `${session.trackName} - ${session.sessionKind} - ${formatDate(session.lastSeenUtc)}`;
-  renderSessionParticipants(session.participants ?? []);
-  highlightSelectedSessionRow();
-  setStatus(`Viewing stored session from ${formatDate(session.lastSeenUtc)}.`);
+  selectedSessionDetail = session;
+  if (!(session.participants ?? []).some(participant => participant.participantId === selectedParticipantId)) {
+    selectedParticipantId = null;
+  }
+  if (activateTab) {
+    activeSessionWorkspaceTab = 'results';
+  }
+  renderSelectedSessionWorkspace();
+  highlightSelectedSessionSelection();
+  if (updateStatus) {
+    setStatus(`Viewing stored session from ${formatDate(session.lastSeenUtc)}.`);
+  }
 }
 
 async function setSessionCountForHistory(sessionId, countForHistory) {
@@ -629,41 +774,34 @@ async function deleteEmptyHistoricalSessions() {
   await loadLeaderboards();
 }
 
-function renderSessions(sessions) {
-  sessionRowsElement.replaceChildren();
-  if (sessions.length === 0) {
-    const row = document.createElement('tr');
-    const cell = document.createElement('td');
-    cell.colSpan = 9;
-    cell.textContent = t('sessions.empty');
-    row.appendChild(cell);
-    sessionRowsElement.appendChild(row);
+function renderSelectedSessionWorkspace() {
+  toggleManageResultsButton.textContent = isManageResultsMode ? t('sessions.manageClose') : t('sessions.manage');
+  toggleManageResultsButton.classList.toggle('active', isManageResultsMode);
+  toggleManageResultsButton.setAttribute('aria-pressed', String(isManageResultsMode));
+
+  if (!selectedSessionDetail) {
+    sessionParticipantRowsElement.replaceChildren();
+    sessionParticipantDetailSurfaceElement.replaceChildren();
+    sessionCompareSurfaceElement.hidden = true;
+    selectedSessionMetricsElement.replaceChildren();
+    if (activeSessionWorkspaceTab === 'results') {
+      activeSessionWorkspaceTab = 'recent';
+    }
+    renderSessionWorkspaceNavigation();
     return;
   }
 
-  for (const session of sessions) {
-    const row = document.createElement('tr');
-    row.dataset.sessionId = session.sessionId;
-    appendCell(row, session.countForHistory ? t('sessions.included') : t('sessions.excluded'));
-    appendCell(row, session.trackName);
-    appendCell(row, session.sessionKind);
-    appendCell(row, session.sessionPhase);
-    appendCell(row, formatDate(session.lastSeenUtc));
-    appendCell(row, session.participantCount);
-    appendCell(row, `${session.validTimedLapCount}/${session.lapCount}`);
-    appendCell(row, formatSeconds(session.bestLapSeconds));
-    appendActionsCell(row, [
-      { label: t('sessions.view'), onClick: () => loadSessionDetail(session.sessionId).catch(showError) },
-      {
-        label: session.countForHistory ? t('sessions.exclude') : t('sessions.include'),
-        onClick: () => setSessionCountForHistory(session.sessionId, !session.countForHistory).catch(showError),
-      },
-      { label: t('sessions.delete'), onClick: () => deleteHistoricalSession(session.sessionId).catch(showError), danger: true },
-    ]);
-    sessionRowsElement.appendChild(row);
-  }
-
-  highlightSelectedSessionRow();
+  const topParticipant = (selectedSessionDetail.participants ?? [])[0];
+  selectedSessionTitleElement.textContent = `${selectedSessionDetail.trackName} - ${selectedSessionDetail.sessionKind}`;
+  selectedSessionTabLabelElement.textContent = `${selectedSessionDetail.trackName} - ${selectedSessionDetail.sessionKind}`;
+  selectedSessionSummaryElement.textContent = isManageResultsMode
+    ? t('sessions.manageHint')
+    : t('sessions.readOnly');
+  renderSessionMetrics(selectedSessionDetail, topParticipant);
+  renderSessionParticipants(selectedSessionDetail.participants ?? []);
+  renderParticipantDetail(selectedSessionDetail.participants ?? []);
+  renderCompareSurface(selectedSessionDetail.participants ?? []);
+  renderSessionWorkspaceNavigation();
 }
 
 function renderSessionParticipants(participants) {
@@ -671,7 +809,7 @@ function renderSessionParticipants(participants) {
   if (participants.length === 0) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 11;
+    cell.colSpan = 6;
     cell.textContent = t('sessions.noParticipants');
     row.appendChild(cell);
     sessionParticipantRowsElement.appendChild(row);
@@ -680,34 +818,83 @@ function renderSessionParticipants(participants) {
 
   for (const participant of participants) {
     const row = document.createElement('tr');
+    row.classList.toggle('selectedRow', participant.participantId === selectedParticipantId);
     appendCell(row, participant.rank);
     appendCell(row, participant.effectiveDisplayName || participant.displayName);
-    appendCell(row, participant.rigName);
-    appendCell(row, participant.vehicleName);
-    appendCell(row, participant.completedLaps);
+    appendCell(row, `P${participant.rank}`);
     appendCell(row, formatSeconds(participant.bestLapSeconds));
-    appendCell(row, formatSeconds(participant.lastLapSeconds));
-    appendCell(row, `${participant.validTimedLapCount}/${participant.lapCount}`);
-    const correctionInput = appendTextInputCell(row, participant.displayNameOverride ?? '');
-    const excludeCheckbox = appendPlainCheckboxCell(row, participant.excludedFromHistory);
-    appendButtonCell(row, 'Save', () => saveParticipantCorrection(participant.participantId, correctionInput.value, excludeCheckbox.checked).catch(showError));
+    appendCell(row, participant.completedLaps);
+    appendActionsCell(row, [
+      {
+        label: participant.participantId === selectedParticipantId ? t('sessions.hideDriver') : t('sessions.inspectDriver'),
+        onClick: () => toggleParticipantDetail(participant.participantId),
+      },
+    ]);
     sessionParticipantRowsElement.appendChild(row);
-
-    const lapsRow = document.createElement('tr');
-    const lapsCell = document.createElement('td');
-    lapsCell.colSpan = 11;
-    lapsCell.appendChild(renderLapCorrectionTable(participant));
-    lapsRow.appendChild(lapsCell);
-    sessionParticipantRowsElement.appendChild(lapsRow);
   }
 }
 
-function renderLapCorrectionTable(participant) {
+function renderParticipantDetail(participants) {
+  sessionParticipantDetailSurfaceElement.replaceChildren();
+
+  if (isManageResultsMode && selectedSessionDetail) {
+    sessionParticipantDetailSurfaceElement.appendChild(renderSessionManagePanel(selectedSessionDetail));
+  }
+
+  if (!selectedParticipantId) {
+    const placeholder = document.createElement('p');
+    placeholder.className = 'wideField';
+    placeholder.textContent = t('sessions.selectDriver');
+    sessionParticipantDetailSurfaceElement.appendChild(placeholder);
+    return;
+  }
+
+  const participant = participants.find(entry => entry.participantId === selectedParticipantId);
+  if (!participant) {
+    return;
+  }
+
+  const panel = document.createElement('section');
+  panel.className = 'participantDetailPanel';
+
+  const header = document.createElement('div');
+  header.className = 'sessionWorkspaceHeader';
+  const headerCopy = document.createElement('div');
+  const title = document.createElement('h3');
+  title.textContent = participant.effectiveDisplayName || participant.displayName;
+  const subtitle = document.createElement('p');
+  subtitle.textContent = `${participant.rigName} - ${participant.vehicleName}`;
+  headerCopy.append(title, subtitle);
+  header.appendChild(headerCopy);
+  panel.appendChild(header);
+
+  const summary = document.createElement('div');
+  summary.className = 'sessionMetrics';
+  summary.appendChild(createMetricCard(t('sessions.bestLap'), formatSeconds(participant.bestLapSeconds)));
+  summary.appendChild(createMetricCard(t('sessions.laps'), String(participant.completedLaps ?? 0)));
+  summary.appendChild(createMetricCard(t('sessions.lastLap'), formatSeconds(participant.lastLapSeconds)));
+  summary.appendChild(createMetricCard(t('sessions.counted'), `${participant.validTimedLapCount}/${participant.lapCount}`));
+  panel.appendChild(summary);
+
+  if (isManageResultsMode) {
+    panel.appendChild(renderParticipantManageForm(participant));
+  }
+
+  panel.appendChild(renderLapTable(participant));
+  sessionParticipantDetailSurfaceElement.appendChild(panel);
+}
+
+function renderLapTable(participant) {
   const table = document.createElement('table');
   table.className = 'lapCorrectionTable';
   const head = document.createElement('thead');
   const headRow = document.createElement('tr');
-  ['Lap', 'Time', 'Flag', 'Counts', 'Correction', 'Invalid', 'Reason', ''].forEach(label => {
+  const headings = ['Lap', 'Time', t('sessions.counted'), t('sessions.observed')];
+  if (isManageResultsMode) {
+    headings.push(t('sessions.invalid'), t('sessions.reason'), '');
+  }
+
+  headings.forEach(label => {
     const cell = document.createElement('th');
     cell.textContent = label;
     headRow.appendChild(cell);
@@ -720,20 +907,21 @@ function renderLapCorrectionTable(participant) {
     const row = document.createElement('tr');
     appendCell(row, lap.lapNumber);
     appendCell(row, formatSeconds(lap.effectiveLapSeconds));
-    appendCell(row, lap.validLapFlag ?? '-');
     appendCell(row, lap.countsForTiming ? 'Yes' : 'No');
-    const correctionInput = appendTextInputCell(row, lap.lapSecondsOverride ?? '');
-    const invalidCheckbox = appendPlainCheckboxCell(row, lap.staffInvalidated);
-    const reasonInput = appendTextInputCell(row, lap.correctionReason ?? '');
-    appendButtonCell(row, 'Save', () => saveLapCorrection(lap.lapId, correctionInput.value, invalidCheckbox.checked, reasonInput.value).catch(showError));
+    appendCell(row, formatDate(lap.observedUtc));
+    if (isManageResultsMode) {
+      const invalidCheckbox = appendPlainCheckboxCell(row, lap.staffInvalidated);
+      const reasonInput = appendTextInputCell(row, lap.correctionReason ?? '');
+      appendButtonCell(row, 'Save', () => saveLapCorrection(lap.lapId, lap.lapSecondsOverride ?? '', invalidCheckbox.checked, reasonInput.value).catch(showError));
+    }
     body.appendChild(row);
   }
 
   if ((participant.laps ?? []).length === 0) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 8;
-    cell.textContent = 'No completed laps persisted for this participant.';
+    cell.colSpan = isManageResultsMode ? 7 : 4;
+    cell.textContent = t('participants.noCompletedLaps');
     row.appendChild(cell);
     body.appendChild(row);
   }
@@ -749,7 +937,8 @@ async function saveParticipantCorrection(participantId, displayNameOverride, exc
     excludedFromHistory,
     reason: excludedFromHistory ? 'Staff excluded participant' : null,
   });
-  renderSessionParticipants(session.participants ?? []);
+  selectedSessionDetail = session;
+  renderSelectedSessionWorkspace();
   await loadLeaderboards();
   setStatus('Participant correction saved.');
 }
@@ -762,7 +951,8 @@ async function saveLapCorrection(lapId, lapSecondsOverride, staffInvalidated, re
     staffInvalidated,
     reason: nullIfEmpty(reason) ?? (staffInvalidated ? 'Staff invalidated lap' : null),
   });
-  renderSessionParticipants(session.participants ?? []);
+  selectedSessionDetail = session;
+  renderSelectedSessionWorkspace();
   await loadLeaderboards();
   setStatus('Lap correction saved.');
 }
@@ -786,9 +976,447 @@ function parseLapSecondsInput(value) {
   throw new Error('Lap correction must be blank, seconds, or m:ss.mmm.');
 }
 
-function highlightSelectedSessionRow() {
-  sessionRowsElement.querySelectorAll('tr').forEach(row => {
-    row.classList.toggle('selectedRow', row.dataset.sessionId === selectedSessionId);
+function toggleParticipantDetail(participantId) {
+  selectedParticipantId = selectedParticipantId === participantId ? null : participantId;
+  renderSelectedSessionWorkspace();
+}
+
+function toggleManageResults() {
+  isManageResultsMode = !isManageResultsMode;
+  renderSelectedSessionWorkspace();
+}
+
+function toggleCompareDrivers() {
+  isCompareVisible = !isCompareVisible;
+  renderSelectedSessionWorkspace();
+}
+
+function closeSelectedSession() {
+  selectedSessionId = null;
+  selectedSessionDetail = null;
+  selectedParticipantId = null;
+  isManageResultsMode = false;
+  isCompareVisible = false;
+  if (activeSessionWorkspaceTab === 'results') {
+    activeSessionWorkspaceTab = 'recent';
+  }
+  renderSelectedSessionWorkspace();
+  highlightSelectedSessionSelection();
+}
+
+function activateSessionWorkspaceTab(tabName) {
+  if (tabName === 'results' && !selectedSessionDetail) {
+    return;
+  }
+
+  activeSessionWorkspaceTab = tabName;
+  renderSessionWorkspaceNavigation();
+}
+
+function renderSessionWorkspaceNavigation() {
+  const hasResultsTab = Boolean(selectedSessionDetail);
+  const activeTab = hasResultsTab || activeSessionWorkspaceTab !== 'results'
+    ? activeSessionWorkspaceTab
+    : 'recent';
+
+  setSessionWorkspaceTabState(sessionOverviewLiveTabButtonElement, activeTab === 'live');
+  setSessionWorkspaceTabState(sessionOverviewRecentTabButtonElement, activeTab === 'recent');
+  setSessionWorkspaceTabState(sessionOverviewOlderTabButtonElement, activeTab === 'older');
+  setSessionWorkspaceTabState(selectedSessionTabButtonElement, activeTab === 'results');
+
+  selectedSessionTabButtonElement.hidden = !hasResultsTab;
+  closeSelectedSessionButton.hidden = !hasResultsTab;
+
+  sessionOverviewLivePanelElement.hidden = activeTab !== 'live';
+  sessionOverviewRecentPanelElement.hidden = activeTab !== 'recent';
+  sessionOverviewOlderPanelElement.hidden = activeTab !== 'older';
+  selectedSessionPanelElement.hidden = activeTab !== 'results' || !hasResultsTab;
+  sessionWorkspaceUtilityRowElement.hidden = activeTab === 'results';
+}
+
+function setSessionWorkspaceTabState(button, isActive) {
+  button.classList.toggle('active', isActive);
+  button.setAttribute('aria-selected', String(isActive));
+}
+
+function openTelemetryWorkspace() {
+  setStatus(t('sessions.telemetryPending'));
+}
+
+async function loadLiveSessionSnapshot() {
+  try {
+    const snapshot = await fetchJson('/api/live-session/current');
+    return isLiveSessionSnapshotUsable(snapshot) ? snapshot : null;
+  } catch {
+    return null;
+  }
+}
+
+function isLiveSessionSnapshotUsable(snapshot) {
+  return Boolean(snapshot?.session?.trackName);
+}
+
+function isLiveSessionActive(snapshot) {
+  if (!isLiveSessionSnapshotUsable(snapshot)) {
+    return false;
+  }
+
+  return !['SessionOver', 'Garage', 'Unknown'].includes(snapshot.session.phase);
+}
+
+function buildSessionWorkspace(sessions, liveSession) {
+  const now = Date.now();
+  const activeSessionSummary = findActiveSessionSummary(sessions, liveSession, now);
+  const remainingSessions = sessions
+    .filter(session => session.sessionId !== activeSessionSummary?.sessionId)
+    .filter(session => !isPlaceholderSession(session))
+    .sort((left, right) => new Date(right.lastSeenUtc) - new Date(left.lastSeenUtc));
+
+  const recentCutoff = now - 3 * 60 * 60 * 1000;
+  const recentSessions = remainingSessions
+    .filter(session => new Date(session.lastSeenUtc).getTime() >= recentCutoff)
+    .slice(0, 4);
+  const recentIds = new Set(recentSessions.map(session => session.sessionId));
+  const olderSessions = remainingSessions.filter(session => !recentIds.has(session.sessionId));
+
+  return {
+    liveSession,
+    activeSessionSummary,
+    recentSessions,
+    olderSessions,
+    olderGroups: groupOlderSessions(olderSessions),
+  };
+}
+
+function findActiveSessionSummary(sessions, liveSession, now) {
+  if (!isLiveSessionActive(liveSession)) {
+    return null;
+  }
+
+  return sessions
+    .filter(session => session.trackName === liveSession.session.trackName)
+    .filter(session => String(session.sessionKind) === String(liveSession.session.kind))
+    .filter(session => Math.abs(new Date(session.lastSeenUtc).getTime() - now) <= 15 * 60 * 1000)
+    .sort((left, right) => new Date(right.lastSeenUtc) - new Date(left.lastSeenUtc))[0] ?? null;
+}
+
+function isPlaceholderSession(session) {
+  return (!session.trackName || session.trackName === 'Unknown track')
+    || (session.lapCount === 0 && session.validTimedLapCount === 0 && ['Garage', 'Unknown'].includes(String(session.sessionPhase)));
+}
+
+function groupOlderSessions(sessions) {
+  const groups = new Map([
+    ['today', { key: 'today', label: t('sessions.groupToday'), sessions: [] }],
+    ['yesterday', { key: 'yesterday', label: t('sessions.groupYesterday'), sessions: [] }],
+    ['older', { key: 'older', label: t('sessions.groupOlder'), sessions: [] }],
+  ]);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  for (const session of sessions) {
+    const lastSeen = new Date(session.lastSeenUtc);
+    lastSeen.setHours(lastSeen.getHours(), lastSeen.getMinutes(), lastSeen.getSeconds(), lastSeen.getMilliseconds());
+    const bucket = lastSeen >= today
+      ? 'today'
+      : lastSeen >= yesterday
+        ? 'yesterday'
+        : 'older';
+    groups.get(bucket).sessions.push(session);
+  }
+
+  return [...groups.values()].filter(group => group.sessions.length > 0);
+}
+
+function renderLiveSessionSurface(liveSession, activeSessionSummary) {
+  liveSessionSurfaceElement.replaceChildren();
+  if (!isLiveSessionActive(liveSession)) {
+    liveSessionSurfaceElement.appendChild(createEmptyWorkspaceNote(t('sessions.noLive')));
+    return;
+  }
+
+  liveSessionSurfaceElement.appendChild(createLiveSessionCard(liveSession, activeSessionSummary));
+}
+
+function renderSessionCollection(container, sessions, emptyMessage) {
+  container.replaceChildren();
+  if (sessions.length === 0) {
+    container.appendChild(createEmptyWorkspaceNote(emptyMessage));
+    return;
+  }
+
+  for (const session of sessions) {
+    container.appendChild(createSessionCard(session));
+  }
+
+  highlightSelectedSessionSelection();
+}
+
+function renderOlderSessionGroups(groups) {
+  olderSessionsSurfaceElement.replaceChildren();
+  if (groups.length === 0) {
+    olderSessionsSurfaceElement.appendChild(createEmptyWorkspaceNote(t('sessions.noOlder')));
+    return;
+  }
+
+  for (const group of groups) {
+    const details = document.createElement('details');
+    details.className = 'sessionArchiveGroup';
+    details.open = group.key === 'today';
+
+    const summary = document.createElement('summary');
+    summary.textContent = `${group.label} (${group.sessions.length})`;
+    details.appendChild(summary);
+
+    const cards = document.createElement('div');
+    cards.className = 'sessionCardGrid';
+    group.sessions.forEach(session => cards.appendChild(createSessionCard(session)));
+    details.appendChild(cards);
+    olderSessionsSurfaceElement.appendChild(details);
+  }
+
+  highlightSelectedSessionSelection();
+}
+
+function createLiveSessionCard(liveSession, activeSessionSummary) {
+  return createSessionOverviewRow({
+    sessionId: activeSessionSummary?.sessionId ?? null,
+    trackName: liveSession.session.trackName,
+    descriptor: formatSessionDescriptor(liveSession.session.kind, liveSession.session.phase),
+    facts: [
+      { label: t('sessions.driverCount'), value: String(liveSession.session.vehicleCount ?? 0) },
+      { label: t('sessions.lastUpdated'), value: formatDate(liveSession.timestampUtc) },
+    ],
+    action: activeSessionSummary?.sessionId
+      ? { label: t('sessions.openResults'), onClick: () => loadSessionDetail(activeSessionSummary.sessionId).catch(showError) }
+      : null,
+    extraClassName: 'liveSessionCard',
+  });
+}
+
+function createSessionCard(session) {
+  return createSessionOverviewRow({
+    sessionId: session.sessionId,
+    trackName: session.trackName,
+    descriptor: formatSessionDescriptor(session.sessionKind, session.sessionPhase),
+    facts: [
+      { label: t('sessions.driverCount'), value: String(session.participantCount ?? 0) },
+      { label: t('sessions.bestLap'), value: formatSeconds(session.bestLapSeconds) },
+      { label: t('sessions.lastUpdated'), value: formatDate(session.lastSeenUtc) },
+    ],
+    action: { label: t('sessions.openResults'), onClick: () => loadSessionDetail(session.sessionId).catch(showError) },
+  });
+}
+
+function createSessionOverviewRow({ sessionId, trackName, descriptor, facts, action, extraClassName = '' }) {
+  const row = document.createElement('article');
+  row.className = `sessionSummaryCard ${extraClassName}`.trim();
+  if (sessionId) {
+    row.dataset.sessionId = sessionId;
+  }
+
+  const titleRow = document.createElement('div');
+  titleRow.className = 'sessionSummaryRowTitle';
+  const title = document.createElement('h4');
+  title.textContent = trackName;
+  titleRow.appendChild(title);
+
+  if (descriptor) {
+    const subtitle = document.createElement('p');
+    subtitle.textContent = descriptor;
+    titleRow.appendChild(subtitle);
+  }
+
+  const metaRow = document.createElement('div');
+  metaRow.className = 'sessionSummaryRowMeta';
+  facts.filter(fact => fact?.value).forEach((fact, index) => metaRow.appendChild(createSessionFact(fact.label, fact.value, index + 1)));
+
+  if (action) {
+    const actions = document.createElement('div');
+    actions.className = 'buttonRow';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = action.label;
+    button.addEventListener('click', action.onClick);
+    actions.appendChild(button);
+    metaRow.appendChild(actions);
+  }
+
+  row.append(titleRow, metaRow);
+  return row;
+}
+
+function createSessionFact(label, value, columnIndex) {
+  const fact = document.createElement('span');
+  fact.className = 'sessionSummaryFact';
+  fact.style.setProperty('--session-summary-column', String(columnIndex));
+  const labelElement = document.createElement('span');
+  labelElement.className = 'sessionSummaryFactLabel';
+  labelElement.textContent = `${label}:`;
+  const valueElement = document.createElement('strong');
+  valueElement.textContent = value;
+  fact.append(labelElement, valueElement);
+  return fact;
+}
+
+function formatSessionDescriptor(sessionKind, sessionPhase) {
+  if (!sessionPhase || String(sessionPhase) === 'SessionOver') {
+    return String(sessionKind ?? '');
+  }
+
+  return `${sessionKind} - ${sessionPhase}`;
+}
+
+function createMetricCard(label, value) {
+  const metric = document.createElement('div');
+  metric.className = 'sessionMetricCard';
+  const labelElement = document.createElement('span');
+  labelElement.textContent = label;
+  const valueElement = document.createElement('strong');
+  valueElement.textContent = value ?? '-';
+  metric.append(labelElement, valueElement);
+  return metric;
+}
+
+function createTag(label, tone) {
+  const tag = document.createElement('span');
+  tag.className = `sessionTag ${tone}`;
+  tag.textContent = label;
+  return tag;
+}
+
+function createEmptyWorkspaceNote(message) {
+  const note = document.createElement('p');
+  note.className = 'sessionWorkspaceEmpty';
+  note.textContent = message;
+  return note;
+}
+
+function renderSessionMetrics(session, topParticipant) {
+  selectedSessionMetricsElement.replaceChildren();
+  selectedSessionMetricsElement.appendChild(createMetricCard(t('sessions.track'), session.trackName));
+  selectedSessionMetricsElement.appendChild(createMetricCard(t('sessions.kind'), String(session.sessionKind)));
+  selectedSessionMetricsElement.appendChild(createMetricCard(t('sessions.topDriver'), topParticipant?.effectiveDisplayName ?? topParticipant?.displayName ?? '-'));
+  selectedSessionMetricsElement.appendChild(createMetricCard(t('sessions.bestLap'), formatSeconds(session.bestLapSeconds)));
+  selectedSessionMetricsElement.appendChild(createMetricCard(t('sessions.driverCount'), String(session.participantCount ?? 0)));
+  selectedSessionMetricsElement.appendChild(createMetricCard(t('sessions.boardStatus'), session.countForHistory ? t('sessions.included') : t('sessions.excluded')));
+}
+
+function renderCompareSurface(participants) {
+  sessionCompareSurfaceElement.replaceChildren();
+  sessionCompareSurfaceElement.hidden = !isCompareVisible;
+  if (!isCompareVisible) {
+    return;
+  }
+
+  const title = document.createElement('h3');
+  title.textContent = t('sessions.compare');
+  const description = document.createElement('p');
+  description.textContent = t('sessions.compareEmpty');
+  sessionCompareSurfaceElement.append(title, description);
+
+  const table = document.createElement('table');
+  table.className = 'lapCorrectionTable';
+  const head = document.createElement('thead');
+  const headRow = document.createElement('tr');
+  [t('sessions.driver'), t('sessions.best'), t('sessions.lastLap'), t('sessions.laps'), t('sessions.compareDelta')].forEach(label => {
+    const cell = document.createElement('th');
+    cell.textContent = label;
+    headRow.appendChild(cell);
+  });
+  head.appendChild(headRow);
+  table.appendChild(head);
+
+  const validBestLaps = participants.map(participant => participant.bestLapSeconds).filter(Number.isFinite);
+  const sessionBestLap = validBestLaps.length > 0 ? Math.min(...validBestLaps) : null;
+  const body = document.createElement('tbody');
+  for (const participant of participants) {
+    const row = document.createElement('tr');
+    appendCell(row, participant.effectiveDisplayName || participant.displayName);
+    appendCell(row, formatSeconds(participant.bestLapSeconds));
+    appendCell(row, formatSeconds(participant.lastLapSeconds));
+    appendCell(row, participant.completedLaps);
+    appendCell(row, sessionBestLap !== null && Number.isFinite(participant.bestLapSeconds)
+      ? formatGap(participant.bestLapSeconds - sessionBestLap)
+      : '-');
+    body.appendChild(row);
+  }
+  table.appendChild(body);
+  sessionCompareSurfaceElement.appendChild(table);
+}
+
+function renderSessionManagePanel(session) {
+  const panel = document.createElement('section');
+  panel.className = 'participantDetailPanel sessionManagePanel';
+
+  const title = document.createElement('h3');
+  title.textContent = t('sessions.manage');
+  const description = document.createElement('p');
+  description.textContent = t('sessions.manageHint');
+  panel.append(title, description);
+
+  const actions = document.createElement('div');
+  actions.className = 'buttonRow';
+
+  const includeButton = document.createElement('button');
+  includeButton.type = 'button';
+  includeButton.textContent = session.countForHistory ? t('sessions.exclude') : t('sessions.include');
+  includeButton.addEventListener('click', () => setSessionCountForHistory(session.sessionId, !session.countForHistory).catch(showError));
+  actions.appendChild(includeButton);
+
+  const deleteButton = document.createElement('button');
+  deleteButton.type = 'button';
+  deleteButton.className = 'dangerButton';
+  deleteButton.textContent = t('sessions.delete');
+  deleteButton.addEventListener('click', () => deleteHistoricalSession(session.sessionId).catch(showError));
+  actions.appendChild(deleteButton);
+
+  panel.appendChild(actions);
+  return panel;
+}
+
+function renderParticipantManageForm(participant) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'sessionManageForm';
+
+  const label = document.createElement('label');
+  const labelTitle = document.createElement('span');
+  labelTitle.textContent = t('sessions.correction');
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.value = participant.displayNameOverride ?? '';
+  nameInput.spellcheck = false;
+  label.append(labelTitle, nameInput);
+  wrapper.appendChild(label);
+
+  const checkboxLabel = document.createElement('label');
+  checkboxLabel.className = 'checkboxLabel';
+  const excludedInput = document.createElement('input');
+  excludedInput.type = 'checkbox';
+  excludedInput.checked = Boolean(participant.excludedFromHistory);
+  const checkboxText = document.createElement('span');
+  checkboxText.textContent = t('sessions.exclude');
+  checkboxLabel.append(excludedInput, checkboxText);
+  wrapper.appendChild(checkboxLabel);
+
+  const buttonRow = document.createElement('div');
+  buttonRow.className = 'buttonRow';
+  const saveButton = document.createElement('button');
+  saveButton.type = 'button';
+  saveButton.textContent = 'Save';
+  saveButton.addEventListener('click', () => saveParticipantCorrection(participant.participantId, nameInput.value, excludedInput.checked).catch(showError));
+  buttonRow.appendChild(saveButton);
+  wrapper.appendChild(buttonRow);
+
+  return wrapper;
+}
+
+function highlightSelectedSessionSelection() {
+  document.querySelectorAll('[data-session-id]').forEach(element => {
+    element.classList.toggle('selectedRow', element.dataset.sessionId === selectedSessionId);
   });
 }
 
@@ -1371,6 +1999,13 @@ function formatSeconds(value) {
   const minutes = Math.floor(value / 60);
   const seconds = (value % 60).toFixed(3).padStart(6, '0');
   return `${minutes}:${seconds}`;
+}
+
+function formatGap(value) {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '-';
+  if (value === 0) return '0.000';
+  const prefix = value > 0 ? '+' : '-';
+  return `${prefix}${Math.abs(value).toFixed(3)}`;
 }
 
 function nullIfEmpty(value) {

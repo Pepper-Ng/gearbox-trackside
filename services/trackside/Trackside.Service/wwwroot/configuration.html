@@ -196,55 +196,89 @@
         </section>
       </section>
 
-      <section id="sessionsTab" class="adminTab" hidden aria-label="Sessions">
+      <section id="sessionsTab" class="adminTab sessionsWorkspaceShell" hidden aria-label="Sessions">
         <section class="configurationPanel">
-          <h2 data-i18n="sessions.title">Session History</h2>
-          <p id="sessionsStatus" class="wideField" data-i18n="sessions.description">Stored sessions used for historical boards. This is not the live-session monitor.</p>
-          <div class="wideField tableFrame">
-            <table class="sessionsTable">
-              <thead>
-                <tr>
-                  <th data-i18n="sessions.boards">Boards</th>
-                  <th data-i18n="sessions.track">Track</th>
-                  <th data-i18n="sessions.kind">Session</th>
-                  <th data-i18n="sessions.phase">Phase</th>
-                  <th data-i18n="sessions.lastSeen">Last seen</th>
-                  <th data-i18n="sessions.participants">Drivers</th>
-                  <th data-i18n="sessions.laps">Laps</th>
-                  <th data-i18n="sessions.best">Best</th>
-                  <th data-i18n="sessions.actions">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="sessionRows"></tbody>
-            </table>
-          </div>
-          <div class="buttonRow">
-            <button id="refreshSessions" type="button" data-i18n="sessions.refresh">Refresh Sessions</button>
-            <button id="deleteEmptySessions" type="button" data-i18n="sessions.deleteEmpty">Delete Empty Sessions</button>
-          </div>
-        </section>
-        <section class="configurationPanel">
-          <h2 id="selectedSessionTitle" data-i18n="sessions.detailTitle">Session Detail</h2>
-          <div class="wideField tableFrame">
-            <table class="sessionParticipantsTable">
-              <thead>
-                <tr>
-                  <th data-i18n="sessions.rank">Rank</th>
-                  <th data-i18n="sessions.driver">Driver</th>
-                  <th data-i18n="sessions.rig">Rig</th>
-                  <th data-i18n="sessions.vehicle">Vehicle</th>
-                  <th data-i18n="sessions.laps">Laps</th>
-                  <th data-i18n="sessions.best">Best</th>
-                  <th data-i18n="sessions.lastLap">Last</th>
-                  <th data-i18n="sessions.timed">Timed</th>
-                  <th data-i18n="sessions.correction">Correction</th>
-                  <th data-i18n="sessions.exclude">Exclude</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody id="sessionParticipantRows"></tbody>
-            </table>
-          </div>
+          <h2 data-i18n="sessions.title">Session Workspace</h2>
+          <p id="sessionsStatus" class="wideField" data-i18n="sessions.description">This workspace helps staff inspect recent results, compare drivers, and only rarely manage stored results.</p>
+          <section class="sessionWorkspaceDock wideField">
+            <div class="sessionWorkspaceTabs" role="tablist" aria-label="Session results workspace">
+              <button id="sessionOverviewLiveTabButton" class="sessionWorkspaceTab" type="button" role="tab" aria-selected="false" data-i18n="sessions.liveTitle">In Progress</button>
+              <button id="sessionOverviewRecentTabButton" class="sessionWorkspaceTab active" type="button" role="tab" aria-selected="true" data-i18n="sessions.recentTitle">Recently Completed</button>
+              <button id="sessionOverviewOlderTabButton" class="sessionWorkspaceTab" type="button" role="tab" aria-selected="false" data-i18n="sessions.olderTitle">Older Results</button>
+              <button id="selectedSessionTabButton" class="sessionWorkspaceTab sessionWorkspaceTabTemporary" type="button" role="tab" aria-selected="false" hidden>
+                <span id="selectedSessionTabLabel">Driver Results</span>
+              </button>
+              <button id="closeSelectedSessionButton" class="sessionWorkspaceTabAction sessionWorkspaceTabClose" type="button" hidden data-i18n-aria="sessions.closeResults" aria-label="Close Results">&times;</button>
+            </div>
+            <section id="sessionOverviewLivePanel" class="sessionWorkspaceCanvas sessionWorkspaceOverviewPanel" role="tabpanel" hidden>
+              <section class="sessionWorkspaceSection" aria-label="In progress sessions">
+                <div class="sessionWorkspaceHeader">
+                  <div>
+                    <h3 data-i18n="sessions.liveTitle">In Progress</h3>
+                    <p data-i18n="sessions.liveDescription">Active sessions stay visible here without taking over the results workspace.</p>
+                  </div>
+                </div>
+                <div id="liveSessionSurface" class="sessionCardGrid"></div>
+              </section>
+            </section>
+            <section id="sessionOverviewRecentPanel" class="sessionWorkspaceCanvas sessionWorkspaceOverviewPanel" role="tabpanel">
+              <section class="sessionWorkspaceSection" aria-label="Recently completed sessions">
+                <div class="sessionWorkspaceHeader">
+                  <div>
+                    <h3 data-i18n="sessions.recentTitle">Recently Completed</h3>
+                    <p data-i18n="sessions.recentDescription">Up to 4 completed sessions from the last 3 hours stay ready for staff and customer follow-up.</p>
+                  </div>
+                </div>
+                <div id="recentSessionsSurface" class="sessionCardGrid"></div>
+              </section>
+            </section>
+            <section id="sessionOverviewOlderPanel" class="sessionWorkspaceCanvas sessionWorkspaceOverviewPanel" role="tabpanel" hidden>
+              <section class="sessionWorkspaceSection" aria-label="Older results">
+                <div class="sessionWorkspaceHeader">
+                  <div>
+                    <h3 data-i18n="sessions.olderTitle">Older Results</h3>
+                    <p data-i18n="sessions.olderDescription">Earlier results stay grouped below so archive browsing does not crowd the latest sessions.</p>
+                  </div>
+                </div>
+                <div id="olderSessionsSurface" class="sessionArchive"></div>
+              </section>
+            </section>
+            <section id="selectedSessionPanel" class="sessionWorkspaceCanvas" role="tabpanel" hidden>
+              <div class="sessionWorkspaceHeader sessionDetailHeader">
+                <div>
+                  <h2 id="selectedSessionTitle" data-i18n="sessions.detailTitle">Driver Results</h2>
+                  <p id="selectedSessionSummary" class="wideField" data-i18n="sessions.detailDescription">Select a session to reveal detailed information without disrupting the list.</p>
+                </div>
+                <div class="buttonRow sessionDetailActions">
+                  <button id="compareDriversButton" type="button" data-i18n="sessions.compare">Compare Drivers</button>
+                  <button id="openTelemetryButton" type="button" data-i18n="sessions.telemetry">Telemetry / Report</button>
+                  <button id="toggleManageResultsButton" type="button" data-i18n="sessions.manage">Manage Results</button>
+                </div>
+              </div>
+              <div id="selectedSessionMetrics" class="sessionMetrics"></div>
+              <div class="wideField tableFrame">
+                <table class="sessionParticipantsTable compactParticipantsTable">
+                  <thead>
+                    <tr>
+                      <th data-i18n="sessions.rank">Rank</th>
+                      <th data-i18n="sessions.driver">Driver</th>
+                      <th data-i18n="sessions.position">Result</th>
+                      <th data-i18n="sessions.best">Best</th>
+                      <th data-i18n="sessions.laps">Laps</th>
+                      <th data-i18n="sessions.actions">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="sessionParticipantRows"></tbody>
+                </table>
+              </div>
+              <div id="sessionCompareSurface" class="sessionCompareSurface" hidden></div>
+              <div id="sessionParticipantDetailSurface" class="sessionParticipantDetailSurface"></div>
+            </section>
+            <div id="sessionWorkspaceUtilityRow" class="buttonRow sessionWorkspaceUtilityRow">
+              <button id="refreshSessions" type="button" data-i18n="sessions.refresh">Refresh Sessions</button>
+              <button id="deleteEmptySessions" type="button" data-i18n="sessions.deleteEmpty">Delete Empty Sessions</button>
+            </div>
+          </section>
         </section>
       </section>
 
