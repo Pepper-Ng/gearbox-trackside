@@ -95,6 +95,13 @@ export function useStableDriverColors(markers: DriverMarker[]): Map<string, stri
   const markerKey = markers.map(marker => marker.driverId).join('|');
 
   return useMemo(() => {
+    const visibleDriverIds = new Set(markers.map(marker => marker.driverId));
+    for (const driverId of assignments.current.keys()) {
+      if (!visibleDriverIds.has(driverId)) {
+        assignments.current.delete(driverId);
+      }
+    }
+
     for (const marker of markers) {
       if (!assignments.current.has(marker.driverId)) {
         assignments.current.set(marker.driverId, trackerDriverColorByIndex(nextIndex.current));
@@ -158,7 +165,7 @@ export function toSvgPoint(normalizedX: number, normalizedY: number, metrics: Ma
 
 export function clampRefreshHz(value: number | null | undefined): number {
   if (!isFiniteNumber(value)) {
-    return 50;
+    return 30;
   }
 
   return Math.min(60, Math.max(1, value));
