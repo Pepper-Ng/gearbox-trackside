@@ -115,6 +115,7 @@ public sealed class LiveSessionPublisher : BackgroundService
 
     private TimeSpan GetPublishInterval()
     {
+        // Publishing is intentionally decoupled from shared-memory polling; slow or absent maps should not increase browser churn.
         var publishSeconds = Math.Max(
             TracksideLiveSessionOptions.MinimumPublishIntervalSeconds,
             _options.CurrentValue.PublishIntervalSeconds);
@@ -123,6 +124,7 @@ public sealed class LiveSessionPublisher : BackgroundService
 
     private static string BuildPersistenceFingerprint(LiveSessionSnapshot snapshot, bool countForHistory)
     {
+        // Timestamp is deliberately excluded so fixture/stub feeds do not rewrite SQLite rows when the payload is unchanged.
         var builder = new StringBuilder();
         builder.Append(countForHistory ? '1' : '0').Append('|');
         builder.Append(snapshot.Source).Append('|');

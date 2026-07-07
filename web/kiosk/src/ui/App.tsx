@@ -3,7 +3,7 @@ import { formatGap, formatLapTime, formatNumber } from '../format';
 import { BestLapBoardResponse, BestLapRow, BestLapWindow, ClientConfiguration, DriverSnapshot, KioskDisplayMode, LastFinishedSessionResponse, LastFinishedSessionRow, LiveSessionConnection, LiveSessionInfo, LiveSessionSnapshot, SectorSnapshot, startLiveSessionFeed, TrackGeometryResponse, TracksideApiClient } from '../tracksideApi';
 import { getConnectionIndicators, getDriverStatus, getRaceLapProgress, getRacePositionDelta, type ConnectionIndicators, type DriverStatus } from './liveBoardLogic';
 import { buildSectorStripeStates, createEmptySectorStripeCache, defaultSectorStripeStates, type SectorStripeCache, type SectorStripeState } from './sectorStripeLogic';
-import { buildDriverMarkers, buildMapMetrics, clampRefreshHz, toSvgPoint, TrackerPage, type DriverMarker, useStableDriverColors } from './TrackerPage';
+import { buildDriverMarkers, buildMapMetrics, clampRefreshHz, resolveTrackerBounds, toSvgPoint, TrackerPage, type DriverMarker, useStableDriverColors } from './TrackerPage';
 import { stableDriverColor } from './driverColors';
 
 type ViewMode = BestLapWindow | 'last' | 'live' | 'tracker' | 'combined';
@@ -243,7 +243,9 @@ function CombinedPage({ snapshot, geometry, status, clientRefreshHz }: CombinedP
     };
   }, [refreshHz]);
 
-  const mapMetrics = useMemo(() => buildMapMetrics(geometry?.bounds), [geometry?.bounds]);
+  // Combined view shares the tracker fallback bounds so driver stripes and map markers stay colour-aligned before geometry is ready.
+  const trackerBounds = useMemo(() => resolveTrackerBounds(geometry?.bounds, trackerSnapshot?.drivers ?? []), [geometry?.bounds, trackerSnapshot?.drivers]);
+  const mapMetrics = useMemo(() => buildMapMetrics(trackerBounds), [trackerBounds]);
   const pathPoints = useMemo(
     () => (geometry?.points ?? [])
       .map(point => toSvgPoint(point.x, point.y, mapMetrics))
@@ -252,8 +254,8 @@ function CombinedPage({ snapshot, geometry, status, clientRefreshHz }: CombinedP
     [geometry?.points, mapMetrics],
   );
   const markers = useMemo(
-    () => buildDriverMarkers(trackerSnapshot?.drivers ?? [], geometry?.bounds, mapMetrics),
-    [trackerSnapshot?.drivers, geometry?.bounds, mapMetrics],
+    () => buildDriverMarkers(trackerSnapshot?.drivers ?? [], trackerBounds, mapMetrics),
+    [trackerSnapshot?.drivers, trackerBounds, mapMetrics],
   );
   const markerColors = useStableDriverColors(markers);
 
