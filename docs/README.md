@@ -14,3 +14,4 @@ Current status: the Phase 0B scaffold is complete, the Phase 0A proof of concept
 - [Phase 0A core PoC](./core-poc.md) - Completed live-data proof and go/no-go outcome.
 - [Telemetry report PoC decision](./telemetry-report-poc-plan.md) - Final telemetry source and report implementation direction.
 - [Shared-memory plugin investigation](./shared-memory-plugin-investigation.md) - Source-level behavior and operational implications.
+- [rFactor 2 dedicated-server crash runbook](./rfactor2-dedicated-crash-runbook.md) - Confirmed corrupt-configuration recovery, fail-safe USB evidence capture, application dumps, BSOD triage, and fallback isolation.
