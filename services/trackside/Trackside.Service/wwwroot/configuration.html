@@ -67,15 +67,15 @@
 
     <section id="dashboardPanel" class="dashboardShell" hidden>
       <nav class="adminTabs" aria-label="Admin sections">
-        <button class="active" data-tab="sourceTab" type="button" data-i18n="tabs.source">Source</button>
-        <button data-tab="sessionSetupTab" type="button" data-i18n="tabs.sessionSetup">Session Setup</button>
         <button data-tab="sessionsTab" type="button" data-i18n="tabs.sessions">Sessions</button>
+        <button data-tab="sessionSetupTab" type="button" data-i18n="tabs.sessionSetup">Session Setup</button>
         <button data-tab="leaderboardsTab" type="button" data-i18n="tabs.leaderboards">Leaderboards</button>
         <button data-tab="usersTab" type="button" data-i18n="tabs.admins">Admins</button>
         <button data-tab="statusTab" type="button" data-i18n="tabs.status">Status</button>
+        <button class="active" data-tab="sourceTab" type="button" data-i18n="tabs.advanced">Advanced</button>
       </nav>
 
-      <section id="sourceTab" class="adminTab active" data-i18n-aria="aria.sourceConfiguration" aria-label="Source configuration">
+      <section id="sourceTab" class="adminTab active" data-i18n-aria="aria.advancedConfiguration" aria-label="Advanced configuration">
         <section class="configurationPanel">
           <h2 data-i18n="sourceConfig.title">Live Source</h2>
           <p class="wideField" data-i18n="sourceConfig.description">Choose the timing source, memory-map discovery behavior, and polling rates used by the live kiosk feed.</p>
