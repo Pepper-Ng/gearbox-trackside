@@ -27,6 +27,7 @@ export function TrackerPage({ snapshot, geometry, clientRefreshHz }: TrackerPage
     let timer = 0;
 
     function tick() {
+      // The backend snapshot cadence can be slower than marker animation; reuse the latest snapshot at the UI refresh rate.
       setTrackerSnapshot(latestSnapshot.current);
       if (!cancelled) {
         timer = window.setTimeout(tick, 1000 / refreshHz);
@@ -40,12 +41,14 @@ export function TrackerPage({ snapshot, geometry, clientRefreshHz }: TrackerPage
     };
   }, [refreshHz]);
 
-  const mapMetrics = useMemo(() => buildMapMetrics(geometry?.bounds), [geometry?.bounds]);
+  const trackerBounds = useMemo(() => resolveTrackerBounds(geometry?.bounds, trackerSnapshot?.drivers ?? []), [geometry?.bounds, trackerSnapshot?.drivers]);
+  const mapMetrics = useMemo(() => buildMapMetrics(trackerBounds), [trackerBounds]);
+  // Geometry points are already normalized by the backend, so the browser only adapts them to the current SVG viewport.
   const pathPoints = useMemo(() => (geometry?.points ?? [])
     .map(point => toSvgPoint(point.x, point.y, mapMetrics))
     .map(point => `${point.x},${point.y}`)
     .join(' '), [geometry?.points, mapMetrics]);
-  const markers = useMemo(() => buildDriverMarkers(trackerSnapshot?.drivers ?? [], geometry?.bounds, mapMetrics), [trackerSnapshot?.drivers, geometry?.bounds, mapMetrics]);
+  const markers = useMemo(() => buildDriverMarkers(trackerSnapshot?.drivers ?? [], trackerBounds, mapMetrics), [trackerSnapshot?.drivers, trackerBounds, mapMetrics]);
   const markerColors = useStableDriverColors(markers);
 
   return (
@@ -95,6 +98,14 @@ export function useStableDriverColors(markers: DriverMarker[]): Map<string, stri
   const markerKey = markers.map(marker => marker.driverId).join('|');
 
   return useMemo(() => {
+    // Keep colours stable while a driver is visible, but prune old sessions so a kiosk can run all day.
+    const visibleDriverIds = new Set(markers.map(marker => marker.driverId));
+    for (const driverId of assignments.current.keys()) {
+      if (!visibleDriverIds.has(driverId)) {
+        assignments.current.delete(driverId);
+      }
+    }
+
     for (const marker of markers) {
       if (!assignments.current.has(marker.driverId)) {
         assignments.current.set(marker.driverId, trackerDriverColorByIndex(nextIndex.current));
@@ -108,6 +119,7 @@ export function useStableDriverColors(markers: DriverMarker[]): Map<string, stri
 
 export function buildMapMetrics(bounds: TrackGeometryBounds | null | undefined): MapMetrics {
   if (!bounds) {
+    // No geometry and no positioned drivers yet: keep a stable empty viewport instead of resizing around nothing.
     return { width: mapWidth, height: 640 };
   }
 
@@ -131,6 +143,7 @@ export function buildDriverMarkers(drivers: DriverSnapshot[], bounds: TrackGeome
   }
 
   return drivers
+    // Drivers without world X/Z coordinates cannot be placed on the tracker, but they still remain visible elsewhere.
     .filter(driver => isFiniteNumber(driver.posX) && isFiniteNumber(driver.posZ))
     .map((driver, index) => {
       const worldX = driver.posX!;
@@ -149,6 +162,43 @@ export function buildDriverMarkers(drivers: DriverSnapshot[], bounds: TrackGeome
     });
 }
 
+export function resolveTrackerBounds(bounds: TrackGeometryBounds | null | undefined, drivers: DriverSnapshot[]): TrackGeometryBounds | null {
+  if (bounds) {
+    return bounds;
+  }
+
+  // Before a reliable track outline exists, live driver coordinates can still give the tracker a useful
+  // provisional viewport. This is only for marker placement; the actual track line remains hidden.
+  const positionedDrivers = drivers.filter(driver => isFiniteNumber(driver.posX) && isFiniteNumber(driver.posZ));
+  if (positionedDrivers.length === 0) {
+    return null;
+  }
+
+  const xs = positionedDrivers.map(driver => driver.posX!);
+  const zs = positionedDrivers.map(driver => driver.posZ!);
+  return expandBounds({
+    minWorldX: Math.min(...xs),
+    maxWorldX: Math.max(...xs),
+    minWorldZ: Math.min(...zs),
+    maxWorldZ: Math.max(...zs),
+  });
+}
+
+function expandBounds(bounds: TrackGeometryBounds): TrackGeometryBounds {
+  // A single car, or a tight group leaving the pits, would otherwise collapse the SVG scale and make markers jump.
+  const minimumSpan = 80;
+  const width = Math.max(minimumSpan, bounds.maxWorldX - bounds.minWorldX);
+  const height = Math.max(minimumSpan, bounds.maxWorldZ - bounds.minWorldZ);
+  const centerX = (bounds.minWorldX + bounds.maxWorldX) / 2;
+  const centerZ = (bounds.minWorldZ + bounds.maxWorldZ) / 2;
+  return {
+    minWorldX: centerX - (width / 2),
+    maxWorldX: centerX + (width / 2),
+    minWorldZ: centerZ - (height / 2),
+    maxWorldZ: centerZ + (height / 2),
+  };
+}
+
 export function toSvgPoint(normalizedX: number, normalizedY: number, metrics: MapMetrics): { x: number; y: number } {
   return {
     x: mapPadding + (Math.min(1, Math.max(0, normalizedX)) * (metrics.width - (mapPadding * 2))),
@@ -158,7 +208,8 @@ export function toSvgPoint(normalizedX: number, normalizedY: number, metrics: Ma
 
 export function clampRefreshHz(value: number | null | undefined): number {
   if (!isFiniteNumber(value)) {
-    return 50;
+    // The server exposes this as an operator setting; 30 Hz is the venue-safe browser fallback.
+    return 30;
   }
 
   return Math.min(60, Math.max(1, value));

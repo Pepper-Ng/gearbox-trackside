@@ -87,14 +87,14 @@ The `Trackside` section in `Trackside.Service/appsettings.json` controls:
 - `Source.SharedMemory.AutoDiscover` - scans configured dedicated-server process names and visible Windows `Section` objects for scoring maps.
 - `Source.SharedMemory.DedicatedServerProcessNames` - process-name hints used to probe PID-suffixed maps after Dedicated Server restarts.
 - `Source.SharedMemory.MultipleScoringMapPolicy` - defaults to `RequireExplicitSelection`, so multiple simultaneous PID-suffixed scoring maps are reported instead of silently chosen.
-- `Source.SharedMemory.Telemetry.Enabled` - enabled by default for `Source.Mode = SharedMemory`; the high-rate telemetry loop feeds generated driver-tracker geometry while scoring remains the leaderboard and lap-validity source.
+- `Source.SharedMemory.Telemetry.Enabled` - disabled by default; enable it for live shared-memory telemetry capture once the rF2 plugin is publishing maps. Scoring remains the leaderboard and lap-validity source.
 - `LiveSession.PublishIntervalSeconds` - background SignalR publish cadence.
 - `Persistence.Enabled` - enables the durable Phase 2 store.
 - `Persistence.DatabasePath` / `Persistence.DatabaseFileName` - optional database location override or file name under the resolved data directory.
 - `Persistence.CountSessionsByDefault` - default inclusion flag for newly persisted live-session summaries until staff changes a session in the admin Sessions tab.
 - `Persistence.Retention.*` - retention policy targets for detailed lap records, session summaries, long-lived track best records, monthly track periods, and future telemetry samples. A background cleanup worker and admin trigger enforce these windows while preserving derived track-best records by default.
 - `Kiosk.DefaultDisplayMode` - default kiosk view for newly opened screens: Monthly, Weekly, Daily, LastSession, or Live.
-- `DriverTracker.ClientRefreshHz` - browser-side refresh/redraw rate for `/tracker`, defaulting to 50 Hz. Source freshness still depends on the active rFactor 2 scoring or telemetry source.
+- `DriverTracker.ClientRefreshHz` - browser-side refresh/redraw rate for `/tracker`, defaulting to 30 Hz. Admins can raise it up to 60 Hz when venue hardware is comfortable. Source freshness still depends on the active rFactor 2 scoring or telemetry source.
 - `DriverTracker.GeometryRecordingLaps` - default number of complete lap passes to average before generated track geometry is considered complete. The admin Driver Tracker panel can restart recording per seen track to improve stored geometry.
 - `Deployment.*` - install mode, service name, bundle version, install root, config/data/log/update paths, and manifest path. Detailed paths are surfaced through the authenticated admin status endpoint rather than public `/api/health`.
 - `Updates.*` - placeholder update status/channel/manifest fields for future dashboard-controlled updates.

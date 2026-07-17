@@ -182,6 +182,7 @@ const translations = {
     'driverTracker.laps': 'Laps',
     'driverTracker.samples': 'Samples',
     'driverTracker.updated': 'Updated',
+    'driverTracker.detail': 'Detail',
     'driverTracker.actions': 'Actions',
     'driverTracker.noTracks': 'No tracks seen yet.',
     'driverTracker.ready': 'Ready',
@@ -403,6 +404,7 @@ const translations = {
     'driverTracker.laps': 'Ronden',
     'driverTracker.samples': 'Samples',
     'driverTracker.updated': 'Bijgewerkt',
+    'driverTracker.detail': 'Detail',
     'driverTracker.actions': 'Acties',
     'driverTracker.noTracks': 'Nog geen banen gezien.',
     'driverTracker.ready': 'Gereed',
@@ -580,6 +582,8 @@ function setLanguage(language) {
 
 setupButton.addEventListener('click', () => createFirstAdmin().catch(showError));
 loginButton.addEventListener('click', () => login().catch(showError));
+setupPanel.addEventListener('keydown', event => submitAuthPanelOnEnter(event, createFirstAdmin));
+loginPanel.addEventListener('keydown', event => submitAuthPanelOnEnter(event, login));
 logoutButton.addEventListener('click', () => logout().catch(showError));
 languageSelectElement.addEventListener('change', () => saveLocalizationChoice(languageSelectElement.value).catch(showError));
 refreshElement.addEventListener('click', () => loadConfiguration().catch(showError));
@@ -617,6 +621,16 @@ document.querySelectorAll('[data-tab]').forEach(button => {
 });
 
 loadSession().catch(showError);
+
+function submitAuthPanelOnEnter(event, action) {
+  if (event.key !== 'Enter' || event.isComposing || !(event.target instanceof HTMLInputElement)) {
+    return;
+  }
+
+  // Auth panels are intentionally not full forms, but Enter should still follow normal login/setup muscle memory.
+  event.preventDefault();
+  action().catch(showError);
+}
 
 async function loadSession() {
   const session = await fetchJson('/api/admin/session');
@@ -1575,7 +1589,7 @@ async function loadKioskSettings() {
 
 async function loadDriverTrackerSettings() {
   const settings = await fetchJson('/api/admin/driver-tracker');
-  driverTrackerClientRefreshHzElement.value = String(settings.clientRefreshHz ?? 50);
+  driverTrackerClientRefreshHzElement.value = String(settings.clientRefreshHz ?? 30);
   driverTrackerGeometryRecordingLapsElement.value = String(settings.geometryRecordingLaps ?? 1);
 }
 
@@ -1619,7 +1633,7 @@ async function saveDriverTrackerSettings() {
   const clientRefreshHz = Number(driverTrackerClientRefreshHzElement.value);
   const geometryRecordingLaps = Number(driverTrackerGeometryRecordingLapsElement.value);
   const settings = await putJson('/api/admin/driver-tracker', { clientRefreshHz, geometryRecordingLaps });
-  driverTrackerClientRefreshHzElement.value = String(settings.clientRefreshHz ?? 50);
+  driverTrackerClientRefreshHzElement.value = String(settings.clientRefreshHz ?? 30);
   driverTrackerGeometryRecordingLapsElement.value = String(settings.geometryRecordingLaps ?? 1);
   setStatus(t('status.driverTrackerSaved'));
 }
@@ -1629,7 +1643,7 @@ function renderDriverTrackerTracks(tracks) {
   if (tracks.length === 0) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 7;
+    cell.colSpan = 8;
     cell.textContent = t('driverTracker.noTracks');
     row.appendChild(cell);
     driverTrackerTrackRowsElement.appendChild(row);
@@ -1640,10 +1654,11 @@ function renderDriverTrackerTracks(tracks) {
     const row = document.createElement('tr');
     appendCell(row, track.trackName ?? '-');
     appendCell(row, driverTrackerStatusText(track));
-    appendCell(row, `${Number(track.coveragePercent ?? 0).toFixed(1)}%`);
+    appendCell(row, formatDriverTrackerCoverage(track));
     appendCell(row, `${track.recordedLapCount ?? 0}/${track.targetCompletedLaps ?? 1}`);
-    appendCell(row, String(track.sampleCount ?? 0));
+    appendCell(row, formatDriverTrackerSamples(track));
     appendCell(row, formatDate(track.updatedUtc));
+    appendCell(row, track.statusDetail ?? '-');
     appendActionsCell(row, [
       {
         label: t('driverTracker.improve'),
@@ -1656,6 +1671,22 @@ function renderDriverTrackerTracks(tracks) {
     ]);
     driverTrackerTrackRowsElement.appendChild(row);
   }
+}
+
+function formatDriverTrackerCoverage(track) {
+  const stored = `${Number(track.coveragePercent ?? 0).toFixed(1)}%`;
+  const candidate = Number(track.candidateCoveragePercent ?? 0);
+  return candidate > 0 && !track.hasGeometry
+    ? `${stored} / ${candidate.toFixed(1)}% candidate`
+    : stored;
+}
+
+function formatDriverTrackerSamples(track) {
+  const stored = Number(track.sampleCount ?? 0);
+  const candidate = Number(track.candidateSampleCount ?? 0);
+  return candidate > 0
+    ? `${stored} / ${candidate} candidate`
+    : String(stored);
 }
 
 function driverTrackerStatusText(track) {

@@ -3,7 +3,7 @@ import { formatGap, formatLapTime, formatNumber } from '../format';
 import { BestLapBoardResponse, BestLapRow, BestLapWindow, ClientConfiguration, DriverSnapshot, KioskDisplayMode, LastFinishedSessionResponse, LastFinishedSessionRow, LiveSessionConnection, LiveSessionInfo, LiveSessionSnapshot, SectorSnapshot, startLiveSessionFeed, TrackGeometryResponse, TracksideApiClient } from '../tracksideApi';
 import { getConnectionIndicators, getDriverStatus, getRaceLapProgress, getRacePositionDelta, type ConnectionIndicators, type DriverStatus } from './liveBoardLogic';
 import { buildSectorStripeStates, createEmptySectorStripeCache, defaultSectorStripeStates, type SectorStripeCache, type SectorStripeState } from './sectorStripeLogic';
-import { buildDriverMarkers, buildMapMetrics, clampRefreshHz, toSvgPoint, TrackerPage, type DriverMarker, useStableDriverColors } from './TrackerPage';
+import { buildDriverMarkers, buildMapMetrics, clampRefreshHz, resolveTrackerBounds, toSvgPoint, TrackerPage, type DriverMarker, useStableDriverColors } from './TrackerPage';
 import { stableDriverColor } from './driverColors';
 
 type ViewMode = BestLapWindow | 'last' | 'live' | 'tracker' | 'combined';
@@ -190,33 +190,6 @@ interface LiveBoardProps {
 }
 
 function LiveBoard({ snapshot, status }: LiveBoardProps) {
-  const [clockAnchor, setClockAnchor] = useState({ seconds: 0, timestamp: Date.now() });
-  const [tick, setTick] = useState(Date.now());
-
-  useEffect(() => {
-    const currentSeconds = snapshot?.session?.currentSessionSeconds;
-    if (currentSeconds == null) {
-      return;
-    }
-
-    setClockAnchor({
-      seconds: currentSeconds,
-      timestamp: Date.now(),
-    });
-  }, [snapshot?.session?.currentSessionSeconds]);
-
-  useEffect(() => {
-    if (snapshot?.session?.currentSessionSeconds == null) {
-      return;
-    }
-
-    const interval = window.setInterval(() => setTick(Date.now()), 50);
-    return () => window.clearInterval(interval);
-  }, [snapshot?.session?.currentSessionSeconds]);
-
-  const interpolatedClockSeconds = snapshot?.session?.currentSessionSeconds != null
-    ? clockAnchor.seconds + Math.max(0, (tick - clockAnchor.timestamp) / 1000)
-    : undefined;
   const connectionIndicators = getConnectionIndicators(status, snapshot);
 
   return (
@@ -224,7 +197,7 @@ function LiveBoard({ snapshot, status }: LiveBoardProps) {
       <section className="sessionStrip" aria-label="Session summary">
         <Metric label="Track" value={snapshot?.session.trackName} indicators={<CompactStatusDots indicators={connectionIndicators} />} />
         <Metric label="Session" value={formatSessionValue(snapshot)} />
-        <Metric label="Clock" value={formatLapTime(interpolatedClockSeconds)} />
+        <ClockMetric currentSeconds={snapshot?.session?.currentSessionSeconds} />
       </section>
 
       <BoardPanel title="Live Board" meta={`${snapshot?.drivers.length ?? 0} drivers`} metaClassName="liveDriverCount" live>
@@ -244,27 +217,6 @@ interface CombinedPageProps {
 }
 
 function CombinedPage({ snapshot, geometry, status, clientRefreshHz }: CombinedPageProps) {
-  const [clockAnchor, setClockAnchor] = useState({ seconds: 0, timestamp: Date.now() });
-  const [clockTick, setClockTick] = useState(Date.now());
-
-  useEffect(() => {
-    const currentSeconds = snapshot?.session?.currentSessionSeconds;
-    if (currentSeconds == null) {
-      return;
-    }
-
-    setClockAnchor({ seconds: currentSeconds, timestamp: Date.now() });
-  }, [snapshot?.session?.currentSessionSeconds]);
-
-  useEffect(() => {
-    if (snapshot?.session?.currentSessionSeconds == null) {
-      return;
-    }
-
-    const interval = window.setInterval(() => setClockTick(Date.now()), 50);
-    return () => window.clearInterval(interval);
-  }, [snapshot?.session?.currentSessionSeconds]);
-
   const [trackerSnapshot, setTrackerSnapshot] = useState<LiveSessionSnapshot | null>(snapshot);
   const latestSnapshotRef = useRef<LiveSessionSnapshot | null>(snapshot);
   const refreshHz = clampRefreshHz(clientRefreshHz);
@@ -291,7 +243,9 @@ function CombinedPage({ snapshot, geometry, status, clientRefreshHz }: CombinedP
     };
   }, [refreshHz]);
 
-  const mapMetrics = useMemo(() => buildMapMetrics(geometry?.bounds), [geometry?.bounds]);
+  // Combined view shares the tracker fallback bounds so driver stripes and map markers stay colour-aligned before geometry is ready.
+  const trackerBounds = useMemo(() => resolveTrackerBounds(geometry?.bounds, trackerSnapshot?.drivers ?? []), [geometry?.bounds, trackerSnapshot?.drivers]);
+  const mapMetrics = useMemo(() => buildMapMetrics(trackerBounds), [trackerBounds]);
   const pathPoints = useMemo(
     () => (geometry?.points ?? [])
       .map(point => toSvgPoint(point.x, point.y, mapMetrics))
@@ -300,8 +254,8 @@ function CombinedPage({ snapshot, geometry, status, clientRefreshHz }: CombinedP
     [geometry?.points, mapMetrics],
   );
   const markers = useMemo(
-    () => buildDriverMarkers(trackerSnapshot?.drivers ?? [], geometry?.bounds, mapMetrics),
-    [trackerSnapshot?.drivers, geometry?.bounds, mapMetrics],
+    () => buildDriverMarkers(trackerSnapshot?.drivers ?? [], trackerBounds, mapMetrics),
+    [trackerSnapshot?.drivers, trackerBounds, mapMetrics],
   );
   const markerColors = useStableDriverColors(markers);
 
@@ -313,9 +267,6 @@ function CombinedPage({ snapshot, geometry, status, clientRefreshHz }: CombinedP
     return map;
   }, [trackerSnapshot?.drivers, markerColors]);
 
-  const interpolatedClockSeconds = snapshot?.session?.currentSessionSeconds != null
-    ? clockAnchor.seconds + Math.max(0, (clockTick - clockAnchor.timestamp) / 1000)
-    : undefined;
   const connectionIndicators = getConnectionIndicators(status, snapshot);
 
   return (
@@ -323,7 +274,7 @@ function CombinedPage({ snapshot, geometry, status, clientRefreshHz }: CombinedP
       <section className="sessionStrip" aria-label="Session summary">
         <Metric label="Track" value={snapshot?.session.trackName} indicators={<CompactStatusDots indicators={connectionIndicators} />} />
         <Metric label="Session" value={formatSessionValue(snapshot)} />
-        <Metric label="Clock" value={formatLapTime(interpolatedClockSeconds)} />
+        <ClockMetric currentSeconds={snapshot?.session?.currentSessionSeconds} />
       </section>
 
       <div className="combinedLayout">
@@ -844,6 +795,38 @@ function Metric({ label, value, indicators, featured }: MetricProps) {
       <strong>{value ?? '-'}{indicators}</strong>
     </div>
   );
+}
+
+interface ClockMetricProps {
+  currentSeconds: number | null | undefined;
+}
+
+function ClockMetric({ currentSeconds }: ClockMetricProps) {
+  const [clockAnchor, setClockAnchor] = useState({ seconds: 0, timestamp: Date.now() });
+  const [tick, setTick] = useState(Date.now());
+
+  useEffect(() => {
+    if (currentSeconds == null) {
+      return;
+    }
+
+    setClockAnchor({ seconds: currentSeconds, timestamp: Date.now() });
+  }, [currentSeconds]);
+
+  useEffect(() => {
+    if (currentSeconds == null) {
+      return;
+    }
+
+    const interval = window.setInterval(() => setTick(Date.now()), 50);
+    return () => window.clearInterval(interval);
+  }, [currentSeconds]);
+
+  const interpolatedSeconds = currentSeconds != null
+    ? clockAnchor.seconds + Math.max(0, (tick - clockAnchor.timestamp) / 1000)
+    : undefined;
+
+  return <Metric label="Clock" value={formatLapTime(interpolatedSeconds)} />;
 }
 
 interface SlimMetricProps {

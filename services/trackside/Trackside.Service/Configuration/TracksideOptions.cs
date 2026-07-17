@@ -150,7 +150,7 @@ public sealed class TracksideDriverTrackerOptions
     /// <summary>
     /// Default browser tracker refresh rate.
     /// </summary>
-    public const double DefaultClientRefreshHz = 50.0;
+    public const double DefaultClientRefreshHz = 30.0;
 
     /// <summary>
     /// Minimum number of complete lap passes to average into generated geometry.

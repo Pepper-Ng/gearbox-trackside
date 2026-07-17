@@ -2,11 +2,12 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Globalization;
+using System.Text;
 using Trackside.Application.Configuration;
 using Trackside.Application.LiveSession;
 using Trackside.Application.Persistence;
 using Trackside.Domain.LiveSession;
-using Trackside.Service.Configuration;
 using Trackside.Service.Hubs;
 
 namespace Trackside.Service.Workers;
@@ -21,10 +22,10 @@ public sealed class LiveSessionPublisher : BackgroundService
     private readonly ITracksideStore _store;
     private readonly IHubContext<LiveSessionHub, ILiveSessionClient> _hubContext;
     private readonly IOptionsMonitor<TracksideLiveSessionOptions> _options;
-    private readonly IOptionsMonitor<TracksideOptions> _tracksideOptions;
     private readonly IOptionsMonitor<TracksidePersistenceOptions> _persistenceOptions;
     private readonly ILiveDataPublisher _liveDataPublisher;
     private readonly ILogger<LiveSessionPublisher> _logger;
+    private string? _lastPersistedSnapshotFingerprint;
 
     /// <summary>
     /// Creates the background publisher.
@@ -34,7 +35,6 @@ public sealed class LiveSessionPublisher : BackgroundService
     /// <param name="store">Durable Phase 2 store.</param>
     /// <param name="hubContext">SignalR hub context used for browser pushes.</param>
     /// <param name="options">Live application options used for publish cadence.</param>
-    /// <param name="tracksideOptions">Trackside options used to align publish cadence with source polling.</param>
     /// <param name="persistenceOptions">Persistence options used for default session inclusion.</param>
     /// <param name="liveDataPublisher">Publisher for projected live data consumed by optional modules.</param>
     /// <param name="logger">Logger for source failures and lifecycle events.</param>
@@ -44,7 +44,6 @@ public sealed class LiveSessionPublisher : BackgroundService
         ITracksideStore store,
         IHubContext<LiveSessionHub, ILiveSessionClient> hubContext,
         IOptionsMonitor<TracksideLiveSessionOptions> options,
-        IOptionsMonitor<TracksideOptions> tracksideOptions,
         IOptionsMonitor<TracksidePersistenceOptions> persistenceOptions,
         ILiveDataPublisher liveDataPublisher,
         ILogger<LiveSessionPublisher> logger)
@@ -54,7 +53,6 @@ public sealed class LiveSessionPublisher : BackgroundService
         _store = store;
         _hubContext = hubContext;
         _options = options;
-        _tracksideOptions = tracksideOptions;
         _persistenceOptions = persistenceOptions;
         _liveDataPublisher = liveDataPublisher;
         _logger = logger;
@@ -92,10 +90,18 @@ public sealed class LiveSessionPublisher : BackgroundService
     {
         try
         {
+            var countForHistory = _persistenceOptions.CurrentValue.CountSessionsByDefault;
+            var fingerprint = BuildPersistenceFingerprint(snapshot, countForHistory);
+            if (string.Equals(fingerprint, _lastPersistedSnapshotFingerprint, StringComparison.Ordinal))
+            {
+                return;
+            }
+
             await _store.SaveLiveSessionSnapshotAsync(
                 snapshot,
-                _persistenceOptions.CurrentValue.CountSessionsByDefault,
+                countForHistory,
                 cancellationToken);
+            _lastPersistedSnapshotFingerprint = fingerprint;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -109,17 +115,66 @@ public sealed class LiveSessionPublisher : BackgroundService
 
     private TimeSpan GetPublishInterval()
     {
+        // Publishing is intentionally decoupled from shared-memory polling; slow or absent maps should not increase browser churn.
         var publishSeconds = Math.Max(
             TracksideLiveSessionOptions.MinimumPublishIntervalSeconds,
             _options.CurrentValue.PublishIntervalSeconds);
+        return TimeSpan.FromSeconds(publishSeconds);
+    }
 
-        var tracksideOptions = _tracksideOptions.CurrentValue;
-        if (tracksideOptions.Source.Mode == LiveSessionSourceMode.SharedMemory)
+    private static string BuildPersistenceFingerprint(LiveSessionSnapshot snapshot, bool countForHistory)
+    {
+        // Timestamp is deliberately excluded so fixture/stub feeds do not rewrite SQLite rows when the payload is unchanged.
+        var builder = new StringBuilder();
+        builder.Append(countForHistory ? '1' : '0').Append('|');
+        builder.Append(snapshot.Source).Append('|');
+        builder.Append(snapshot.Session.TrackName).Append('|');
+        builder.Append(snapshot.Session.Kind).Append('|');
+        builder.Append(snapshot.Session.Phase).Append('|');
+        AppendValue(builder, snapshot.Session.CurrentSessionSeconds);
+        AppendValue(builder, snapshot.Session.ScheduledDurationSeconds);
+        AppendValue(builder, snapshot.Session.LapDistanceMeters);
+        builder.Append(snapshot.Session.OverallFlag).Append('|');
+
+        foreach (var driver in snapshot.Drivers.OrderBy(driver => driver.DriverId, StringComparer.OrdinalIgnoreCase))
         {
-            var scoringSeconds = 1.0 / Math.Clamp(tracksideOptions.Source.SharedMemory.ScoringPollHz, 0.25, 200.0);
-            return TimeSpan.FromSeconds(Math.Min(publishSeconds, scoringSeconds));
+            builder.Append(driver.DriverId).Append('|');
+            builder.Append(driver.RigName).Append('|');
+            builder.Append(driver.DisplayName).Append('|');
+            builder.Append(driver.VehicleName).Append('|');
+            builder.Append(driver.LeaderboardRank).Append('|');
+            builder.Append(driver.Position).Append('|');
+            builder.Append(driver.CompletedLaps).Append('|');
+            AppendValue(builder, driver.BestLapSeconds);
+            AppendValue(builder, driver.LastLapSeconds);
+            AppendValue(builder, driver.CurrentLapSeconds);
+            AppendValue(builder, driver.GapToLeaderSeconds);
+            AppendValue(builder, driver.GapToNextSeconds);
+            builder.Append(driver.LapsBehindLeader).Append('|');
+            AppendValue(builder, driver.TrackPositionPercent);
+            AppendValue(builder, driver.LapDistanceMeters);
+            AppendValue(builder, driver.PosX);
+            AppendValue(builder, driver.PosZ);
+            foreach (var sector in driver.Sectors.OrderBy(sector => sector.Number))
+            {
+                builder.Append(sector.Number).Append('|');
+                AppendValue(builder, sector.BestSeconds);
+                AppendValue(builder, sector.LastSeconds);
+                AppendValue(builder, sector.CurrentSeconds);
+                builder.Append(sector.IsOverallBest ? '1' : '0').Append('|');
+            }
         }
 
-        return TimeSpan.FromSeconds(publishSeconds);
+        return builder.ToString();
+    }
+
+    private static void AppendValue(StringBuilder builder, double? value)
+    {
+        if (value.HasValue && double.IsFinite(value.Value))
+        {
+            builder.Append(value.Value.ToString("R", CultureInfo.InvariantCulture));
+        }
+
+        builder.Append('|');
     }
 }

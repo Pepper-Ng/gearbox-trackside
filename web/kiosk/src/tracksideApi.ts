@@ -167,6 +167,8 @@ export interface TrackGeometryResponse {
   coveragePercent: number;
   /** True when enough start-to-finish samples exist for reliable rendering. */
   isCompleteLap: boolean;
+  /** Current geometry generation detail from the backend. */
+  statusDetail?: string | null;
   /** Raw world-coordinate bounds for normalizing live driver markers. */
   bounds?: TrackGeometryBounds | null;
   /** Normalized geometry points ordered by lap progress. */

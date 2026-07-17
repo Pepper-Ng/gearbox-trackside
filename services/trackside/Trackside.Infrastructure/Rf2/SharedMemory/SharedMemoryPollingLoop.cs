@@ -9,6 +9,8 @@ namespace Trackside.Infrastructure.Rf2.SharedMemory;
 public sealed class SharedMemoryPollingLoop<T> : IDisposable
     where T : class
 {
+    private static readonly TimeSpan MaximumIdleDelay = TimeSpan.FromSeconds(5);
+
     private readonly string _name;
     private readonly bool _enabled;
     private readonly TimeSpan _pollInterval;
@@ -19,6 +21,7 @@ public sealed class SharedMemoryPollingLoop<T> : IDisposable
     private T? _latest;
     private Exception? _lastError;
     private DateTimeOffset? _lastSuccessUtc;
+    private int _consecutiveIdleReads;
 
     /// <summary>
     /// Creates and starts the polling loop when enabled.
@@ -102,12 +105,14 @@ public sealed class SharedMemoryPollingLoop<T> : IDisposable
                     Volatile.Write(ref _latest, value);
                     _lastSuccessUtc = DateTimeOffset.UtcNow;
                     _lastError = null;
+                    _consecutiveIdleReads = 0;
                 }
                 else
                 {
                     Volatile.Write(ref _latest, null);
                     _lastSuccessUtc = null;
                     _lastError = null;
+                    _consecutiveIdleReads++;
                 }
             }
             catch (OperationCanceledException) when (_stop.IsCancellationRequested)
@@ -118,17 +123,33 @@ public sealed class SharedMemoryPollingLoop<T> : IDisposable
             {
                 Volatile.Write(ref _latest, null);
                 _lastError = ex;
+                _consecutiveIdleReads++;
                 _logger.LogDebug(ex, "{LoopName} shared-memory polling iteration failed.", _name);
             }
 
             try
             {
-                await Task.Delay(_pollInterval, _stop.Token);
+                await Task.Delay(GetNextDelay(), _stop.Token);
             }
             catch (OperationCanceledException) when (_stop.IsCancellationRequested)
             {
                 break;
             }
         }
+    }
+
+    private TimeSpan GetNextDelay()
+    {
+        if (_consecutiveIdleReads <= 0)
+        {
+            return _pollInterval;
+        }
+
+        // Missing maps are expected while rFactor 2 or its plugin is not publishing yet. Backing off keeps the
+        // console host from repeatedly probing Windows objects at the full live-data cadence for long periods.
+        var cappedExponent = Math.Min(_consecutiveIdleReads - 1, 8);
+        var multiplier = 1 << cappedExponent;
+        var delayTicks = Math.Min(_pollInterval.Ticks * multiplier, MaximumIdleDelay.Ticks);
+        return TimeSpan.FromTicks(Math.Max(_pollInterval.Ticks, delayTicks));
     }
 }

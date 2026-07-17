@@ -44,6 +44,11 @@ public sealed class TrackGeometryRecorderTests
             Assert.Equal(0, geometry.SampleCount);
             Assert.True(geometry.CoveragePercent < 90.0);
             Assert.Empty(geometry.Points);
+
+            var track = Assert.Single(cache.ListTracks());
+            Assert.Equal(3, track.CandidateSampleCount);
+            Assert.True(track.CandidateCoveragePercent > 0.0);
+            Assert.Contains("candidate lap samples", track.StatusDetail, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -68,6 +73,7 @@ public sealed class TrackGeometryRecorderTests
             Assert.True(geometry.IsCompleteLap);
             Assert.True(geometry.SampleCount >= 90);
             Assert.True(geometry.CoveragePercent >= 90.0);
+            Assert.Contains("Geometry ready", geometry.StatusDetail, StringComparison.OrdinalIgnoreCase);
             Assert.Equal(181, geometry.Points.Count);
             Assert.Equal(geometry.Points[0].X, geometry.Points[^1].X, precision: 8);
             Assert.Equal(geometry.Points[0].Y, geometry.Points[^1].Y, precision: 8);

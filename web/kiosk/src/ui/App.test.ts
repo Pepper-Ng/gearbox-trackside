@@ -4,6 +4,7 @@ import { getFlagColor, getFlagDisplayText, getViewFromPath, isCheckeredFlag, sho
 import { stableDriverColor, trackerDriverColorByIndex } from './driverColors';
 import { getConnectionIndicators, getDriverStatus, getRaceLapProgress, getRacePositionDelta } from './liveBoardLogic';
 import { buildSectorStripeStates, createEmptySectorStripeCache, type SectorStripeState } from './sectorStripeLogic';
+import { resolveTrackerBounds } from './TrackerPage';
 
 describe('kiosk route selection', () => {
   it('maps the tracker route to the tracker view', () => {
@@ -72,6 +73,17 @@ describe('tracker colors', () => {
 
     expect(stableDriverColor('7', 'Niko')).toBe(niko);
     expect(stableDriverColor('8', 'Antonio')).not.toBe(niko);
+  });
+
+  it('can derive provisional tracker bounds from live driver positions before geometry is ready', () => {
+    const bounds = resolveTrackerBounds(null, [
+      makeDriver({ driverId: '1', posX: 10, posZ: -20 }),
+      makeDriver({ driverId: '2', posX: 14, posZ: -18 }),
+    ]);
+
+    expect(bounds).not.toBeNull();
+    expect(bounds!.maxWorldX - bounds!.minWorldX).toBeGreaterThanOrEqual(80);
+    expect(bounds!.maxWorldZ - bounds!.minWorldZ).toBeGreaterThanOrEqual(80);
   });
 });
 

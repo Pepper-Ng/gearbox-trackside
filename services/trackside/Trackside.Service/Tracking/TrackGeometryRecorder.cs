@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Globalization;
 using Microsoft.Extensions.Options;
 using Trackside.Application.LiveSession;
 using Trackside.Application.Serialization;
@@ -18,7 +19,7 @@ public sealed record TrackGeometryChangedFrame
     /// <summary>
     /// Updated generated track geometry.
     /// </summary>
-    public TrackGeometryResponse Geometry { get; init; } = TrackGeometryResponse.Unavailable(null, 0, 0.0, false, null, null);
+    public TrackGeometryResponse Geometry { get; init; } = TrackGeometryResponse.Unavailable(null, 0, 0.0, false, null, null, null);
 }
 
 /// <summary>
@@ -227,7 +228,7 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
     {
         if (string.IsNullOrWhiteSpace(trackName))
         {
-            return TrackGeometryResponse.Unavailable(trackName, 0, 0.0, false, null, null);
+            return TrackGeometryResponse.Unavailable(trackName, 0, 0.0, false, null, null, "No track is selected yet.");
         }
 
         lock (_gate)
@@ -304,8 +305,11 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
         IsImprovementRecording = state.RecordingRequested,
         CoveragePercent = state.CoveragePercent,
         SampleCount = state.Samples.Count,
+        CandidateSampleCount = state.CandidateSampleCount,
+        CandidateCoveragePercent = state.CandidateCoveragePercent,
         TargetCompletedLaps = state.TargetCompletedLaps,
         RecordedLapCount = state.RecordedLapCount,
+        StatusDetail = state.StatusDetail,
     };
 
     private int DefaultTargetLaps() => ClampTargetLaps(_options.CurrentValue.DriverTracker.GeometryRecordingLaps);
@@ -465,13 +469,15 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
 
         if (!state.IsCompleteLap || samples.Count < 4)
         {
-            return TrackGeometryResponse.Unavailable(state.TrackName, samples.Count, state.CoveragePercent, state.IsCompleteLap, state.UpdatedUtc, state.Source);
+            // Keep the track outline hidden until a full qualifying lap is merged, but still return
+            // status detail so operators can see whether recording is waiting for samples or lap completion.
+            return TrackGeometryResponse.Unavailable(state.TrackName, samples.Count, state.CoveragePercent, state.IsCompleteLap, state.UpdatedUtc, state.Source, state.StatusDetail);
         }
 
         var resampled = SmoothCircular(Resample(samples));
         if (resampled.Count == 0)
         {
-            return TrackGeometryResponse.Unavailable(state.TrackName, samples.Count, state.CoveragePercent, state.IsCompleteLap, state.UpdatedUtc, state.Source);
+            return TrackGeometryResponse.Unavailable(state.TrackName, samples.Count, state.CoveragePercent, state.IsCompleteLap, state.UpdatedUtc, state.Source, state.StatusDetail);
         }
 
         var closed = resampled.Concat([resampled[0]]).ToList();
@@ -507,6 +513,7 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
             SampleCount = samples.Count,
             CoveragePercent = state.CoveragePercent,
             IsCompleteLap = state.IsCompleteLap,
+            StatusDetail = state.StatusDetail,
             Bounds = bounds,
             Points = points,
         };
@@ -719,6 +726,42 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
         public int RecordedLapCount => RecordedLapKeys.Count;
 
         public bool IsRecording => !IsCompleteLap || RecordingRequested;
+
+        public int CandidateSampleCount => CandidateLaps.Values.Sum(lap => lap.Samples.Count);
+
+        public double CandidateCoveragePercent => CandidateLaps.Count == 0
+            ? 0.0
+            : CandidateLaps.Values.Max(lap => CalculateQuality(lap.Samples.Values).CoveragePercent);
+
+        public string StatusDetail
+        {
+            get
+            {
+                // Candidate laps are intentionally separate from stored geometry until a driver crosses into
+                // the next lap key; that avoids rendering an abandoned out-lap or partial telemetry pass as a track.
+                if (IsCompleteLap && !IsRecording)
+                {
+                    return $"Geometry ready from {RecordedLapCount}/{TargetCompletedLaps} completed lap pass(es).";
+                }
+
+                if (IsCompleteLap && RecordingRequested)
+                {
+                    return $"Improving existing geometry: {RecordedLapCount}/{TargetCompletedLaps} completed lap pass(es) recorded.";
+                }
+
+                if (Samples.Count > 0)
+                {
+                    return $"Stored partial geometry covers {CoveragePercent.ToString("0.0", CultureInfo.InvariantCulture)}% from {RecordedLapCount}/{TargetCompletedLaps} completed lap pass(es).";
+                }
+
+                if (CandidateSampleCount > 0)
+                {
+                    return $"Recording candidate lap samples: {CandidateCoveragePercent.ToString("0.0", CultureInfo.InvariantCulture)}% coverage. The lap is saved after the driver starts the next lap.";
+                }
+
+                return "Waiting for valid on-track position samples with lap progress.";
+            }
+        }
 
         public SortedDictionary<int, WorldSample> Samples { get; } = [];
 
@@ -1000,6 +1043,16 @@ public sealed record TrackGeometryCatalogEntry
     public int SampleCount { get; init; }
 
     /// <summary>
+    /// Number of volatile samples currently collected for in-progress candidate laps.
+    /// </summary>
+    public int CandidateSampleCount { get; init; }
+
+    /// <summary>
+    /// Best current coverage percentage among in-progress candidate laps.
+    /// </summary>
+    public double CandidateCoveragePercent { get; init; }
+
+    /// <summary>
     /// Complete lap passes requested before geometry is considered complete.
     /// </summary>
     public int TargetCompletedLaps { get; init; }
@@ -1008,6 +1061,11 @@ public sealed record TrackGeometryCatalogEntry
     /// Distinct lap passes contributing samples to the current geometry.
     /// </summary>
     public int RecordedLapCount { get; init; }
+
+    /// <summary>
+    /// Operator-facing detail explaining the current geometry state.
+    /// </summary>
+    public string StatusDetail { get; init; } = string.Empty;
 }
 
 /// <summary>
@@ -1072,6 +1130,11 @@ public sealed record TrackGeometryResponse
     public bool IsCompleteLap { get; init; }
 
     /// <summary>
+    /// Operator-facing detail explaining why geometry is or is not available.
+    /// </summary>
+    public string? StatusDetail { get; init; }
+
+    /// <summary>
     /// Raw world-coordinate bounds used for frontend driver marker normalization.
     /// </summary>
     public TrackGeometryBounds? Bounds { get; init; }
@@ -1084,7 +1147,7 @@ public sealed record TrackGeometryResponse
     /// <summary>
     /// Creates an unavailable response for missing or under-sampled geometry.
     /// </summary>
-    public static TrackGeometryResponse Unavailable(string? trackName, int sampleCount, double coveragePercent, bool isCompleteLap, DateTimeOffset? updatedUtc, string? source) => new()
+    public static TrackGeometryResponse Unavailable(string? trackName, int sampleCount, double coveragePercent, bool isCompleteLap, DateTimeOffset? updatedUtc, string? source, string? statusDetail) => new()
     {
         TrackName = trackName,
         Source = source,
@@ -1092,6 +1155,7 @@ public sealed record TrackGeometryResponse
         SampleCount = sampleCount,
         CoveragePercent = coveragePercent,
         IsCompleteLap = isCompleteLap,
+        StatusDetail = statusDetail,
     };
 }
 
