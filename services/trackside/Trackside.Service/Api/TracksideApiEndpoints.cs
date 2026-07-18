@@ -235,17 +235,24 @@ public static class TracksideApiEndpoints
     }
 
     /// <summary>
-    /// Maps the authenticated selected-track geometry endpoint used by the admin preview.
+    /// Maps authenticated selected-track geometry endpoints used by the admin preview.
     /// </summary>
     /// <param name="endpoints">Endpoint builder receiving the route.</param>
-    /// <returns>The mapped endpoint convention builder.</returns>
+    /// <returns>The mapped GET endpoint convention builder.</returns>
     public static IEndpointConventionBuilder MapAdminDriverTrackerGeometry(this IEndpointRouteBuilder endpoints)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
-        return endpoints.MapGet(LiveSessionRoutes.AdminDriverTrackerGeometryPath, GetDriverTrackerTrackGeometry)
+        var getEndpoint = endpoints.MapGet(LiveSessionRoutes.AdminDriverTrackerGeometryPath, GetDriverTrackerTrackGeometry)
             .RequireAuthorization()
             .WithName("GetDriverTrackerTrackGeometry")
             .WithSummary("Returns generated geometry for a selected track in the admin catalog.");
+
+        endpoints.MapDelete(LiveSessionRoutes.AdminDriverTrackerGeometryPath, DeleteDriverTrackerTrackGeometryAsync)
+            .RequireAuthorization()
+            .WithName("DeleteDriverTrackerTrackGeometry")
+            .WithSummary("Deletes generated geometry for a selected track in the admin catalog.");
+
+        return getEndpoint;
     }
 
     private static async Task<IResult> GetCurrentSessionAsync(
@@ -299,11 +306,54 @@ public static class TracksideApiEndpoints
             return Results.BadRequest(new { error = "Track name is required." });
         }
 
+        return !TryResolveCatalogTrackName(trackName, trackGeometryRecorder, out var canonicalTrackName)
+            ? Results.NotFound(new { error = "Track geometry was not found." })
+            : Results.Ok(trackGeometryRecorder.Get(canonicalTrackName));
+    }
+
+    /// <summary>
+    /// Deletes persisted and in-memory generated geometry for a selected catalog track.
+    /// </summary>
+    /// <param name="trackName">Track name selected by the administrator.</param>
+    /// <param name="trackGeometryRecorder">Geometry recorder and persisted catalog.</param>
+    /// <param name="cancellationToken">Cancellation token for live-geometry reset publication.</param>
+    /// <returns>A bad request, not-found response, or the updated track catalog entry.</returns>
+    public static async Task<IResult> DeleteDriverTrackerTrackGeometryAsync(
+        string? trackName,
+        TrackGeometryRecorder trackGeometryRecorder,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(trackName))
+        {
+            return Results.BadRequest(new { error = "Track name is required." });
+        }
+
+        if (!TryResolveCatalogTrackName(trackName, trackGeometryRecorder, out var canonicalTrackName))
+        {
+            return Results.NotFound(new { error = "Track geometry was not found." });
+        }
+
+        var result = await trackGeometryRecorder.DeleteOutlineAsync(canonicalTrackName, cancellationToken);
+        return result is null
+            ? Results.NotFound(new { error = "Track geometry was not found." })
+            : Results.Ok(result);
+    }
+
+    private static bool TryResolveCatalogTrackName(
+        string trackName,
+        TrackGeometryRecorder trackGeometryRecorder,
+        out string canonicalTrackName)
+    {
         var catalogTrack = trackGeometryRecorder.ListTracks().FirstOrDefault(track =>
             string.Equals(track.TrackName, trackName.Trim(), StringComparison.OrdinalIgnoreCase));
-        return catalogTrack is null
-            ? Results.NotFound(new { error = "Track geometry was not found." })
-            : Results.Ok(trackGeometryRecorder.Get(catalogTrack.TrackName));
+        if (catalogTrack is null)
+        {
+            canonicalTrackName = string.Empty;
+            return false;
+        }
+
+        canonicalTrackName = catalogTrack.TrackName;
+        return true;
     }
 
     private static IResult GetClientConfiguration(IOptionsMonitor<TracksideOptions> options) => Results.Ok(new ClientConfigurationResponse

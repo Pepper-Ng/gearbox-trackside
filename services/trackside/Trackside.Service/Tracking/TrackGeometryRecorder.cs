@@ -281,6 +281,48 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
         return entry;
     }
 
+    /// <summary>
+    /// Deletes generated geometry for a known catalog track and resets recording state so live samples can rebuild it.
+    /// </summary>
+    /// <param name="trackName">Track name to remove using case-insensitive catalog lookup.</param>
+    /// <param name="cancellationToken">Cancellation token for publishing geometry reset updates.</param>
+    /// <returns>Updated catalog entry after reset, or <see langword="null"/> when no catalog row exists.</returns>
+    public async ValueTask<TrackGeometryCatalogEntry?> DeleteOutlineAsync(string trackName, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(trackName);
+        TrackGeometryChangedFrame changed;
+        TrackGeometryCatalogEntry entry;
+
+        lock (_gate)
+        {
+            LoadPersistedStates();
+            if (!_tracks.TryGetValue(trackName.Trim(), out var state))
+            {
+                return null;
+            }
+
+            var now = _timeProvider.GetUtcNow();
+            DeletePersistedOutlineFile(state.TrackName);
+            state.ResetAfterDelete(DefaultTargetLaps());
+            state.UpdatedUtc = now;
+            state.LastPersistedUtc = null;
+            if (state.SeenUtc == default)
+            {
+                state.SeenUtc = now;
+            }
+
+            // Reset context caches so the next published outline is based on fresh lap context after deletion.
+            _scoringContexts.Remove(state.TrackName);
+            _lastTelemetryUtcByTrack.Remove(state.TrackName);
+
+            entry = ToCatalogEntry(state);
+            changed = new TrackGeometryChangedFrame { Geometry = BuildResponse(state) };
+        }
+
+        await _liveDataPublisher.PublishAsync(changed, cancellationToken);
+        return entry;
+    }
+
     private TrackGeometryState GetOrLoadState(string trackName)
     {
         if (_tracks.TryGetValue(trackName, out var cached))
@@ -459,6 +501,15 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
         var options = new JsonSerializerOptions(TracksideJson.SerializerOptions) { WriteIndented = true };
         File.WriteAllText(temporaryPath, JsonSerializer.Serialize(persisted, options));
         File.Move(temporaryPath, path, overwrite: true);
+    }
+
+    private void DeletePersistedOutlineFile(string trackName)
+    {
+        var path = GeometryFilePath(trackName);
+        if (File.Exists(path))
+        {
+            File.Delete(path);
+        }
     }
 
     private TrackGeometryResponse BuildResponse(TrackGeometryState state)
@@ -777,17 +828,14 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
             RecordingRequested = true;
             if (resetExistingGeometry)
             {
-                Samples.Clear();
-                RecordedLapKeys.Clear();
-                CandidateLaps.Clear();
-                ActiveDriverLaps.Clear();
-                IsCompleteLap = false;
-                CoveragePercent = 0.0;
+                ResetGeometryState(recordingRequested: true, targetCompletedLaps);
                 return;
             }
 
             RecalculateQuality();
         }
+
+        public void ResetAfterDelete(int targetCompletedLaps) => ResetGeometryState(recordingRequested: false, targetCompletedLaps);
 
         public bool Add(WorldSample sample, DateTimeOffset now)
         {
@@ -879,6 +927,18 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
             {
                 RecordingRequested = false;
             }
+        }
+
+        private void ResetGeometryState(bool recordingRequested, int targetCompletedLaps)
+        {
+            TargetCompletedLaps = targetCompletedLaps;
+            RecordingRequested = recordingRequested;
+            Samples.Clear();
+            RecordedLapKeys.Clear();
+            CandidateLaps.Clear();
+            ActiveDriverLaps.Clear();
+            IsCompleteLap = false;
+            CoveragePercent = 0.0;
         }
     }
 

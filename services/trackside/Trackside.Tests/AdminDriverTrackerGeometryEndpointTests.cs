@@ -89,7 +89,107 @@ public sealed class AdminDriverTrackerGeometryEndpointTests
     }
 
     /// <summary>
-    /// The selected-track endpoint remains restricted to authenticated administrators.
+    /// Missing track names are rejected before delete lookup.
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task DeleteRejectsMissingTrackName(string? trackName)
+    {
+        var recorder = CreateRecorder(out var tempRoot);
+        try
+        {
+            var result = await TracksideApiEndpoints.DeleteDriverTrackerTrackGeometryAsync(trackName, recorder, CancellationToken.None);
+
+            Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode);
+        }
+        finally
+        {
+            DeleteTempRoot(tempRoot);
+        }
+    }
+
+    /// <summary>
+    /// Delete returns not found for names outside the known catalog.
+    /// </summary>
+    [Fact]
+    public async Task DeleteReturnsNotFoundForUnknownTrack()
+    {
+        var recorder = CreateRecorder(out var tempRoot);
+        try
+        {
+            var result = await TracksideApiEndpoints.DeleteDriverTrackerTrackGeometryAsync("Unknown Track", recorder, CancellationToken.None);
+
+            Assert.Equal(StatusCodes.Status404NotFound, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode);
+            Assert.Empty(recorder.ListTracks());
+        }
+        finally
+        {
+            DeleteTempRoot(tempRoot);
+        }
+    }
+
+    /// <summary>
+    /// Deleting a known track returns its updated catalog state with geometry cleared.
+    /// </summary>
+    [Fact]
+    public async Task DeleteReturnsUpdatedCatalogEntryForKnownTrack()
+    {
+        var recorder = CreateRecorder(out var tempRoot);
+        try
+        {
+            await recorder.StartRecordingAsync(new TrackGeometryRecordingRequest
+            {
+                TrackName = "Loch Drummond - Short",
+                TargetCompletedLaps = 1,
+                ResetExistingGeometry = true,
+            }, CancellationToken.None);
+
+            var result = await TracksideApiEndpoints.DeleteDriverTrackerTrackGeometryAsync("Loch Drummond - Short", recorder, CancellationToken.None);
+
+            Assert.Equal(StatusCodes.Status200OK, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode);
+            var entry = Assert.IsType<TrackGeometryCatalogEntry>(Assert.IsAssignableFrom<IValueHttpResult>(result).Value);
+            Assert.Equal("Loch Drummond - Short", entry.TrackName);
+            Assert.False(entry.HasGeometry);
+            Assert.Equal(0, entry.SampleCount);
+        }
+        finally
+        {
+            DeleteTempRoot(tempRoot);
+        }
+    }
+
+    /// <summary>
+    /// Delete lookup is case-insensitive and returns canonical catalog track casing.
+    /// </summary>
+    [Fact]
+    public async Task DeleteResolvesCatalogTrackCaseInsensitively()
+    {
+        var recorder = CreateRecorder(out var tempRoot);
+        try
+        {
+            await recorder.StartRecordingAsync(new TrackGeometryRecordingRequest
+            {
+                TrackName = "Loch Drummond - Short",
+                TargetCompletedLaps = 1,
+                ResetExistingGeometry = true,
+            }, CancellationToken.None);
+
+            var result = await TracksideApiEndpoints.DeleteDriverTrackerTrackGeometryAsync("loch drummond - short", recorder, CancellationToken.None);
+
+            Assert.Equal(StatusCodes.Status200OK, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode);
+            var entry = Assert.IsType<TrackGeometryCatalogEntry>(Assert.IsAssignableFrom<IValueHttpResult>(result).Value);
+            Assert.Equal("Loch Drummond - Short", entry.TrackName);
+        }
+        finally
+        {
+            DeleteTempRoot(tempRoot);
+        }
+    }
+
+    /// <summary>
+    /// The selected-track geometry GET and DELETE routes remain restricted to authenticated administrators.
     /// </summary>
     [Fact]
     public async Task RouteRequiresAuthorization()
@@ -102,12 +202,19 @@ public sealed class AdminDriverTrackerGeometryEndpointTests
         {
             app.MapAdminDriverTrackerGeometry();
 
-            var endpoint = ((IEndpointRouteBuilder)app).DataSources
+            var endpoints = ((IEndpointRouteBuilder)app).DataSources
                 .SelectMany(source => source.Endpoints)
                 .OfType<RouteEndpoint>()
-                .Single(candidate => candidate.RoutePattern.RawText == LiveSessionRoutes.AdminDriverTrackerGeometryPath);
+                .Where(candidate => candidate.RoutePattern.RawText == LiveSessionRoutes.AdminDriverTrackerGeometryPath)
+                .ToList();
 
-            Assert.NotEmpty(endpoint.Metadata.GetOrderedMetadata<IAuthorizeData>());
+            Assert.Equal(2, endpoints.Count);
+
+            var getEndpoint = endpoints.Single(candidate => candidate.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods.Contains(HttpMethods.Get, StringComparer.OrdinalIgnoreCase) == true);
+            var deleteEndpoint = endpoints.Single(candidate => candidate.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods.Contains(HttpMethods.Delete, StringComparer.OrdinalIgnoreCase) == true);
+
+            Assert.NotEmpty(getEndpoint.Metadata.GetOrderedMetadata<IAuthorizeData>());
+            Assert.NotEmpty(deleteEndpoint.Metadata.GetOrderedMetadata<IAuthorizeData>());
         }
         finally
         {

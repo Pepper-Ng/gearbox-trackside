@@ -237,6 +237,161 @@ public sealed class TrackGeometryRecorderTests
     }
 
     /// <summary>
+    /// Deleting a completed outline removes persisted geometry, keeps the catalog row, and clears drawable points.
+    /// </summary>
+    [Fact]
+    public async Task DeleteOutlineRemovesCompleteGeometryAndPersistedFile()
+    {
+        var cache = CreateCache(out var tempRoot);
+        try
+        {
+            RecordTelemetryLap(cache, "1", completedLaps: 0, startIndex: 0, endIndex: 100);
+            Assert.True(cache.Get("Loch Drummond - Short").IsAvailable);
+            Assert.Single(GeometryFiles(tempRoot));
+
+            var deleted = await cache.DeleteOutlineAsync("Loch Drummond - Short", CancellationToken.None);
+
+            Assert.NotNull(deleted);
+            Assert.False(deleted.HasGeometry);
+            Assert.Equal(0, deleted.SampleCount);
+            Assert.Equal(0, deleted.RecordedLapCount);
+            Assert.Empty(GeometryFiles(tempRoot));
+
+            var geometry = cache.Get("Loch Drummond - Short");
+            Assert.False(geometry.IsAvailable);
+            Assert.Equal(0, geometry.SampleCount);
+            Assert.Empty(geometry.Points);
+
+            var track = Assert.Single(cache.ListTracks());
+            Assert.Equal("Loch Drummond - Short", track.TrackName);
+            Assert.False(track.HasGeometry);
+            Assert.Equal(0, track.SampleCount);
+        }
+        finally
+        {
+            DeleteTempRoot(tempRoot);
+        }
+    }
+
+    /// <summary>
+    /// Deleting an outline publishes an unavailable frame so clients drop stale track geometry immediately.
+    /// </summary>
+    [Fact]
+    public async Task DeleteOutlinePublishesUnavailableGeometryFrame()
+    {
+        var publisher = new RecordingLiveDataPublisher();
+        var cache = CreateCache(out var tempRoot, publisher: publisher);
+        try
+        {
+            RecordTelemetryLap(cache, "1", completedLaps: 0, startIndex: 0, endIndex: 100);
+
+            _ = await cache.DeleteOutlineAsync("Loch Drummond - Short", CancellationToken.None);
+
+            var published = Assert.IsType<TrackGeometryChangedFrame>(publisher.PublishedFrames.Last()).Geometry;
+            Assert.Equal("Loch Drummond - Short", published.TrackName);
+            Assert.False(published.IsAvailable);
+            Assert.Equal(0, published.SampleCount);
+            Assert.Empty(published.Points);
+        }
+        finally
+        {
+            DeleteTempRoot(tempRoot);
+        }
+    }
+
+    /// <summary>
+    /// Outline deletion still succeeds when the hashed persisted file has already been removed externally.
+    /// </summary>
+    [Fact]
+    public async Task DeleteOutlineSucceedsWhenPersistedFileIsAlreadyMissing()
+    {
+        var cache = CreateCache(out var tempRoot);
+        try
+        {
+            _ = await cache.StartRecordingAsync(new TrackGeometryRecordingRequest
+            {
+                TrackName = "Loch Drummond - Short",
+                TargetCompletedLaps = 2,
+                ResetExistingGeometry = true,
+            }, CancellationToken.None);
+
+            var persisted = Assert.Single(GeometryFiles(tempRoot));
+            File.Delete(persisted);
+
+            var deleted = await cache.DeleteOutlineAsync("loch drummond - short", CancellationToken.None);
+
+            Assert.NotNull(deleted);
+            Assert.Equal("Loch Drummond - Short", deleted.TrackName);
+            Assert.False(deleted.HasGeometry);
+            Assert.Equal(0, deleted.SampleCount);
+            Assert.Empty(GeometryFiles(tempRoot));
+        }
+        finally
+        {
+            DeleteTempRoot(tempRoot);
+        }
+    }
+
+    /// <summary>
+    /// Fresh recorders without a catalog row return null for outline deletion.
+    /// </summary>
+    [Fact]
+    public async Task DeleteOutlineReturnsNullWhenTrackIsUnknown()
+    {
+        var cache = CreateCache(out var tempRoot);
+        try
+        {
+            var deleted = await cache.DeleteOutlineAsync("Unknown Track", CancellationToken.None);
+
+            Assert.Null(deleted);
+            Assert.Empty(cache.ListTracks());
+        }
+        finally
+        {
+            DeleteTempRoot(tempRoot);
+        }
+    }
+
+    /// <summary>
+    /// Deleting while a manual recording pass is active clears candidate samples and resets catalog recording intent.
+    /// </summary>
+    [Fact]
+    public async Task DeleteOutlineResetsCatalogStateDuringRecording()
+    {
+        var cache = CreateCache(out var tempRoot, geometryRecordingLaps: 4);
+        try
+        {
+            _ = await cache.StartRecordingAsync(new TrackGeometryRecordingRequest
+            {
+                TrackName = "Loch Drummond - Short",
+                TargetCompletedLaps = 2,
+                ResetExistingGeometry = true,
+            }, CancellationToken.None);
+
+            RecordTelemetryLap(cache, "1", completedLaps: 0, startIndex: 0, endIndex: 40, emitLapTransition: false);
+            var before = Assert.Single(cache.ListTracks());
+            Assert.True(before.IsImprovementRecording);
+            Assert.True(before.CandidateSampleCount > 0);
+            Assert.Equal(2, before.TargetCompletedLaps);
+
+            _ = await cache.DeleteOutlineAsync("Loch Drummond - Short", CancellationToken.None);
+
+            var after = Assert.Single(cache.ListTracks());
+            Assert.False(after.HasGeometry);
+            Assert.True(after.IsRecording);
+            Assert.False(after.IsImprovementRecording);
+            Assert.Equal(0, after.RecordedLapCount);
+            Assert.Equal(0, after.SampleCount);
+            Assert.Equal(0, after.CandidateSampleCount);
+            Assert.Equal(4, after.TargetCompletedLaps);
+        }
+        finally
+        {
+            DeleteTempRoot(tempRoot);
+        }
+    }
+
+    /// <summary>
     /// Improve mode keeps existing geometry and continues averaging until the new target completed-lap count is reached.
     /// </summary>
     [Fact]
@@ -574,6 +729,14 @@ public sealed class TrackGeometryRecorderTests
         PathLateralMeters = 0.0,
         TrackEdgeMeters = 6.0,
     };
+
+    private static IReadOnlyList<string> GeometryFiles(string tempRoot)
+    {
+        var geometryRoot = Path.Combine(tempRoot, "track-geometry");
+        return Directory.Exists(geometryRoot)
+            ? Directory.GetFiles(geometryRoot, "*.json")
+            : [];
+    }
 
     private static void DeleteTempRoot(string tempRoot)
     {
