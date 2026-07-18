@@ -27,6 +27,7 @@ public sealed class TrackGeometryRecorderTests
                 Session = new LiveSessionInfo
                 {
                     TrackName = "Loch Drummond - Short",
+                    Phase = SessionPhase.GreenFlag,
                     LapDistanceMeters = 1000.0,
                 },
                 Drivers =
@@ -177,7 +178,12 @@ public sealed class TrackGeometryRecorderTests
             cache.UpdateScoringSnapshot(new LiveSessionSnapshot
             {
                 Source = "shared-memory",
-                Session = new LiveSessionInfo { TrackName = "Loch Drummond - Short", LapDistanceMeters = 1000.0 },
+                Session = new LiveSessionInfo
+                {
+                    TrackName = "Loch Drummond - Short",
+                    Phase = SessionPhase.GreenFlag,
+                    LapDistanceMeters = 1000.0,
+                },
                 Drivers = [Driver("1", progressPercent: 0.0, worldX: 0.0, worldZ: 0.0)],
             });
 
@@ -237,7 +243,7 @@ public sealed class TrackGeometryRecorderTests
     }
 
     /// <summary>
-    /// Deleting a completed outline removes persisted geometry, keeps the catalog row, and clears drawable points.
+    /// Deleting a completed outline removes persisted geometry and the in-memory catalog row.
     /// </summary>
     [Fact]
     public async Task DeleteOutlineRemovesCompleteGeometryAndPersistedFile()
@@ -262,10 +268,13 @@ public sealed class TrackGeometryRecorderTests
             Assert.Equal(0, geometry.SampleCount);
             Assert.Empty(geometry.Points);
 
-            var track = Assert.Single(cache.ListTracks());
-            Assert.Equal("Loch Drummond - Short", track.TrackName);
-            Assert.False(track.HasGeometry);
-            Assert.Equal(0, track.SampleCount);
+            Assert.Empty(cache.ListTracks());
+
+            var reloaded = CreateCache(tempRoot);
+            Assert.Empty(reloaded.ListTracks());
+            var reloadedGeometry = reloaded.Get("Loch Drummond - Short");
+            Assert.False(reloadedGeometry.IsAvailable);
+            Assert.Equal(0, reloadedGeometry.SampleCount);
         }
         finally
         {
@@ -353,10 +362,10 @@ public sealed class TrackGeometryRecorderTests
     }
 
     /// <summary>
-    /// Deleting while a manual recording pass is active clears candidate samples and resets catalog recording intent.
+    /// Deleting while a manual recording pass is active removes the in-memory catalog row and candidate state.
     /// </summary>
     [Fact]
-    public async Task DeleteOutlineResetsCatalogStateDuringRecording()
+    public async Task DeleteOutlineRemovesCatalogStateDuringRecording()
     {
         var cache = CreateCache(out var tempRoot, geometryRecordingLaps: 4);
         try
@@ -376,14 +385,10 @@ public sealed class TrackGeometryRecorderTests
 
             _ = await cache.DeleteOutlineAsync("Loch Drummond - Short", CancellationToken.None);
 
-            var after = Assert.Single(cache.ListTracks());
-            Assert.False(after.HasGeometry);
-            Assert.True(after.IsRecording);
-            Assert.False(after.IsImprovementRecording);
-            Assert.Equal(0, after.RecordedLapCount);
-            Assert.Equal(0, after.SampleCount);
-            Assert.Equal(0, after.CandidateSampleCount);
-            Assert.Equal(4, after.TargetCompletedLaps);
+            Assert.Empty(cache.ListTracks());
+            var geometry = cache.Get("Loch Drummond - Short");
+            Assert.False(geometry.IsAvailable);
+            Assert.Equal(0, geometry.SampleCount);
         }
         finally
         {
@@ -509,6 +514,95 @@ public sealed class TrackGeometryRecorderTests
     }
 
     /// <summary>
+    /// Telemetry frames alone must not create a track catalog entry before matching scoring context arrives.
+    /// </summary>
+    [Fact]
+    public void TelemetryBeforeScoringDoesNotCreateCatalogState()
+    {
+        var cache = CreateCache(out var tempRoot);
+        try
+        {
+            cache.UpdateTelemetry(new TelemetryPositionFrame
+            {
+                TrackName = "Loch Drummond - Short",
+                Source = "telemetry",
+                Vehicles = [new TelemetryPositionVehicle { DriverId = "1", PosX = 1.0, PosZ = 2.0 }],
+            });
+
+            Assert.Empty(cache.ListTracks());
+            var geometry = cache.Get("Loch Drummond - Short");
+            Assert.False(geometry.IsAvailable);
+            Assert.Equal(0, geometry.SampleCount);
+        }
+        finally
+        {
+            DeleteTempRoot(tempRoot);
+        }
+    }
+
+    /// <summary>
+    /// Semantic gating rejects Unknown/Garage session phases even when a valid-looking driver row is present.
+    /// </summary>
+    [Theory]
+    [InlineData(SessionPhase.Unknown)]
+    [InlineData(SessionPhase.Garage)]
+    public void SemanticGateRejectsInactiveSessionPhases(SessionPhase phase)
+    {
+        var cache = CreateCache(out var tempRoot);
+        try
+        {
+            cache.UpdateScoringSnapshot(new LiveSessionSnapshot
+            {
+                Source = "shared-memory",
+                Session = new LiveSessionInfo
+                {
+                    TrackName = "Loch Drummond - Short",
+                    Phase = phase,
+                    LapDistanceMeters = 1000.0,
+                },
+                Drivers = [Driver("1", progressPercent: 50.0, worldX: 10.0, worldZ: 20.0)],
+            });
+
+            Assert.Empty(cache.ListTracks());
+        }
+        finally
+        {
+            DeleteTempRoot(tempRoot);
+        }
+    }
+
+    /// <summary>
+    /// Semantic gating requires finite lap distance and rejects missing or zero lap-distance metadata.
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData(0.0)]
+    public void SemanticGateRejectsMissingOrZeroLapDistance(double? lapDistanceMeters)
+    {
+        var cache = CreateCache(out var tempRoot);
+        try
+        {
+            cache.UpdateScoringSnapshot(new LiveSessionSnapshot
+            {
+                Source = "shared-memory",
+                Session = new LiveSessionInfo
+                {
+                    TrackName = "Loch Drummond - Short",
+                    Phase = SessionPhase.GreenFlag,
+                    LapDistanceMeters = lapDistanceMeters,
+                },
+                Drivers = [Driver("1", progressPercent: 50.0, worldX: 10.0, worldZ: 20.0)],
+            });
+
+            Assert.Empty(cache.ListTracks());
+        }
+        finally
+        {
+            DeleteTempRoot(tempRoot);
+        }
+    }
+
+    /// <summary>
     /// Pit, garage, invalid-lap, and off-track samples are rejected.
     /// </summary>
     [Fact]
@@ -523,6 +617,7 @@ public sealed class TrackGeometryRecorderTests
                 Session = new LiveSessionInfo
                 {
                     TrackName = "Loch Drummond - Short",
+                    Phase = SessionPhase.GreenFlag,
                     LapDistanceMeters = 1000.0,
                 },
                 Drivers =
@@ -537,6 +632,37 @@ public sealed class TrackGeometryRecorderTests
             var geometry = cache.Get("Loch Drummond - Short");
 
             Assert.Equal(0, geometry.SampleCount);
+            Assert.Empty(cache.ListTracks());
+        }
+        finally
+        {
+            DeleteTempRoot(tempRoot);
+        }
+    }
+
+    /// <summary>
+    /// Valid GreenFlag scoring evidence creates a catalog row without relying on placeholder track-name filtering.
+    /// </summary>
+    [Fact]
+    public void SemanticGateCreatesCatalogRowWithValidEvidence()
+    {
+        var cache = CreateCache(out var tempRoot);
+        try
+        {
+            cache.UpdateScoringSnapshot(new LiveSessionSnapshot
+            {
+                Source = "shared-memory",
+                Session = new LiveSessionInfo
+                {
+                    TrackName = "Loch Drummond - Short",
+                    Phase = SessionPhase.GreenFlag,
+                    LapDistanceMeters = 1000.0,
+                },
+                Drivers = [Driver("1", progressPercent: 25.0, worldX: 10.0, worldZ: 20.0)],
+            });
+
+            var track = Assert.Single(cache.ListTracks());
+            Assert.Equal("Loch Drummond - Short", track.TrackName);
         }
         finally
         {
@@ -586,6 +712,7 @@ public sealed class TrackGeometryRecorderTests
                 Session = new LiveSessionInfo
                 {
                     TrackName = "Loch Drummond - Short",
+                    Phase = SessionPhase.GreenFlag,
                     LapDistanceMeters = 1000.0,
                 },
                 Drivers = [Driver(driverId, progress * 100.0, worldX: 999.0, worldZ: 999.0) with { CompletedLaps = completedLaps }],
@@ -616,6 +743,7 @@ public sealed class TrackGeometryRecorderTests
                 Session = new LiveSessionInfo
                 {
                     TrackName = "Loch Drummond - Short",
+                    Phase = SessionPhase.GreenFlag,
                     LapDistanceMeters = 1000.0,
                 },
                 Drivers = [Driver(driverId, progressPercent: 0.0, worldX: 999.0, worldZ: 999.0) with { CompletedLaps = completedLaps + 1 }],
@@ -655,6 +783,7 @@ public sealed class TrackGeometryRecorderTests
                 Session = new LiveSessionInfo
                 {
                     TrackName = "Loch Drummond - Short",
+                    Phase = SessionPhase.GreenFlag,
                     LapDistanceMeters = 1000.0,
                 },
                 Drivers = [Driver(driverId, progress * 100.0, Math.Cos(progress * Math.Tau) * 100.0, Math.Sin(progress * Math.Tau) * 80.0) with { CompletedLaps = completedLaps }],
@@ -669,6 +798,7 @@ public sealed class TrackGeometryRecorderTests
                 Session = new LiveSessionInfo
                 {
                     TrackName = "Loch Drummond - Short",
+                    Phase = SessionPhase.GreenFlag,
                     LapDistanceMeters = 1000.0,
                 },
                 Drivers = [Driver(driverId, progressPercent: 0.0, worldX: 100.0, worldZ: 0.0) with { CompletedLaps = completedLaps + 1 }],
@@ -693,6 +823,7 @@ public sealed class TrackGeometryRecorderTests
                 Session = new LiveSessionInfo
                 {
                     TrackName = "Loch Drummond - Short",
+                    Phase = SessionPhase.GreenFlag,
                     LapDistanceMeters = 1000.0,
                 },
                 Drivers = [Driver(driverId, progress * 100.0, Math.Cos(progress * Math.Tau) * 100.0, Math.Sin(progress * Math.Tau) * 80.0) with { CompletedLaps = completedLaps }],
@@ -707,6 +838,7 @@ public sealed class TrackGeometryRecorderTests
                 Session = new LiveSessionInfo
                 {
                     TrackName = "Loch Drummond - Short",
+                    Phase = SessionPhase.GreenFlag,
                     LapDistanceMeters = 1000.0,
                 },
                 Drivers = [Driver(driverId, progressPercent: 0.0, worldX: 100.0, worldZ: 0.0) with { CompletedLaps = completedLaps + 1 }],

@@ -102,35 +102,34 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
             return null;
         }
 
-        if (!IsTrackNameUsable(snapshot.Session.TrackName))
-        {
-            return null;
-        }
-
         lock (_gate)
         {
             var trackName = snapshot.Session.TrackName.Trim();
-            var state = GetOrLoadState(trackName);
             var now = _timeProvider.GetUtcNow();
             PruneVolatileState(now);
+
+            if (!TryBuildSemanticScoringContexts(snapshot, now, out var contexts))
+            {
+                // Clear stale contexts so telemetry cannot continue sampling from an old lap context.
+                _scoringContexts.Remove(trackName);
+                return null;
+            }
+
+            var state = GetOrLoadState(trackName);
             if (state.SeenUtc == default)
             {
                 state.SeenUtc = now;
             }
 
-            var contexts = new Dictionary<string, DriverSampleContext>(StringComparer.OrdinalIgnoreCase);
             var changed = false;
             var useScoringPositions = ShouldUseScoringPositions(snapshot.Source, trackName, now);
             foreach (var driver in snapshot.Drivers)
             {
-                var context = TryCreateSampleContext(driver, snapshot.Session, now);
-                if (context is null)
+                if (!contexts.TryGetValue(driver.DriverId, out var sampleContext))
                 {
                     continue;
                 }
 
-                var sampleContext = context.Value;
-                contexts[driver.DriverId] = sampleContext;
                 if (useScoringPositions && IsFinite(driver.PosX) && IsFinite(driver.PosZ))
                 {
                     // Fixture/recorded snapshots have no telemetry frame, and live scoring is the fallback when telemetry is unavailable.
@@ -168,28 +167,40 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
             return null;
         }
 
-        if (!IsTrackNameUsable(frame.TrackName))
-        {
-            return null;
-        }
-
         lock (_gate)
         {
             var trackName = frame.TrackName.Trim();
-            var state = GetOrLoadState(trackName);
             var now = _timeProvider.GetUtcNow();
             _lastTelemetryUtcByTrack[trackName] = now;
             PruneVolatileState(now);
-            if (state.SeenUtc == default)
-            {
-                state.SeenUtc = now;
-            }
 
             if (!_scoringContexts.TryGetValue(trackName, out var contexts))
             {
-                state.Source = frame.Source;
-                state.UpdatedUtc = now;
                 return null;
+            }
+
+            var hasFreshMatchingContexts = false;
+            foreach (var vehicle in frame.Vehicles)
+            {
+                if (contexts.TryGetValue(vehicle.DriverId, out var context)
+                    && now - context.UpdatedUtc <= ScoringContextRetention
+                    && IsFinite(vehicle.PosX)
+                    && IsFinite(vehicle.PosZ))
+                {
+                    hasFreshMatchingContexts = true;
+                    break;
+                }
+            }
+
+            if (!hasFreshMatchingContexts)
+            {
+                return null;
+            }
+
+            var state = GetOrLoadState(trackName);
+            if (state.SeenUtc == default)
+            {
+                state.SeenUtc = now;
             }
 
             var changed = false;
@@ -233,7 +244,10 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
 
         lock (_gate)
         {
-            return BuildResponse(GetOrLoadState(trackName.Trim()));
+            var canonicalTrackName = trackName.Trim();
+            return TryGetState(canonicalTrackName, out var state)
+                ? BuildResponse(state)
+                : TrackGeometryResponse.Unavailable(canonicalTrackName, 0, 0.0, false, null, null, "No recorded geometry exists for this track yet.");
         }
     }
 
@@ -282,11 +296,11 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
     }
 
     /// <summary>
-    /// Deletes generated geometry for a known catalog track and resets recording state so live samples can rebuild it.
+    /// Deletes generated geometry for a known catalog track and removes the cached catalog row.
     /// </summary>
     /// <param name="trackName">Track name to remove using case-insensitive catalog lookup.</param>
     /// <param name="cancellationToken">Cancellation token for publishing geometry reset updates.</param>
-    /// <returns>Updated catalog entry after reset, or <see langword="null"/> when no catalog row exists.</returns>
+    /// <returns>Deletion result, or <see langword="null"/> when no catalog row exists.</returns>
     public async ValueTask<TrackGeometryCatalogEntry?> DeleteOutlineAsync(string trackName, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(trackName);
@@ -303,20 +317,33 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
 
             var now = _timeProvider.GetUtcNow();
             DeletePersistedOutlineFile(state.TrackName);
-            state.ResetAfterDelete(DefaultTargetLaps());
-            state.UpdatedUtc = now;
-            state.LastPersistedUtc = null;
-            if (state.SeenUtc == default)
-            {
-                state.SeenUtc = now;
-            }
-
-            // Reset context caches so the next published outline is based on fresh lap context after deletion.
+            _tracks.Remove(state.TrackName);
             _scoringContexts.Remove(state.TrackName);
             _lastTelemetryUtcByTrack.Remove(state.TrackName);
 
-            entry = ToCatalogEntry(state);
-            changed = new TrackGeometryChangedFrame { Geometry = BuildResponse(state) };
+            const string deletedStatusDetail = "Deleted geometry. The track will reappear after fresh on-track lap evidence.";
+            entry = new TrackGeometryCatalogEntry
+            {
+                TrackName = state.TrackName,
+                Source = state.Source,
+                SeenUtc = state.SeenUtc,
+                UpdatedUtc = now,
+                LastPersistedUtc = null,
+                HasGeometry = false,
+                IsRecording = false,
+                IsImprovementRecording = false,
+                CoveragePercent = 0.0,
+                SampleCount = 0,
+                CandidateSampleCount = 0,
+                CandidateCoveragePercent = 0.0,
+                TargetCompletedLaps = state.TargetCompletedLaps,
+                RecordedLapCount = 0,
+                StatusDetail = deletedStatusDetail,
+            };
+            changed = new TrackGeometryChangedFrame
+            {
+                Geometry = TrackGeometryResponse.Unavailable(state.TrackName, 0, 0.0, false, now, state.Source, deletedStatusDetail),
+            };
         }
 
         await _liveDataPublisher.PublishAsync(changed, cancellationToken);
@@ -333,6 +360,25 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
         var state = Load(trackName) ?? new TrackGeometryState(trackName, DefaultTargetLaps());
         _tracks[trackName] = state;
         return state;
+    }
+
+    private bool TryGetState(string trackName, out TrackGeometryState state)
+    {
+        if (_tracks.TryGetValue(trackName, out state!))
+        {
+            return true;
+        }
+
+        var loaded = Load(trackName);
+        if (loaded is null)
+        {
+            state = null!;
+            return false;
+        }
+
+        _tracks[loaded.TrackName] = loaded;
+        state = loaded;
+        return true;
     }
 
     private TrackGeometryCatalogEntry ToCatalogEntry(TrackGeometryState state) => new()
@@ -663,6 +709,33 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
             || now - lastTelemetryUtc > TelemetryFallbackThreshold;
     }
 
+    private static bool TryBuildSemanticScoringContexts(
+        LiveSessionSnapshot snapshot,
+        DateTimeOffset updatedUtc,
+        out Dictionary<string, DriverSampleContext> contexts)
+    {
+        contexts = new Dictionary<string, DriverSampleContext>(StringComparer.OrdinalIgnoreCase);
+
+        // Track names can be placeholder text while rF2 initializes. Require semantic lap evidence instead.
+        if (snapshot.Session.Phase is not SessionPhase.GreenFlag
+            || !IsFinite(snapshot.Session.LapDistanceMeters)
+            || snapshot.Session.LapDistanceMeters <= 0)
+        {
+            return false;
+        }
+
+        foreach (var driver in snapshot.Drivers)
+        {
+            var context = TryCreateSampleContext(driver, snapshot.Session, updatedUtc);
+            if (context is not null)
+            {
+                contexts[driver.DriverId] = context.Value;
+            }
+        }
+
+        return contexts.Count > 0;
+    }
+
     private static DriverSampleContext? TryCreateSampleContext(DriverSnapshot driver, LiveSessionInfo session, DateTimeOffset updatedUtc)
     {
         if (driver.IsInPits || driver.IsInGarageStall || driver.ValidLapFlag == 0 || !IsOnTrack(driver))
@@ -743,10 +816,6 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
     private static double Lerp(double start, double end, double factor) => start + ((end - start) * factor);
 
     private static bool IsFinite(double? value) => value is not null && double.IsFinite(value.Value);
-
-    private static bool IsTrackNameUsable(string? trackName) => !string.IsNullOrWhiteSpace(trackName)
-        && !string.Equals(trackName.Trim(), "Unknown track", StringComparison.OrdinalIgnoreCase)
-        && !string.Equals(trackName.Trim(), "No live scoring source", StringComparison.OrdinalIgnoreCase);
 
     private sealed class TrackGeometryState
     {
@@ -834,8 +903,6 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
 
             RecalculateQuality();
         }
-
-        public void ResetAfterDelete(int targetCompletedLaps) => ResetGeometryState(recordingRequested: false, targetCompletedLaps);
 
         public bool Add(WorldSample sample, DateTimeOffset now)
         {

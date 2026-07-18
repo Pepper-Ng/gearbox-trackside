@@ -2629,24 +2629,19 @@ function renderDriverTrackerTracks(tracks) {
         },
       },
     ];
-    const hasOutlineData = Boolean(track.hasGeometry || track.isRecording)
-      || Number(track.sampleCount ?? 0) > 0
-      || Number(track.candidateSampleCount ?? 0) > 0;
-    if (hasOutlineData) {
-      actions.push({
-        label: t('driverTracker.delete'),
-        title: t('driverTracker.deleteTitle'),
-        ariaLabel: t('driverTracker.deleteAria', { track: trackName }),
-        danger: true,
-        onClick: () => {
-          if (!trackName) {
-            return;
-          }
+    actions.push({
+      label: t('driverTracker.delete'),
+      title: t('driverTracker.deleteTitle'),
+      ariaLabel: t('driverTracker.deleteAria', { track: trackName }),
+      danger: true,
+      onClick: () => {
+        if (!trackName) {
+          return;
+        }
 
-          deleteDriverTrackerOutline(trackName).catch(showError);
-        },
-      });
-    }
+        deleteDriverTrackerOutline(trackName).catch(showError);
+      },
+    });
     appendActionsCell(row, actions);
     driverTrackerTrackRowsElement.appendChild(row);
   }
@@ -2966,8 +2961,12 @@ async function deleteDriverTrackerOutline(trackName) {
 
   await deleteJson(`/api/admin/driver-tracker/geometry?trackName=${encodeURIComponent(trackName)}`);
   if (namesEqual(trackName, selectedDriverTrackerTrackName)) {
+    selectedDriverTrackerTrackName = null;
     latestSelectedTrackGeometry = null;
     selectedDriverTrackerCatalogToken = null;
+  }
+  if (namesEqual(trackName, latestCurrentTrackGeometry?.trackName)) {
+    latestCurrentTrackGeometry = null;
   }
 
   setStatus(t('status.driverTrackerOutlineDeleted', { track: trackName }));

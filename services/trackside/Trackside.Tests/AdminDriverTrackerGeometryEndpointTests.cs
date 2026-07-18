@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using System.Reflection;
 using Trackside.Application.LiveSession;
 using Trackside.Service.Api;
 using Trackside.Service.Configuration;
@@ -220,6 +221,78 @@ public sealed class AdminDriverTrackerGeometryEndpointTests
         {
             DeleteTempRoot(tempRoot);
         }
+    }
+
+    /// <summary>
+    /// Manual recording requests return not found when the requested track is absent from the catalog.
+    /// </summary>
+    [Fact]
+    public async Task StartRecordingReturnsNotFoundForUnknownTrack()
+    {
+        var recorder = CreateRecorder(out var tempRoot);
+        try
+        {
+            var result = await InvokeStartDriverTrackerRecordingAsync(new DriverTrackerRecordingRequest
+            {
+                TrackName = "Unknown Track",
+                TargetCompletedLaps = 2,
+                ResetExistingGeometry = true,
+            }, recorder, CancellationToken.None);
+
+            Assert.Equal(StatusCodes.Status404NotFound, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode);
+            Assert.Empty(recorder.ListTracks());
+        }
+        finally
+        {
+            DeleteTempRoot(tempRoot);
+        }
+    }
+
+    /// <summary>
+    /// Manual recording starts for known catalog tracks and preserves canonical catalog casing.
+    /// </summary>
+    [Fact]
+    public async Task StartRecordingReturnsOkForKnownCatalogTrack()
+    {
+        var recorder = CreateRecorder(out var tempRoot);
+        try
+        {
+            await recorder.StartRecordingAsync(new TrackGeometryRecordingRequest
+            {
+                TrackName = "Loch Drummond - Short",
+                TargetCompletedLaps = 1,
+                ResetExistingGeometry = true,
+            }, CancellationToken.None);
+
+            var result = await InvokeStartDriverTrackerRecordingAsync(new DriverTrackerRecordingRequest
+            {
+                TrackName = "loch drummond - short",
+                TargetCompletedLaps = 3,
+                ResetExistingGeometry = false,
+            }, recorder, CancellationToken.None);
+
+            Assert.Equal(StatusCodes.Status200OK, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode);
+            var entry = Assert.IsType<TrackGeometryCatalogEntry>(Assert.IsAssignableFrom<IValueHttpResult>(result).Value);
+            Assert.Equal("Loch Drummond - Short", entry.TrackName);
+            Assert.Equal(3, entry.TargetCompletedLaps);
+        }
+        finally
+        {
+            DeleteTempRoot(tempRoot);
+        }
+    }
+
+    private static Task<IResult> InvokeStartDriverTrackerRecordingAsync(
+        DriverTrackerRecordingRequest request,
+        TrackGeometryRecorder recorder,
+        CancellationToken cancellationToken)
+    {
+        var method = typeof(TracksideApiEndpoints).GetMethod("StartDriverTrackerRecordingAsync", BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var task = method.Invoke(null, [request, recorder, cancellationToken]) as Task<IResult>;
+        Assert.NotNull(task);
+        return task;
     }
 
     private static TrackGeometryRecorder CreateRecorder(out string tempRoot)

@@ -643,9 +643,14 @@ public static class TracksideApiEndpoints
             return Results.BadRequest(new { error = "TargetCompletedLaps must be between 1 and 20." });
         }
 
+        if (!TryResolveCatalogTrackName(request.TrackName, trackGeometryRecorder, out var canonicalTrackName))
+        {
+            return Results.NotFound(new { error = "Track geometry was not found." });
+        }
+
         var result = await trackGeometryRecorder.StartRecordingAsync(new TrackGeometryRecordingRequest
         {
-            TrackName = request.TrackName,
+            TrackName = canonicalTrackName,
             TargetCompletedLaps = request.TargetCompletedLaps,
             ResetExistingGeometry = request.ResetExistingGeometry,
         }, cancellationToken);
