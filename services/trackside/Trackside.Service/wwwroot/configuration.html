@@ -123,18 +123,15 @@
           <h2 data-i18n="sessions.title">Session Workspace</h2>
           <p id="sessionsStatus" class="wideField" data-i18n="sessions.description">Review live, recent, and archived results, then open any session for driver details and follow-up.</p>
           <section class="sessionWorkspaceDock wideField">
-            <div class="sessionWorkspaceTabs" role="tablist" aria-label="Session results workspace">
-              <button id="sessionOverviewLiveTabButton" class="sessionWorkspaceTab" type="button" role="tab" aria-selected="false" data-i18n="sessions.liveTitle">In Progress</button>
-              <button id="sessionOverviewRecentTabButton" class="sessionWorkspaceTab active" type="button" role="tab" aria-selected="true" data-i18n="sessions.recentTitle">Recently Completed</button>
-              <button id="sessionOverviewOlderTabButton" class="sessionWorkspaceTab" type="button" role="tab" aria-selected="false" data-i18n="sessions.olderTitle">Older Results</button>
-              <div id="selectedSessionTabGroup" class="sessionWorkspaceTabGroup" role="presentation" hidden>
-                <button id="selectedSessionTabButton" class="sessionWorkspaceTab sessionWorkspaceTabTemporary" type="button" role="tab" aria-selected="false">
-                  <span id="selectedSessionTabLabel">Driver Results</span>
-                </button>
-                <button id="closeSelectedSessionButton" class="sessionWorkspaceTabAction sessionWorkspaceTabClose" type="button" data-i18n-aria="sessions.closeResults" aria-label="Close Results">&times;</button>
+            <div class="sessionWorkspaceTabs" role="tablist" aria-label="Session results workspace" data-i18n-aria="sessions.workspaceAria">
+              <div class="sessionWorkspaceOverviewTabs" role="presentation">
+                <button id="sessionOverviewLiveTabButton" class="sessionWorkspaceTab" type="button" role="tab" aria-selected="false" aria-controls="sessionOverviewLivePanel" data-i18n="sessions.liveTitle">In Progress</button>
+                <button id="sessionOverviewRecentTabButton" class="sessionWorkspaceTab active" type="button" role="tab" aria-selected="true" aria-controls="sessionOverviewRecentPanel" data-i18n="sessions.recentTitle">Recently Completed</button>
+                <button id="sessionOverviewOlderTabButton" class="sessionWorkspaceTab" type="button" role="tab" aria-selected="false" aria-controls="sessionOverviewOlderPanel" data-i18n="sessions.olderTitle">Older Results</button>
               </div>
+              <div id="openSessionResultTabsRail" class="sessionWorkspaceResultRail" role="presentation" hidden></div>
             </div>
-            <section id="sessionOverviewLivePanel" class="sessionWorkspaceCanvas sessionWorkspaceOverviewPanel" role="tabpanel" hidden>
+            <section id="sessionOverviewLivePanel" class="sessionWorkspaceCanvas sessionWorkspaceOverviewPanel" role="tabpanel" aria-labelledby="sessionOverviewLiveTabButton" hidden>
               <section class="sessionWorkspaceSection" aria-label="In progress sessions">
                 <div class="sessionWorkspaceHeader">
                   <div>
@@ -145,7 +142,7 @@
                 <div id="liveSessionSurface" class="sessionCardGrid"></div>
               </section>
             </section>
-            <section id="sessionOverviewRecentPanel" class="sessionWorkspaceCanvas sessionWorkspaceOverviewPanel" role="tabpanel">
+            <section id="sessionOverviewRecentPanel" class="sessionWorkspaceCanvas sessionWorkspaceOverviewPanel" role="tabpanel" aria-labelledby="sessionOverviewRecentTabButton">
               <section class="sessionWorkspaceSection" aria-label="Recently completed sessions">
                 <div class="sessionWorkspaceHeader">
                   <div>
@@ -156,7 +153,7 @@
                 <div id="recentSessionsSurface" class="sessionCardGrid"></div>
               </section>
             </section>
-            <section id="sessionOverviewOlderPanel" class="sessionWorkspaceCanvas sessionWorkspaceOverviewPanel" role="tabpanel" hidden>
+            <section id="sessionOverviewOlderPanel" class="sessionWorkspaceCanvas sessionWorkspaceOverviewPanel" role="tabpanel" aria-labelledby="sessionOverviewOlderTabButton" hidden>
               <section class="sessionWorkspaceSection" aria-label="Older results">
                 <div class="sessionWorkspaceHeader">
                   <div>

@@ -1290,8 +1290,7 @@ tbody tr:last-child td {
 
 .sessionsWorkspaceShell .buttonRow button,
 .sessionsWorkspaceShell .tableButton,
-.sessionsWorkspaceShell .sessionWorkspaceTab,
-.sessionsWorkspaceShell .sessionWorkspaceTabAction {
+.sessionsWorkspaceShell .sessionWorkspaceTab {
   border-color: var(--session-app-border-strong);
   color: var(--session-app-text);
 }
@@ -1306,8 +1305,7 @@ tbody tr:last-child td {
 .sessionsWorkspaceShell #refreshSessions,
 .sessionsWorkspaceShell #compareDriversButton,
 .sessionsWorkspaceShell #openTelemetryButton,
-.sessionsWorkspaceShell #toggleManageResultsButton,
-.sessionsWorkspaceShell #closeSelectedSessionButton {
+.sessionsWorkspaceShell #toggleManageResultsButton {
   background: linear-gradient(180deg, rgba(219, 229, 239, .98), rgba(201, 214, 228, .98));
 }
 
@@ -1337,8 +1335,7 @@ tbody tr:last-child td {
 .sessionWorkspaceCanvas[hidden],
 .sessionWorkspaceOverviewPanel[hidden],
 .sessionWorkspaceTab[hidden],
-.sessionWorkspaceTabGroup[hidden],
-.sessionWorkspaceTabAction[hidden],
+.sessionWorkspaceResultRail[hidden],
 .sessionWorkspaceUtilityRow[hidden] {
   display: none;
 }
@@ -1351,20 +1348,22 @@ tbody tr:last-child td {
   display: flex;
   align-items: flex-end;
   flex-wrap: wrap;
-  gap: 1px;
+  gap: 8px 10px;
+  width: 100%;
+  min-width: 0;
   border-bottom: 1px solid var(--session-app-border);
   background: linear-gradient(180deg, rgba(218, 226, 236, .96) 0, rgba(206, 216, 228, .98) 100%);
   padding: 10px 12px 0;
 }
 
-.sessionWorkspaceTabGroup {
+.sessionWorkspaceOverviewTabs {
   display: inline-flex;
-  align-items: stretch;
-  margin-left: 16px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 2px;
 }
 
-.sessionWorkspaceTab,
-.sessionWorkspaceTabAction {
+.sessionWorkspaceTab {
   min-height: 38px;
   cursor: pointer;
   border: 1px solid var(--session-app-border);
@@ -1376,65 +1375,157 @@ tbody tr:last-child td {
   padding: 0 14px;
 }
 
-.sessionWorkspaceTabs > .sessionWorkspaceTab:not(.sessionWorkspaceTabTemporary) {
-  border-top-left-radius: 6px;
-  border-top-right-radius: 6px;
-}
-
 .sessionWorkspaceTab.active {
+  border-color: #6f839a;
+  border-bottom-color: transparent;
   background: linear-gradient(180deg, rgba(236, 241, 247, .98), rgba(229, 236, 244, .98));
   color: var(--session-app-text);
+  transform: translateY(1px);
 }
 
-.sessionWorkspaceTabTemporary {
-  border-color: #8c9db2;
-  background: linear-gradient(180deg, rgba(201, 214, 228, .98), rgba(188, 202, 219, .98));
+.sessionWorkspaceOverviewTabs .sessionWorkspaceTab:focus-visible {
+  border-color: var(--session-app-accent);
+  box-shadow: 0 0 0 3px rgba(43, 110, 152, .14);
+  outline: 0;
+}
+
+.sessionWorkspaceResultRail {
+  display: flex;
+  align-items: flex-end;
+  flex: 1 1 440px;
+  flex-wrap: nowrap;
+  gap: 8px;
+  min-width: 300px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0 0 2px 4px;
+  scrollbar-width: thin;
+}
+
+.sessionWorkspaceResultTab {
+  display: inline-flex;
+  align-items: stretch;
+  flex: 0 0 auto;
+  min-height: 38px;
+  min-width: 0;
+  max-width: min(46vw, 430px);
+  border: 1px solid #8c9db2;
+  border-bottom-color: #9babbb;
+  border-radius: 8px 8px 0 0;
+  background: linear-gradient(180deg, rgba(203, 215, 229, .98), rgba(190, 204, 220, .98));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .42);
+  overflow: hidden;
+}
+
+.sessionWorkspaceResultTab:hover {
+  border-color: #7389a0;
+}
+
+.sessionWorkspaceResultTab:focus-within {
+  border-color: var(--session-app-accent);
+  box-shadow: 0 0 0 3px rgba(43, 110, 152, .14), inset 0 1px 0 rgba(255, 255, 255, .42);
+}
+
+.sessionWorkspaceResultTab.active {
+  border-color: #6f839a;
+  border-bottom-color: transparent;
+  background: linear-gradient(180deg, rgba(238, 243, 248, .99), rgba(230, 236, 243, .99));
+  transform: translateY(1px);
+}
+
+.sessionWorkspaceResultTabButton {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   display: inline-flex;
   align-items: center;
+  gap: 8px;
   min-width: 0;
-  max-width: min(48vw, 440px);
-  padding-right: 10px;
+  padding: 0 11px 0 12px;
 }
 
-#selectedSessionTabLabel {
+.sessionWorkspaceResultTabButton.active {
+  border: 0;
+  background: transparent;
+  transform: none;
+}
+
+.sessionWorkspaceResultTabButton:focus-visible,
+.sessionWorkspaceResultTabClose:focus-visible {
+  outline: none;
+}
+
+.sessionWorkspaceResultTabLabel {
   display: block;
-  max-width: 100%;
+  max-width: clamp(120px, 16vw, 230px);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 12px;
+  letter-spacing: .03em;
+  text-transform: uppercase;
 }
 
-.sessionWorkspaceTabTemporary.active {
-  background: linear-gradient(180deg, rgba(226, 235, 245, .98), rgba(214, 225, 238, .98));
-  box-shadow: inset 0 2px 0 rgba(71, 116, 158, .24);
+.sessionWorkspaceResultTabBadge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 20px;
+  border: 1px solid rgba(89, 108, 126, .45);
+  border-radius: 999px;
+  background: rgba(241, 246, 252, .72);
+  color: #2f4258;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  padding: 0 8px;
+  text-transform: uppercase;
 }
 
-.sessionWorkspaceTabGroup .sessionWorkspaceTabClose {
-  border-top-left-radius: 0;
-  border-left: 0;
+.sessionWorkspaceResultTab.active .sessionWorkspaceResultTabButton {
+  color: var(--session-app-text);
 }
 
-.sessionWorkspaceTabAction {
-  border-bottom: 1px solid var(--session-app-border);
-  border-radius: 6px 6px 0 0;
+.sessionWorkspaceResultTab:not(.active) .sessionWorkspaceResultTabButton {
+  color: #4f6074;
+}
+
+.sessionWorkspaceResultTab.active .sessionWorkspaceResultTabBadge {
+  background: rgba(246, 250, 255, .92);
+  border-color: rgba(72, 94, 114, .42);
+}
+
+.sessionWorkspaceResultTabClose {
+  flex: 0 0 28px;
+  width: 28px;
+  min-width: 28px;
+  border: 0;
+  background: transparent;
+  color: #3a4f67;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: .68;
+  padding: 0;
+}
+
+.sessionWorkspaceResultTab.active .sessionWorkspaceResultTabClose {
   background: transparent;
 }
 
-.sessionWorkspaceTabClose {
-  min-width: 34px;
-  border-color: #8c9db2;
-  background: linear-gradient(180deg, rgba(208, 219, 232, .98), rgba(193, 207, 223, .98));
-  color: #38506a;
-  font-size: 19px;
-  font-weight: 600;
+.sessionWorkspaceResultTabClose span {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
   line-height: 1;
-  padding: 0 10px;
+  transform: translateY(-1px);
 }
 
-.sessionWorkspaceTabClose:hover,
-.sessionWorkspaceTabClose:focus-visible {
-  border-color: #6e87a1;
-  box-shadow: 0 0 0 3px rgba(43, 110, 152, .12);
+.sessionWorkspaceResultTabClose:hover {
+  color: #7a2e39;
+  opacity: 1;
 }
 
 .sessionWorkspaceUtilityRow {
@@ -1595,6 +1686,51 @@ tbody tr:last-child td {
   border-radius: 8px;
   margin: 0;
   padding: 16px;
+}
+
+@media (max-width: 1366px) {
+  .sessionWorkspaceResultRail {
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    padding: 6px 0 2px;
+  }
+
+  .sessionWorkspaceResultTab {
+    max-width: min(62vw, 430px);
+  }
+}
+
+@media (max-width: 1024px) {
+  .sessionWorkspaceTabs {
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .sessionWorkspaceOverviewTabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+  }
+
+  .sessionWorkspaceResultRail {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0 2px 2px 0;
+    margin-bottom: -1px;
+  }
+
+  .sessionWorkspaceResultTab {
+    flex: 0 0 auto;
+    max-width: min(78vw, 420px);
+  }
+
+  .sessionWorkspaceResultTabLabel {
+    max-width: min(52vw, 250px);
+  }
 }
 
 @media (max-width: 980px) {

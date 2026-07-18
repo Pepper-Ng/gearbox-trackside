@@ -37,14 +37,11 @@ const sessionWorkspaceUtilityRowElement = document.querySelector('#sessionWorksp
 const liveSessionSurfaceElement = document.querySelector('#liveSessionSurface');
 const recentSessionsSurfaceElement = document.querySelector('#recentSessionsSurface');
 const olderSessionsSurfaceElement = document.querySelector('#olderSessionsSurface');
+const openSessionResultTabsRailElement = document.querySelector('#openSessionResultTabsRail');
 const selectedSessionPanelElement = document.querySelector('#selectedSessionPanel');
 const selectedSessionTitleElement = document.querySelector('#selectedSessionTitle');
 const selectedSessionSummaryElement = document.querySelector('#selectedSessionSummary');
 const selectedSessionMetricsElement = document.querySelector('#selectedSessionMetrics');
-const selectedSessionTabButtonElement = document.querySelector('#selectedSessionTabButton');
-const selectedSessionTabGroupElement = document.querySelector('#selectedSessionTabGroup');
-const selectedSessionTabLabelElement = document.querySelector('#selectedSessionTabLabel');
-const closeSelectedSessionButton = document.querySelector('#closeSelectedSessionButton');
 const sessionParticipantRowsElement = document.querySelector('#sessionParticipantRows');
 const sessionParticipantDetailSurfaceElement = document.querySelector('#sessionParticipantDetailSurface');
 const sessionCompareSurfaceElement = document.querySelector('#sessionCompareSurface');
@@ -115,13 +112,9 @@ let sessionSetupSaveTimer = 0;
 let sessionSetupSaveSequence = 0;
 let isRenderingSessionSetup = false;
 let driverProfiles = [];
-let selectedSessionId = null;
-let selectedSessionDetail = null;
-let selectedParticipantId = null;
-let isManageResultsMode = false;
-let isCompareVisible = false;
 let activeSessionWorkspaceTab = 'recent';
-let selectedSessionOriginTab = 'recent';
+let openSessionResultTabs = [];
+let activeSessionResultTabId = null;
 let latestSessionWorkspace = null;
 let isPopulatingDriverTrackerSettings = false;
 let driverTrackerSaveTimer = 0;
@@ -313,6 +306,7 @@ const translations = {
     'profiles.notes': 'Notes',
     'profiles.create': 'Create Profile',
     'sessions.title': 'Session Workspace',
+    'sessions.workspaceAria': 'Session results workspace',
     'sessions.description': 'Review live, recent, and archived results, then open any session for driver details and follow-up.',
     'sessions.liveTitle': 'In Progress',
     'sessions.liveDescription': 'Active sessions stay visible here without taking over the results workspace.',
@@ -340,6 +334,9 @@ const translations = {
     'sessions.detailDescription': 'Select a session to reveal detailed information without disrupting the list.',
     'sessions.emptyDetail': 'Select a session from the workspace to inspect driver results and open follow-up actions.',
     'sessions.closeResults': 'Close Results',
+    'sessions.resultTabTitle': '{track} - {kind}',
+    'sessions.resultTabAria': 'Driver results for {track} ({kind}).',
+    'sessions.resultTabCloseAria': 'Close result tab for {track} ({kind}).',
     'sessions.loadedSummary': '{recent} recent and {older} older stored sessions loaded.',
     'sessions.viewing': 'Viewing stored session from {lastSeen}.',
     'sessions.includedMessage': 'Session included in historical boards.',
@@ -608,6 +605,7 @@ const translations = {
     'profiles.notes': 'Notities',
     'profiles.create': 'Profiel aanmaken',
     'sessions.title': 'Sessiewerkruimte',
+    'sessions.workspaceAria': 'Werkruimte voor sessieresultaten',
     'sessions.description': 'Bekijk live, recente en gearchiveerde resultaten en open daarna elke sessie voor rijderdetails en opvolging.',
     'sessions.liveTitle': 'Bezig',
     'sessions.liveDescription': 'Actieve sessies blijven hier zichtbaar zonder de resultatenwerkruimte over te nemen.',
@@ -635,6 +633,9 @@ const translations = {
     'sessions.detailDescription': 'Selecteer een sessie om detailinformatie te tonen zonder de lijst te verstoren.',
     'sessions.emptyDetail': 'Selecteer een sessie uit de werkruimte om rijdersresultaten en vervolgstappen te bekijken.',
     'sessions.closeResults': 'Resultaten sluiten',
+    'sessions.resultTabTitle': '{track} - {kind}',
+    'sessions.resultTabAria': 'Rijdersresultaten voor {track} ({kind}).',
+    'sessions.resultTabCloseAria': 'Resultaattab sluiten voor {track} ({kind}).',
     'sessions.loadedSummary': '{recent} recente en {older} oudere opgeslagen sessies geladen.',
     'sessions.viewing': 'Opgeslagen sessie van {lastSeen} wordt bekeken.',
     'sessions.includedMessage': 'Sessie opgenomen in historische klassementen.',
@@ -781,6 +782,7 @@ function setLanguage(language) {
   renderFixturePathDiagnostic();
   renderDriverTrackerTracks(latestDriverTrackerCatalog);
   renderDriverTrackerGeometryPanel();
+  renderSelectedSessionWorkspace();
 }
 
 setupButton.addEventListener('click', () => createFirstAdmin().catch(showError));
@@ -795,11 +797,11 @@ deleteEmptySessionsButton.addEventListener('click', () => deleteEmptyHistoricalS
 sessionOverviewLiveTabButtonElement.addEventListener('click', () => activateSessionWorkspaceTab('live'));
 sessionOverviewRecentTabButtonElement.addEventListener('click', () => activateSessionWorkspaceTab('recent'));
 sessionOverviewOlderTabButtonElement.addEventListener('click', () => activateSessionWorkspaceTab('older'));
-selectedSessionTabButtonElement.addEventListener('click', () => activateSessionWorkspaceTab('results'));
+[sessionOverviewLiveTabButtonElement, sessionOverviewRecentTabButtonElement, sessionOverviewOlderTabButtonElement]
+  .forEach(button => button.addEventListener('keydown', handleSessionWorkspaceTabKeydown));
 compareDriversButton.addEventListener('click', () => toggleCompareDrivers());
 openTelemetryButton.addEventListener('click', () => openTelemetryWorkspace());
 toggleManageResultsButton.addEventListener('click', () => toggleManageResults());
-closeSelectedSessionButton.addEventListener('click', () => closeSelectedSession());
 addSetupRowButton.addEventListener('click', () => {
   appendSessionSetupRow({ rigName: nextRigName(), displayName: '', driverProfileId: null });
   scheduleSessionSetupAutoSave(0);
@@ -979,26 +981,19 @@ async function loadSessions() {
   });
   renderOlderSessionGroups(workspace.olderGroups);
 
+  const availableSessionIds = new Set([
+    ...workspace.recentSessions.map(session => session.sessionId),
+    ...workspace.olderSessions.map(session => session.sessionId),
+    workspace.activeSessionSummary?.sessionId,
+  ].filter(Boolean));
+  pruneSessionResultTabs(availableSessionIds);
+  await refreshSessionResultTabs(availableSessionIds);
+  renderSelectedSessionWorkspace();
+
   const selectableSessions = [...workspace.recentSessions, ...workspace.olderSessions];
   if (selectableSessions.length === 0) {
-    selectedSessionId = null;
-    selectedSessionDetail = null;
-    selectedParticipantId = null;
-    selectedSessionOriginTab = 'recent';
-    isManageResultsMode = false;
-    isCompareVisible = false;
-    renderSelectedSessionWorkspace();
     sessionsStatusElement.textContent = t('sessions.empty');
     return;
-  }
-
-  const selectedStillExists = selectableSessions.some(session => session.sessionId === selectedSessionId);
-  if (selectedSessionId && selectedStillExists) {
-    await loadSessionDetail(selectedSessionId, { activateTab: false, updateStatus: false });
-  } else if (selectedSessionId && !selectedStillExists) {
-    closeSelectedSession();
-  } else {
-    renderSelectedSessionWorkspace();
   }
 
   sessionsStatusElement.textContent = t('sessions.loadedSummary', {
@@ -1007,21 +1002,53 @@ async function loadSessions() {
   });
 }
 
+async function refreshSessionResultTabs(availableSessionIds) {
+  const tabsToRefresh = openSessionResultTabs.filter(tab => availableSessionIds.has(tab.sessionId));
+  if (tabsToRefresh.length === 0) {
+    return;
+  }
+
+  const refreshResults = await Promise.all(tabsToRefresh.map(async tab => {
+    try {
+      const session = await fetchJson(`/api/admin/sessions/${encodeURIComponent(tab.sessionId)}`);
+      return { sessionId: tab.sessionId, session };
+    } catch (error) {
+      return { sessionId: tab.sessionId, error };
+    }
+  }));
+
+  const missingSessionIds = new Set();
+  for (const refreshResult of refreshResults) {
+    if (refreshResult.session) {
+      const tab = getSessionResultTabBySessionId(refreshResult.sessionId)
+        ?? getSessionResultTabBySessionId(refreshResult.session.sessionId);
+      if (tab) {
+        syncSessionResultTabDetail(tab, refreshResult.session);
+      }
+      continue;
+    }
+
+    if (isNotFoundRequestError(refreshResult.error)) {
+      missingSessionIds.add(refreshResult.sessionId);
+    }
+  }
+
+  if (missingSessionIds.size > 0) {
+    const validSessionIds = new Set(openSessionResultTabs
+      .map(tab => tab.sessionId)
+      .filter(sessionId => !missingSessionIds.has(sessionId)));
+    pruneSessionResultTabs(validSessionIds);
+  }
+}
+
+function isNotFoundRequestError(error) {
+  return error?.status === 404;
+}
+
 async function loadSessionDetail(sessionId, { activateTab = true, updateStatus = true, originTab = null } = {}) {
   const session = await fetchJson(`/api/admin/sessions/${encodeURIComponent(sessionId)}`);
-  selectedSessionId = session.sessionId;
-  selectedSessionDetail = session;
-  if (originTab) {
-    selectedSessionOriginTab = normalizeSessionWorkspaceOverviewTab(originTab);
-  }
-  if (!(session.participants ?? []).some(participant => participant.participantId === selectedParticipantId)) {
-    selectedParticipantId = null;
-  }
-  if (activateTab) {
-    activeSessionWorkspaceTab = 'results';
-  }
+  upsertSessionResultTab(session, { originTab, activateTab });
   renderSelectedSessionWorkspace();
-  highlightSelectedSessionSelection();
   if (updateStatus) {
     setStatus(t('sessions.viewing', { lastSeen: formatDate(session.lastSeenUtc) }));
   }
@@ -1029,14 +1056,16 @@ async function loadSessionDetail(sessionId, { activateTab = true, updateStatus =
 
 async function setSessionCountForHistory(sessionId, countForHistory) {
   const session = await putJson(`/api/admin/sessions/${encodeURIComponent(sessionId)}/history`, { countForHistory });
-  selectedSessionId = session.sessionId;
+  upsertSessionResultTab(session, { activateTab: false });
   setStatus(countForHistory ? t('sessions.includedMessage') : t('sessions.excludedMessage'));
   await loadSessions();
   await loadLeaderboards();
 }
 
 async function deleteHistoricalSession(sessionId, { returnTab = null } = {}) {
-  const sessionSummary = findWorkspaceSessionById(sessionId) ?? selectedSessionDetail;
+  const sessionSummary = findWorkspaceSessionById(sessionId)
+    ?? getSessionResultTabBySessionId(sessionId)?.cachedDetail
+    ?? getActiveSessionDetail();
   const deletionProtectionKey = getSessionDeletionProtectionKey(sessionSummary, latestSessionWorkspace);
   if (deletionProtectionKey) {
     setStatus(t(deletionProtectionKey), true);
@@ -1048,9 +1077,7 @@ async function deleteHistoricalSession(sessionId, { returnTab = null } = {}) {
   }
 
   await deleteJson(`/api/admin/sessions/${encodeURIComponent(sessionId)}`);
-  if (selectedSessionId === sessionId) {
-    closeSelectedSession({ preferredTab: returnTab ?? 'recent' });
-  }
+  closeSessionResultTabBySessionId(sessionId, { preferredTab: returnTab ?? 'recent', restoreFocus: true });
 
   setStatus(t('sessions.deleted'));
   await loadSessions();
@@ -1063,13 +1090,17 @@ async function deleteEmptyHistoricalSessions() {
   }
 
   const result = await deleteJson('/api/admin/sessions/empty');
-  selectedSessionId = null;
   setStatus(t('sessions.emptyDeleted').replace('{count}', result.deletedCount ?? 0));
   await loadSessions();
   await loadLeaderboards();
 }
 
 function renderSelectedSessionWorkspace() {
+  const activeResultTab = getActiveSessionResultTab();
+  const selectedSessionDetail = activeResultTab?.cachedDetail ?? null;
+  const isManageResultsMode = Boolean(activeResultTab?.isManageResultsMode);
+  const isCompareVisible = Boolean(activeResultTab?.isCompareVisible);
+
   toggleManageResultsButton.textContent = isManageResultsMode ? t('sessions.manageClose') : t('sessions.manage');
   toggleManageResultsButton.classList.toggle('active', isManageResultsMode);
   toggleManageResultsButton.setAttribute('aria-pressed', String(isManageResultsMode));
@@ -1083,23 +1114,27 @@ function renderSelectedSessionWorkspace() {
       activeSessionWorkspaceTab = resolveSessionOverviewReturnTab();
     }
     renderSessionWorkspaceNavigation();
+    highlightSelectedSessionSelection();
     return;
   }
 
   const topParticipant = (selectedSessionDetail.participants ?? [])[0];
   selectedSessionTitleElement.textContent = `${selectedSessionDetail.trackName} - ${selectedSessionDetail.sessionKind}`;
-  selectedSessionTabLabelElement.textContent = `${selectedSessionDetail.trackName} - ${selectedSessionDetail.sessionKind}`;
   selectedSessionSummaryElement.textContent = isManageResultsMode
     ? t('sessions.manageHint')
     : t('sessions.readOnly');
   renderSessionMetrics(selectedSessionDetail, topParticipant);
-  renderSessionParticipants(selectedSessionDetail.participants ?? []);
-  renderParticipantDetail(selectedSessionDetail.participants ?? []);
-  renderCompareSurface(selectedSessionDetail.participants ?? []);
+  renderSessionParticipants(selectedSessionDetail.participants ?? [], activeResultTab);
+  renderParticipantDetail(selectedSessionDetail.participants ?? [], selectedSessionDetail, activeResultTab);
+  renderCompareSurface(selectedSessionDetail.participants ?? [], isCompareVisible);
   renderSessionWorkspaceNavigation();
+  highlightSelectedSessionSelection();
 }
 
-function renderSessionParticipants(participants) {
+function renderSessionParticipants(participants, activeResultTab) {
+  const selectedParticipantId = activeResultTab?.selectedParticipantId ?? null;
+  const isManageResultsMode = Boolean(activeResultTab?.isManageResultsMode);
+
   sessionParticipantRowsElement.replaceChildren();
   if (participants.length === 0) {
     const row = document.createElement('tr');
@@ -1132,11 +1167,14 @@ function renderSessionParticipants(participants) {
   }
 }
 
-function renderParticipantDetail(participants) {
+function renderParticipantDetail(participants, selectedSessionDetail, activeResultTab) {
+  const selectedParticipantId = activeResultTab?.selectedParticipantId ?? null;
+  const isManageResultsMode = Boolean(activeResultTab?.isManageResultsMode);
+
   sessionParticipantDetailSurfaceElement.replaceChildren();
 
   if (isManageResultsMode && selectedSessionDetail) {
-    sessionParticipantDetailSurfaceElement.appendChild(renderSessionManagePanel(selectedSessionDetail));
+    sessionParticipantDetailSurfaceElement.appendChild(renderSessionManagePanel(selectedSessionDetail, activeResultTab));
   }
 
   if (!selectedParticipantId) {
@@ -1178,11 +1216,11 @@ function renderParticipantDetail(participants) {
     panel.appendChild(renderParticipantManageForm(participant));
   }
 
-  panel.appendChild(renderLapTable(participant));
+  panel.appendChild(renderLapTable(participant, isManageResultsMode));
   sessionParticipantDetailSurfaceElement.appendChild(panel);
 }
 
-function renderLapTable(participant) {
+function renderLapTable(participant, isManageResultsMode) {
   const table = document.createElement('table');
   table.className = 'lapCorrectionTable';
   const head = document.createElement('thead');
@@ -1229,27 +1267,35 @@ function renderLapTable(participant) {
 }
 
 async function saveParticipantCorrection(participantId, displayNameOverride, excludedFromHistory) {
-  if (!selectedSessionId) return;
-  const session = await putJson(`/api/admin/sessions/${encodeURIComponent(selectedSessionId)}/participants/${participantId}/correction`, {
+  const activeResultTab = getActiveSessionResultTab();
+  if (!activeResultTab?.sessionId) {
+    return;
+  }
+
+  const session = await putJson(`/api/admin/sessions/${encodeURIComponent(activeResultTab.sessionId)}/participants/${participantId}/correction`, {
     displayNameOverride: nullIfEmpty(displayNameOverride),
     excludedFromHistory,
     reason: excludedFromHistory ? 'Staff excluded participant' : null,
   });
-  selectedSessionDetail = session;
+  upsertSessionResultTab(session, { activateTab: false });
   renderSelectedSessionWorkspace();
   await loadLeaderboards();
   setStatus(t('sessions.participantCorrectionSaved'));
 }
 
 async function saveLapCorrection(lapId, lapSecondsOverride, staffInvalidated, reason) {
-  if (!selectedSessionId) return;
+  const activeResultTab = getActiveSessionResultTab();
+  if (!activeResultTab?.sessionId) {
+    return;
+  }
+
   const parsedOverride = parseLapSecondsInput(lapSecondsOverride);
-  const session = await putJson(`/api/admin/sessions/${encodeURIComponent(selectedSessionId)}/laps/${lapId}/correction`, {
+  const session = await putJson(`/api/admin/sessions/${encodeURIComponent(activeResultTab.sessionId)}/laps/${lapId}/correction`, {
     lapSecondsOverride: parsedOverride,
     staffInvalidated,
     reason: nullIfEmpty(reason) ?? (staffInvalidated ? 'Staff invalidated lap' : null),
   });
-  selectedSessionDetail = session;
+  upsertSessionResultTab(session, { activateTab: false });
   renderSelectedSessionWorkspace();
   await loadLeaderboards();
   setStatus(t('sessions.lapCorrectionSaved'));
@@ -1275,32 +1321,35 @@ function parseLapSecondsInput(value) {
 }
 
 function toggleParticipantDetail(participantId) {
-  selectedParticipantId = selectedParticipantId === participantId ? null : participantId;
+  const activeResultTab = getActiveSessionResultTab();
+  if (!activeResultTab) {
+    return;
+  }
+
+  activeResultTab.selectedParticipantId = activeResultTab.selectedParticipantId === participantId
+    ? null
+    : participantId;
   renderSelectedSessionWorkspace();
 }
 
 function toggleManageResults() {
-  isManageResultsMode = !isManageResultsMode;
+  const activeResultTab = getActiveSessionResultTab();
+  if (!activeResultTab) {
+    return;
+  }
+
+  activeResultTab.isManageResultsMode = !activeResultTab.isManageResultsMode;
   renderSelectedSessionWorkspace();
 }
 
 function toggleCompareDrivers() {
-  isCompareVisible = !isCompareVisible;
-  renderSelectedSessionWorkspace();
-}
-
-function closeSelectedSession({ preferredTab = null } = {}) {
-  selectedSessionId = null;
-  selectedSessionDetail = null;
-  selectedParticipantId = null;
-  isManageResultsMode = false;
-  isCompareVisible = false;
-  if (activeSessionWorkspaceTab === 'results') {
-    activeSessionWorkspaceTab = resolveSessionOverviewReturnTab(preferredTab);
+  const activeResultTab = getActiveSessionResultTab();
+  if (!activeResultTab) {
+    return;
   }
-  selectedSessionOriginTab = 'recent';
+
+  activeResultTab.isCompareVisible = !activeResultTab.isCompareVisible;
   renderSelectedSessionWorkspace();
-  highlightSelectedSessionSelection();
 }
 
 function normalizeSessionWorkspaceOverviewTab(tabName) {
@@ -1309,42 +1358,391 @@ function normalizeSessionWorkspaceOverviewTab(tabName) {
     : 'recent';
 }
 
-function resolveSessionOverviewReturnTab(preferredTab = null) {
-  return normalizeSessionWorkspaceOverviewTab(preferredTab ?? selectedSessionOriginTab ?? activeSessionWorkspaceTab);
+function resolveSessionOverviewReturnTab(preferredTab = null, fallbackOriginTab = null) {
+  return normalizeSessionWorkspaceOverviewTab(
+    preferredTab
+    ?? fallbackOriginTab
+    ?? getActiveSessionResultTab()?.originOverviewTab
+    ?? activeSessionWorkspaceTab,
+  );
 }
 
-function activateSessionWorkspaceTab(tabName) {
-  if (tabName === 'results' && !selectedSessionDetail) {
+function createSessionResultTabState(sessionDetail, originTab = null) {
+  return {
+    tabId: sessionDetail.sessionId,
+    sessionId: sessionDetail.sessionId,
+    cachedDetail: sessionDetail,
+    originOverviewTab: normalizeSessionWorkspaceOverviewTab(originTab),
+    selectedParticipantId: null,
+    isManageResultsMode: false,
+    isCompareVisible: false,
+  };
+}
+
+function syncSessionResultTabDetail(tab, sessionDetail) {
+  const previousTabId = tab.tabId;
+  tab.tabId = sessionDetail.sessionId;
+  tab.sessionId = sessionDetail.sessionId;
+  tab.cachedDetail = sessionDetail;
+  if (activeSessionResultTabId === previousTabId) {
+    activeSessionResultTabId = tab.tabId;
+  }
+  if (!(sessionDetail.participants ?? []).some(participant => participant.participantId === tab.selectedParticipantId)) {
+    tab.selectedParticipantId = null;
+  }
+}
+
+function getSessionResultTabIndexBySessionId(sessionId) {
+  return openSessionResultTabs.findIndex(tab => tab.sessionId === sessionId);
+}
+
+function getSessionResultTabBySessionId(sessionId) {
+  const tabIndex = getSessionResultTabIndexBySessionId(sessionId);
+  return tabIndex >= 0 ? openSessionResultTabs[tabIndex] : null;
+}
+
+function getSessionResultTabById(tabId) {
+  return openSessionResultTabs.find(tab => tab.tabId === tabId) ?? null;
+}
+
+function getActiveSessionResultTab() {
+  return activeSessionResultTabId
+    ? getSessionResultTabById(activeSessionResultTabId)
+    : null;
+}
+
+function getActiveSessionDetail() {
+  return getActiveSessionResultTab()?.cachedDetail ?? null;
+}
+
+function upsertSessionResultTab(sessionDetail, { originTab = null, activateTab = true } = {}) {
+  if (!sessionDetail?.sessionId) {
+    return null;
+  }
+
+  const existingTab = getSessionResultTabBySessionId(sessionDetail.sessionId);
+  if (existingTab) {
+    syncSessionResultTabDetail(existingTab, sessionDetail);
+    if (originTab) {
+      existingTab.originOverviewTab = normalizeSessionWorkspaceOverviewTab(originTab);
+    }
+    if (activateTab) {
+      activateSessionResultTab(existingTab.tabId);
+    }
+    return existingTab;
+  }
+
+  const createdTab = createSessionResultTabState(sessionDetail, originTab);
+  openSessionResultTabs.push(createdTab);
+  if (activateTab) {
+    activateSessionResultTab(createdTab.tabId);
+  }
+  return createdTab;
+}
+
+function activateSessionResultTab(tabId, { activateWorkspace = true } = {}) {
+  const tab = getSessionResultTabById(tabId);
+  if (!tab) {
     return;
   }
 
-  activeSessionWorkspaceTab = tabName;
+  activeSessionResultTabId = tab.tabId;
+  if (activateWorkspace) {
+    activeSessionWorkspaceTab = 'results';
+  }
+  renderSelectedSessionWorkspace();
+  highlightSelectedSessionSelection();
+}
+
+function resolveAdjacentResultTabId(previousTabs, closingTabId, remainingTabIds) {
+  const closingIndex = previousTabs.findIndex(tab => tab.tabId === closingTabId);
+  if (closingIndex < 0) {
+    return null;
+  }
+
+  for (let index = closingIndex + 1; index < previousTabs.length; index += 1) {
+    if (remainingTabIds.has(previousTabs[index].tabId)) {
+      return previousTabs[index].tabId;
+    }
+  }
+
+  for (let index = closingIndex - 1; index >= 0; index -= 1) {
+    if (remainingTabIds.has(previousTabs[index].tabId)) {
+      return previousTabs[index].tabId;
+    }
+  }
+
+  return null;
+}
+
+function closeSessionResultTab(tabId, { preferredTab = null, restoreFocus = false } = {}) {
+  const closingIndex = openSessionResultTabs.findIndex(tab => tab.tabId === tabId);
+  if (closingIndex < 0) {
+    return;
+  }
+
+  const closingTab = openSessionResultTabs[closingIndex];
+  const wasActive = activeSessionResultTabId === tabId;
+  const workspaceWasShowingResults = activeSessionWorkspaceTab === 'results';
+  const nextTabId = openSessionResultTabs[closingIndex + 1]?.tabId
+    ?? openSessionResultTabs[closingIndex - 1]?.tabId
+    ?? null;
+  let focusTabId = wasActive ? activeSessionResultTabId : (nextTabId ?? activeSessionResultTabId);
+  let focusOverviewTab = null;
+
+  openSessionResultTabs.splice(closingIndex, 1);
+
+  if (wasActive) {
+    // Active-tab closure follows right-neighbor, then left-neighbor, then origin overview fallback.
+    if (nextTabId && getSessionResultTabById(nextTabId)) {
+      activeSessionResultTabId = nextTabId;
+      if (workspaceWasShowingResults) {
+        activeSessionWorkspaceTab = 'results';
+      }
+      focusTabId = nextTabId;
+    } else {
+      activeSessionResultTabId = null;
+      if (activeSessionWorkspaceTab === 'results') {
+        activeSessionWorkspaceTab = resolveSessionOverviewReturnTab(preferredTab, closingTab.originOverviewTab);
+        focusOverviewTab = activeSessionWorkspaceTab;
+      }
+    }
+  }
+
+  renderSelectedSessionWorkspace();
+  if (restoreFocus) {
+    focusSessionWorkspaceTab(focusTabId, focusOverviewTab);
+  }
+}
+
+function closeSessionResultTabBySessionId(sessionId, options = {}) {
+  const tab = getSessionResultTabBySessionId(sessionId);
+  if (!tab) {
+    return;
+  }
+
+  closeSessionResultTab(tab.tabId, options);
+}
+
+function pruneSessionResultTabs(validSessionIds, { preferredOverviewTab = null } = {}) {
+  if (openSessionResultTabs.length === 0) {
+    return false;
+  }
+
+  const previousTabs = [...openSessionResultTabs];
+  const previousActiveTabId = activeSessionResultTabId;
+  const remainingTabs = previousTabs.filter(tab => validSessionIds.has(tab.sessionId));
+  if (remainingTabs.length === previousTabs.length) {
+    return false;
+  }
+
+  const remainingTabIds = new Set(remainingTabs.map(tab => tab.tabId));
+  const removedActiveTab = previousTabs.find(tab => tab.tabId === previousActiveTabId) ?? null;
+  const workspaceWasShowingResults = activeSessionWorkspaceTab === 'results';
+
+  openSessionResultTabs = remainingTabs;
+
+  if (previousActiveTabId && !remainingTabIds.has(previousActiveTabId)) {
+    const adjacentTabId = resolveAdjacentResultTabId(previousTabs, previousActiveTabId, remainingTabIds);
+    if (adjacentTabId) {
+      activeSessionResultTabId = adjacentTabId;
+      if (workspaceWasShowingResults) {
+        activeSessionWorkspaceTab = 'results';
+      }
+    } else {
+      activeSessionResultTabId = null;
+      if (activeSessionWorkspaceTab === 'results') {
+        activeSessionWorkspaceTab = resolveSessionOverviewReturnTab(preferredOverviewTab, removedActiveTab?.originOverviewTab);
+      }
+    }
+  } else if (!previousActiveTabId && remainingTabs.length > 0) {
+    activeSessionResultTabId = remainingTabs[0].tabId;
+  }
+
+  return true;
+}
+
+function buildSessionResultTabLabels(sessionDetail) {
+  const track = String(sessionDetail?.trackName ?? '-');
+  const kind = String(sessionDetail?.sessionKind ?? '-');
+  return {
+    track,
+    kind,
+    title: t('sessions.resultTabTitle', { track, kind }),
+    tabAriaLabel: t('sessions.resultTabAria', { track, kind }),
+    closeAriaLabel: t('sessions.resultTabCloseAria', { track, kind }),
+  };
+}
+
+function sessionResultTabDomId(tabId) {
+  return `sessionResultTab-${encodeURIComponent(tabId).replaceAll('%', '_')}`;
+}
+
+function getSessionWorkspaceTabButtons() {
+  return [
+    sessionOverviewLiveTabButtonElement,
+    sessionOverviewRecentTabButtonElement,
+    sessionOverviewOlderTabButtonElement,
+    ...openSessionResultTabsRailElement.querySelectorAll('.sessionWorkspaceResultTabButton'),
+  ].filter(button => !button.hidden);
+}
+
+function handleSessionWorkspaceTabKeydown(event) {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+    return;
+  }
+
+  const buttons = getSessionWorkspaceTabButtons();
+  const currentIndex = buttons.indexOf(event.currentTarget);
+  if (currentIndex < 0 || buttons.length === 0) {
+    return;
+  }
+
+  event.preventDefault();
+  const targetIndex = event.key === 'Home'
+    ? 0
+    : event.key === 'End'
+      ? buttons.length - 1
+      : (currentIndex + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length;
+  const target = buttons[targetIndex];
+  target.focus();
+  target.click();
+}
+
+function focusSessionWorkspaceTab(resultTabId, overviewTabName) {
+  window.requestAnimationFrame(() => {
+    const resultButton = resultTabId
+      ? [...openSessionResultTabsRailElement.querySelectorAll('.sessionWorkspaceResultTabButton')]
+        .find(button => button.dataset.resultTabId === resultTabId)
+      : null;
+    if (resultButton) {
+      resultButton.focus();
+      return;
+    }
+
+    const overviewButton = overviewTabName === 'live'
+      ? sessionOverviewLiveTabButtonElement
+      : overviewTabName === 'older'
+        ? sessionOverviewOlderTabButtonElement
+        : sessionOverviewRecentTabButtonElement;
+    overviewButton.focus();
+  });
+}
+
+function renderSessionResultTabs() {
+  openSessionResultTabsRailElement.replaceChildren();
+  openSessionResultTabsRailElement.hidden = openSessionResultTabs.length === 0;
+  if (openSessionResultTabs.length === 0) {
+    return;
+  }
+
+  for (const tab of openSessionResultTabs) {
+    const labels = buildSessionResultTabLabels(tab.cachedDetail);
+    const isActive = activeSessionWorkspaceTab === 'results' && tab.tabId === activeSessionResultTabId;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'sessionWorkspaceResultTab';
+    wrapper.setAttribute('role', 'presentation');
+    wrapper.classList.toggle('active', isActive);
+    wrapper.dataset.resultTabId = tab.tabId;
+    wrapper.dataset.sessionId = tab.sessionId;
+
+    const tabButton = document.createElement('button');
+    tabButton.type = 'button';
+    tabButton.className = 'sessionWorkspaceTab sessionWorkspaceResultTabButton';
+    tabButton.id = sessionResultTabDomId(tab.tabId);
+    tabButton.dataset.resultTabId = tab.tabId;
+    tabButton.dataset.sessionId = tab.sessionId;
+    tabButton.setAttribute('role', 'tab');
+    tabButton.setAttribute('aria-controls', 'selectedSessionPanel');
+    tabButton.title = labels.title;
+    tabButton.setAttribute('aria-label', labels.tabAriaLabel);
+    setSessionWorkspaceTabState(tabButton, isActive);
+
+    const labelElement = document.createElement('span');
+    labelElement.className = 'sessionWorkspaceResultTabLabel';
+    labelElement.textContent = labels.track;
+    labelElement.title = labels.title;
+
+    const badgeElement = document.createElement('span');
+    badgeElement.className = 'sessionWorkspaceResultTabBadge';
+    badgeElement.textContent = labels.kind;
+
+    tabButton.append(labelElement, badgeElement);
+    tabButton.addEventListener('click', () => activateSessionResultTab(tab.tabId));
+    tabButton.addEventListener('keydown', handleSessionWorkspaceTabKeydown);
+
+    const closeButton = document.createElement('button');
+    closeButton.type = 'button';
+    closeButton.className = 'sessionWorkspaceResultTabClose';
+    closeButton.dataset.resultTabId = tab.tabId;
+    closeButton.dataset.sessionId = tab.sessionId;
+    closeButton.title = labels.closeAriaLabel;
+    closeButton.setAttribute('aria-label', labels.closeAriaLabel);
+    const closeIcon = document.createElement('span');
+    closeIcon.setAttribute('aria-hidden', 'true');
+    closeIcon.textContent = '\u00d7';
+    closeButton.appendChild(closeIcon);
+    closeButton.addEventListener('click', event => {
+      event.stopPropagation();
+      closeSessionResultTab(tab.tabId, { restoreFocus: true });
+    });
+
+    wrapper.append(tabButton, closeButton);
+    openSessionResultTabsRailElement.appendChild(wrapper);
+  }
+}
+
+function activateSessionWorkspaceTab(tabName) {
+  if (tabName === 'results') {
+    const activeResultTab = getActiveSessionResultTab();
+    if (!activeResultTab) {
+      return;
+    }
+
+    activeSessionWorkspaceTab = 'results';
+    renderSessionWorkspaceNavigation();
+    return;
+  }
+
+  activeSessionWorkspaceTab = normalizeSessionWorkspaceOverviewTab(tabName);
   renderSessionWorkspaceNavigation();
 }
 
 function renderSessionWorkspaceNavigation() {
-  const hasResultsTab = Boolean(selectedSessionDetail);
-  const activeTab = hasResultsTab || activeSessionWorkspaceTab !== 'results'
-    ? activeSessionWorkspaceTab
-    : resolveSessionOverviewReturnTab();
+  if (!getActiveSessionResultTab() && openSessionResultTabs.length > 0) {
+    activeSessionResultTabId = openSessionResultTabs[0].tabId;
+  }
+
+  let activeTab = activeSessionWorkspaceTab;
+  if (activeTab === 'results' && !getActiveSessionResultTab()) {
+    activeTab = resolveSessionOverviewReturnTab();
+    activeSessionWorkspaceTab = activeTab;
+  }
 
   setSessionWorkspaceTabState(sessionOverviewLiveTabButtonElement, activeTab === 'live');
   setSessionWorkspaceTabState(sessionOverviewRecentTabButtonElement, activeTab === 'recent');
   setSessionWorkspaceTabState(sessionOverviewOlderTabButtonElement, activeTab === 'older');
-  setSessionWorkspaceTabState(selectedSessionTabButtonElement, activeTab === 'results');
+  renderSessionResultTabs();
 
-  selectedSessionTabGroupElement.hidden = !hasResultsTab;
+  const activeResultTab = getActiveSessionResultTab();
+  if (activeTab === 'results' && activeResultTab) {
+    selectedSessionPanelElement.setAttribute('aria-labelledby', sessionResultTabDomId(activeResultTab.tabId));
+  } else {
+    selectedSessionPanelElement.removeAttribute('aria-labelledby');
+  }
 
   sessionOverviewLivePanelElement.hidden = activeTab !== 'live';
   sessionOverviewRecentPanelElement.hidden = activeTab !== 'recent';
   sessionOverviewOlderPanelElement.hidden = activeTab !== 'older';
-  selectedSessionPanelElement.hidden = activeTab !== 'results' || !hasResultsTab;
-  sessionWorkspaceUtilityRowElement.hidden = activeTab === 'results';
+  selectedSessionPanelElement.hidden = activeTab !== 'results' || !Boolean(getActiveSessionDetail());
+  sessionWorkspaceUtilityRowElement.hidden = activeTab === 'results' && Boolean(getActiveSessionResultTab());
 }
 
 function setSessionWorkspaceTabState(button, isActive) {
   button.classList.toggle('active', isActive);
   button.setAttribute('aria-selected', String(isActive));
+  button.tabIndex = isActive ? 0 : -1;
 }
 
 function openTelemetryWorkspace() {
@@ -1712,7 +2110,7 @@ function renderSessionMetrics(session, topParticipant) {
   selectedSessionMetricsElement.appendChild(createMetricCard(t('sessions.boardStatus'), session.countForHistory ? t('sessions.included') : t('sessions.excluded')));
 }
 
-function renderCompareSurface(participants) {
+function renderCompareSurface(participants, isCompareVisible) {
   sessionCompareSurfaceElement.replaceChildren();
   sessionCompareSurfaceElement.hidden = !isCompareVisible;
   if (!isCompareVisible) {
@@ -1755,7 +2153,7 @@ function renderCompareSurface(participants) {
   sessionCompareSurfaceElement.appendChild(table);
 }
 
-function renderSessionManagePanel(session) {
+function renderSessionManagePanel(session, activeResultTab) {
   const panel = document.createElement('section');
   panel.className = 'participantDetailPanel sessionManagePanel';
 
@@ -1779,7 +2177,9 @@ function renderSessionManagePanel(session) {
     deleteButton.type = 'button';
     deleteButton.className = 'dangerButton';
     deleteButton.textContent = t('sessions.delete');
-    deleteButton.addEventListener('click', () => deleteHistoricalSession(session.sessionId, { returnTab: selectedSessionOriginTab }).catch(showError));
+    deleteButton.addEventListener('click', () => deleteHistoricalSession(session.sessionId, {
+      returnTab: activeResultTab?.originOverviewTab ?? 'recent',
+    }).catch(showError));
     actions.appendChild(deleteButton);
   }
 
@@ -1832,8 +2232,9 @@ function renderParticipantManageForm(participant) {
 }
 
 function highlightSelectedSessionSelection() {
-  document.querySelectorAll('[data-session-id]').forEach(element => {
-    element.classList.toggle('selectedRow', element.dataset.sessionId === selectedSessionId);
+  const activeSessionId = getActiveSessionDetail()?.sessionId ?? null;
+  document.querySelectorAll('.sessionSummaryCard[data-session-id]').forEach(element => {
+    element.classList.toggle('selectedRow', element.dataset.sessionId === activeSessionId);
   });
 }
 
@@ -2202,7 +2603,7 @@ function renderDriverTrackerTracks(tracks) {
     appendCell(row, formatDriverTrackerSamples(track));
     appendCell(row, formatDate(track.updatedUtc));
     appendCell(row, track.statusDetail ?? '-');
-    appendActionsCell(row, [
+    const actions = [
       {
         label: t('driverTracker.improve'),
         title: t('driverTracker.improveTitle'),
@@ -2227,7 +2628,12 @@ function renderDriverTrackerTracks(tracks) {
           startDriverTrackerRecording(trackName, true).catch(showError);
         },
       },
-      {
+    ];
+    const hasOutlineData = Boolean(track.hasGeometry || track.isRecording)
+      || Number(track.sampleCount ?? 0) > 0
+      || Number(track.candidateSampleCount ?? 0) > 0;
+    if (hasOutlineData) {
+      actions.push({
         label: t('driverTracker.delete'),
         title: t('driverTracker.deleteTitle'),
         ariaLabel: t('driverTracker.deleteAria', { track: trackName }),
@@ -2239,8 +2645,9 @@ function renderDriverTrackerTracks(tracks) {
 
           deleteDriverTrackerOutline(trackName).catch(showError);
         },
-      },
-    ]);
+      });
+    }
+    appendActionsCell(row, actions);
     driverTrackerTrackRowsElement.appendChild(row);
   }
 }
@@ -3096,7 +3503,9 @@ async function readJsonResponse(response) {
       }
     } catch {
     }
-    throw new Error(detail);
+    const requestError = new Error(detail);
+    requestError.status = response.status;
+    throw requestError;
   }
 
   if (response.status === 204) {

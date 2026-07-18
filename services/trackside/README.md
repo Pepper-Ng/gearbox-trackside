@@ -95,13 +95,15 @@ The `Trackside` section in `Trackside.Service/appsettings.json` controls:
 - `Persistence.Retention.*` - retention policy targets for detailed lap records, session summaries, long-lived track best records, monthly track periods, and future telemetry samples. A background cleanup worker and admin trigger enforce these windows while preserving derived track-best records by default.
 - `Kiosk.DefaultDisplayMode` - default kiosk view for newly opened screens: Monthly, Weekly, Daily, LastSession, or Live.
 - `DriverTracker.ClientRefreshHz` - browser-side refresh/redraw rate for `/tracker`, defaulting to 30 Hz. Admins can raise it up to 60 Hz when venue hardware is comfortable. Source freshness still depends on the active rFactor 2 scoring or telemetry source.
-- `DriverTracker.GeometryRecordingLaps` - default number of complete lap passes to average before generated track geometry is considered complete. The admin Driver Tracker panel can restart recording per seen track to improve stored geometry.
+- `DriverTracker.GeometryRecordingLaps` - default number of complete lap passes to average before generated track geometry is considered complete. In admin, **Improve Outline** keeps stored geometry and averages additional completed laps, **Start Over** clears it before a fresh recording, and **Delete Outline** removes stored/in-progress geometry without deleting sessions or laps. Catalog progress refreshes once per second only while the visible Tracker tab is active.
 - `Deployment.*` - install mode, service name, bundle version, install root, config/data/log/update paths, and manifest path. Detailed paths are surfaced through the authenticated admin status endpoint rather than public `/api/health`.
 - `Updates.*` - placeholder update status/channel/manifest fields for future dashboard-controlled updates.
 
 Shared-memory streams are projected once and published to registered live-data consumers. The driver-tracker geometry recorder consumes only scoring context and reduced telemetry-position frames, and it persists averaged geometry rather than raw telemetry.
 
 The tray companion includes an `Open Configuration` menu item that opens the service-hosted configuration page.
+
+The admin Sessions workspace can keep multiple result tabs open. Each tab preserves its own driver selection, comparison visibility, and Manage Results state until it is closed or the stored session is removed.
 
 ## Admin Security
 
