@@ -116,6 +116,18 @@ let activeSessionWorkspaceTab = 'recent';
 let openSessionResultTabs = [];
 let activeSessionResultTabId = null;
 let latestSessionWorkspace = null;
+let sessionPollingTimer = 0;
+let isSessionPolling = false;
+let sessionPollingAbortController = null;
+let sessionPollingSequence = 0;
+let sessionLoadSequence = 0;
+let manualSessionLoadCount = 0;
+let latestSessionLiveSignature = null;
+let sessionSummaryReconciliationAttempts = 0;
+let isDashboardInitializing = false;
+let isDashboardAuthenticated = false;
+let sessionWorkspaceStateSequence = 0;
+let nextSessionAuthorizationCheckEpochMs = 0;
 let isPopulatingDriverTrackerSettings = false;
 let driverTrackerSaveTimer = 0;
 let driverTrackerSaveSequence = 0;
@@ -139,6 +151,11 @@ let isStatusRefreshBusy = false;
 
 const recentSessionWindowMs = 3 * 60 * 60 * 1000;
 const activeSessionFreshWindowMs = 15 * 60 * 1000;
+const sessionPollingIntervalMs = 1500;
+const maxSessionSummaryReconciliationAttempts = 4;
+const sessionSummaryStartSkewMs = 2 * 60 * 1000;
+const sessionAuthorizationCheckIntervalMs = 30 * 1000;
+const liveSessionSignatureStartBucketMs = 5 * 60 * 1000;
 
 const languageStorageKey = 'trackside.admin.language';
 const tabStorageKey = 'trackside.admin.tab';
@@ -867,8 +884,7 @@ async function loadSession() {
     return;
   }
 
-  showDashboard(session);
-  await Promise.all([loadConfiguration(), loadSessionSetup(), loadSessions(), loadKioskSettings(), loadDriverTrackerSettings(), loadDriverTrackerTracks(), loadLeaderboards(), loadUsers(), loadAdminStatus()]);
+  await initializeDashboard(session);
 }
 
 async function createFirstAdmin() {
@@ -877,8 +893,7 @@ async function createFirstAdmin() {
     displayName: setupDisplayNameElement.value.trim(),
     password: setupPasswordElement.value,
   });
-  showDashboard(session);
-  await Promise.all([loadConfiguration(), loadSessionSetup(), loadSessions(), loadKioskSettings(), loadDriverTrackerSettings(), loadDriverTrackerTracks(), loadLeaderboards(), loadUsers(), loadAdminStatus()]);
+  await initializeDashboard(session);
 }
 
 async function login() {
@@ -886,11 +901,23 @@ async function login() {
     username: loginUsernameElement.value.trim(),
     password: loginPasswordElement.value,
   });
-  showDashboard(session);
-  await Promise.all([loadConfiguration(), loadSessionSetup(), loadSessions(), loadKioskSettings(), loadDriverTrackerSettings(), loadDriverTrackerTracks(), loadLeaderboards(), loadUsers(), loadAdminStatus()]);
+  await initializeDashboard(session);
+}
+
+async function initializeDashboard(session) {
+  isDashboardInitializing = true;
+  try {
+    showDashboard(session);
+    await Promise.all([loadConfiguration(), loadSessionSetup(), loadSessions(), loadKioskSettings(), loadDriverTrackerSettings(), loadDriverTrackerTracks(), loadLeaderboards(), loadUsers(), loadAdminStatus()]);
+  } finally {
+    isDashboardInitializing = false;
+  }
+
+  startSessionPolling();
 }
 
 async function logout() {
+  stopSessionPolling();
   stopDriverTrackerPolling();
   await fetch('/api/admin/session', { method: 'DELETE', credentials: 'same-origin' });
   showLogin();
@@ -967,55 +994,94 @@ async function loadUsers() {
   }
 }
 
-async function loadSessions() {
-  const [sessions, liveSession] = await Promise.all([
-    fetchJson('/api/admin/sessions?limit=50'),
-    loadLiveSessionSnapshot(),
-  ]);
-  const workspace = buildSessionWorkspace(sessions, liveSession);
-  latestSessionWorkspace = workspace;
-  renderLiveSessionSurface(workspace.liveSession, workspace.activeSessionSummary);
-  renderSessionCollection(recentSessionsSurfaceElement, workspace.recentSessions, t('sessions.noRecent'), {
-    originTab: 'recent',
-    includeDeleteAction: false,
-  });
-  renderOlderSessionGroups(workspace.olderGroups);
+async function loadSessions({ refreshOpenTabs = true, signal } = {}) {
+  const workspaceStateSequence = sessionWorkspaceStateSequence;
+  const loadSequence = refreshOpenTabs
+    ? beginManualSessionActivity()
+    : sessionLoadSequence;
 
-  const availableSessionIds = new Set([
-    ...workspace.recentSessions.map(session => session.sessionId),
-    ...workspace.olderSessions.map(session => session.sessionId),
-    workspace.activeSessionSummary?.sessionId,
-  ].filter(Boolean));
-  pruneSessionResultTabs(availableSessionIds);
-  await refreshSessionResultTabs(availableSessionIds);
-  renderSelectedSessionWorkspace();
+  try {
+    const sessionsPromise = fetchJson('/api/admin/sessions?limit=50', { signal });
+    let liveSession;
+    try {
+      liveSession = await loadLiveSessionSnapshot(signal);
+    } catch (error) {
+      // An abort can reject both concurrent requests; observe the summary rejection before propagating it.
+      await sessionsPromise.catch(() => {});
+      throw error;
+    }
 
-  const selectableSessions = [...workspace.recentSessions, ...workspace.olderSessions];
-  if (selectableSessions.length === 0) {
-    sessionsStatusElement.textContent = t('sessions.empty');
-    return;
+    if (signal?.aborted || !isSessionLoadCurrent(workspaceStateSequence, loadSequence)) {
+      await sessionsPromise.catch(() => {});
+      return;
+    }
+
+    // The live card should respond to the small snapshot before SQLite summaries have returned.
+    renderLiveSessionSnapshot(liveSession);
+    const sessions = await sessionsPromise;
+    if (signal?.aborted || !isSessionLoadCurrent(workspaceStateSequence, loadSequence)) {
+      return;
+    }
+
+    const workspace = buildSessionWorkspace(sessions, liveSession);
+    latestSessionWorkspace = workspace;
+    latestSessionLiveSignature = buildLiveSessionSignature(liveSession);
+    renderLiveSessionSurface(workspace.liveSession, workspace.activeSessionSummary);
+    renderSessionCollection(recentSessionsSurfaceElement, workspace.recentSessions, t('sessions.noRecent'), {
+      originTab: 'recent',
+      includeDeleteAction: false,
+    });
+    renderOlderSessionGroups(workspace.olderGroups);
+
+    if (refreshOpenTabs) {
+      await refreshSessionResultTabs(signal, workspaceStateSequence, loadSequence);
+    }
+    if (signal?.aborted || !isSessionLoadCurrent(workspaceStateSequence, loadSequence)) {
+      return;
+    }
+
+    renderSelectedSessionWorkspace();
+    updateSessionSummaryReconciliationState(workspace);
+
+    const selectableSessions = [...workspace.recentSessions, ...workspace.olderSessions];
+    if (selectableSessions.length === 0) {
+      sessionsStatusElement.textContent = t('sessions.empty');
+      return;
+    }
+
+    sessionsStatusElement.textContent = t('sessions.loadedSummary', {
+      recent: workspace.recentSessions.length,
+      older: workspace.olderSessions.length,
+    });
+  } finally {
+    if (refreshOpenTabs) {
+      endManualSessionActivity();
+    }
   }
-
-  sessionsStatusElement.textContent = t('sessions.loadedSummary', {
-    recent: workspace.recentSessions.length,
-    older: workspace.olderSessions.length,
-  });
 }
 
-async function refreshSessionResultTabs(availableSessionIds) {
-  const tabsToRefresh = openSessionResultTabs.filter(tab => availableSessionIds.has(tab.sessionId));
+async function refreshSessionResultTabs(signal, workspaceStateSequence, loadSequence) {
+  const tabsToRefresh = [...openSessionResultTabs];
   if (tabsToRefresh.length === 0) {
     return;
   }
 
   const refreshResults = await Promise.all(tabsToRefresh.map(async tab => {
     try {
-      const session = await fetchJson(`/api/admin/sessions/${encodeURIComponent(tab.sessionId)}`);
+      const session = await fetchJson(`/api/admin/sessions/${encodeURIComponent(tab.sessionId)}`, { signal });
       return { sessionId: tab.sessionId, session };
     } catch (error) {
+      if (isAbortError(error)) {
+        throw error;
+      }
+
       return { sessionId: tab.sessionId, error };
     }
   }));
+
+  if (signal?.aborted || !isSessionLoadCurrent(workspaceStateSequence, loadSequence)) {
+    return;
+  }
 
   const missingSessionIds = new Set();
   for (const refreshResult of refreshResults) {
@@ -1046,7 +1112,12 @@ function isNotFoundRequestError(error) {
 }
 
 async function loadSessionDetail(sessionId, { activateTab = true, updateStatus = true, originTab = null } = {}) {
+  const workspaceStateSequence = sessionWorkspaceStateSequence;
   const session = await fetchJson(`/api/admin/sessions/${encodeURIComponent(sessionId)}`);
+  if (workspaceStateSequence !== sessionWorkspaceStateSequence || !isDashboardAuthenticated) {
+    return;
+  }
+
   upsertSessionResultTab(session, { originTab, activateTab });
   renderSelectedSessionWorkspace();
   if (updateStatus) {
@@ -1055,44 +1126,77 @@ async function loadSessionDetail(sessionId, { activateTab = true, updateStatus =
 }
 
 async function setSessionCountForHistory(sessionId, countForHistory) {
-  const session = await putJson(`/api/admin/sessions/${encodeURIComponent(sessionId)}/history`, { countForHistory });
-  upsertSessionResultTab(session, { activateTab: false });
-  setStatus(countForHistory ? t('sessions.includedMessage') : t('sessions.excludedMessage'));
-  await loadSessions();
-  await loadLeaderboards();
+  const workspaceStateSequence = sessionWorkspaceStateSequence;
+  const activitySequence = beginManualSessionActivity();
+  try {
+    const session = await putJson(`/api/admin/sessions/${encodeURIComponent(sessionId)}/history`, { countForHistory });
+    if (!isSessionOperationCurrent(workspaceStateSequence, activitySequence)) {
+      return;
+    }
+
+    upsertSessionResultTab(session, { activateTab: false });
+    setStatus(countForHistory ? t('sessions.includedMessage') : t('sessions.excludedMessage'));
+    await loadSessions();
+    await loadLeaderboards();
+  } finally {
+    endManualSessionActivity();
+  }
 }
 
 async function deleteHistoricalSession(sessionId, { returnTab = null } = {}) {
+  const workspaceStateSequence = sessionWorkspaceStateSequence;
+  const activitySequence = beginManualSessionActivity();
   const sessionSummary = findWorkspaceSessionById(sessionId)
     ?? getSessionResultTabBySessionId(sessionId)?.cachedDetail
     ?? getActiveSessionDetail();
   const deletionProtectionKey = getSessionDeletionProtectionKey(sessionSummary, latestSessionWorkspace);
   if (deletionProtectionKey) {
     setStatus(t(deletionProtectionKey), true);
+    endManualSessionActivity();
     return;
   }
 
   if (!window.confirm(t('sessions.confirmDelete'))) {
+    endManualSessionActivity();
     return;
   }
 
-  await deleteJson(`/api/admin/sessions/${encodeURIComponent(sessionId)}`);
-  closeSessionResultTabBySessionId(sessionId, { preferredTab: returnTab ?? 'recent', restoreFocus: true });
+  try {
+    await deleteJson(`/api/admin/sessions/${encodeURIComponent(sessionId)}`);
+    if (!isSessionOperationCurrent(workspaceStateSequence, activitySequence)) {
+      return;
+    }
 
-  setStatus(t('sessions.deleted'));
-  await loadSessions();
-  await loadLeaderboards();
+    closeSessionResultTabBySessionId(sessionId, { preferredTab: returnTab ?? 'recent', restoreFocus: true });
+
+    setStatus(t('sessions.deleted'));
+    await loadSessions();
+    await loadLeaderboards();
+  } finally {
+    endManualSessionActivity();
+  }
 }
 
 async function deleteEmptyHistoricalSessions() {
+  const workspaceStateSequence = sessionWorkspaceStateSequence;
+  const activitySequence = beginManualSessionActivity();
   if (!window.confirm(t('sessions.confirmDeleteEmpty'))) {
+    endManualSessionActivity();
     return;
   }
 
-  const result = await deleteJson('/api/admin/sessions/empty');
-  setStatus(t('sessions.emptyDeleted').replace('{count}', result.deletedCount ?? 0));
-  await loadSessions();
-  await loadLeaderboards();
+  try {
+    const result = await deleteJson('/api/admin/sessions/empty');
+    if (!isSessionOperationCurrent(workspaceStateSequence, activitySequence)) {
+      return;
+    }
+
+    setStatus(t('sessions.emptyDeleted').replace('{count}', result.deletedCount ?? 0));
+    await loadSessions();
+    await loadLeaderboards();
+  } finally {
+    endManualSessionActivity();
+  }
 }
 
 function renderSelectedSessionWorkspace() {
@@ -1267,38 +1371,60 @@ function renderLapTable(participant, isManageResultsMode) {
 }
 
 async function saveParticipantCorrection(participantId, displayNameOverride, excludedFromHistory) {
+  const workspaceStateSequence = sessionWorkspaceStateSequence;
+  const activitySequence = beginManualSessionActivity();
   const activeResultTab = getActiveSessionResultTab();
   if (!activeResultTab?.sessionId) {
+    endManualSessionActivity();
     return;
   }
 
-  const session = await putJson(`/api/admin/sessions/${encodeURIComponent(activeResultTab.sessionId)}/participants/${participantId}/correction`, {
-    displayNameOverride: nullIfEmpty(displayNameOverride),
-    excludedFromHistory,
-    reason: excludedFromHistory ? 'Staff excluded participant' : null,
-  });
-  upsertSessionResultTab(session, { activateTab: false });
-  renderSelectedSessionWorkspace();
-  await loadLeaderboards();
-  setStatus(t('sessions.participantCorrectionSaved'));
+  try {
+    const session = await putJson(`/api/admin/sessions/${encodeURIComponent(activeResultTab.sessionId)}/participants/${participantId}/correction`, {
+      displayNameOverride: nullIfEmpty(displayNameOverride),
+      excludedFromHistory,
+      reason: excludedFromHistory ? 'Staff excluded participant' : null,
+    });
+    if (!isSessionOperationCurrent(workspaceStateSequence, activitySequence)) {
+      return;
+    }
+
+    upsertSessionResultTab(session, { activateTab: false });
+    renderSelectedSessionWorkspace();
+    await loadLeaderboards();
+    setStatus(t('sessions.participantCorrectionSaved'));
+  } finally {
+    endManualSessionActivity();
+  }
 }
 
 async function saveLapCorrection(lapId, lapSecondsOverride, staffInvalidated, reason) {
+  const workspaceStateSequence = sessionWorkspaceStateSequence;
+  const activitySequence = beginManualSessionActivity();
   const activeResultTab = getActiveSessionResultTab();
   if (!activeResultTab?.sessionId) {
+    endManualSessionActivity();
     return;
   }
 
-  const parsedOverride = parseLapSecondsInput(lapSecondsOverride);
-  const session = await putJson(`/api/admin/sessions/${encodeURIComponent(activeResultTab.sessionId)}/laps/${lapId}/correction`, {
-    lapSecondsOverride: parsedOverride,
-    staffInvalidated,
-    reason: nullIfEmpty(reason) ?? (staffInvalidated ? 'Staff invalidated lap' : null),
-  });
-  upsertSessionResultTab(session, { activateTab: false });
-  renderSelectedSessionWorkspace();
-  await loadLeaderboards();
-  setStatus(t('sessions.lapCorrectionSaved'));
+  try {
+    const parsedOverride = parseLapSecondsInput(lapSecondsOverride);
+    const session = await putJson(`/api/admin/sessions/${encodeURIComponent(activeResultTab.sessionId)}/laps/${lapId}/correction`, {
+      lapSecondsOverride: parsedOverride,
+      staffInvalidated,
+      reason: nullIfEmpty(reason) ?? (staffInvalidated ? 'Staff invalidated lap' : null),
+    });
+    if (!isSessionOperationCurrent(workspaceStateSequence, activitySequence)) {
+      return;
+    }
+
+    upsertSessionResultTab(session, { activateTab: false });
+    renderSelectedSessionWorkspace();
+    await loadLeaderboards();
+    setStatus(t('sessions.lapCorrectionSaved'));
+  } finally {
+    endManualSessionActivity();
+  }
 }
 
 function parseLapSecondsInput(value) {
@@ -1416,7 +1542,7 @@ function getActiveSessionDetail() {
 }
 
 function upsertSessionResultTab(sessionDetail, { originTab = null, activateTab = true } = {}) {
-  if (!sessionDetail?.sessionId) {
+  if (!isDashboardAuthenticated || !sessionDetail?.sessionId) {
     return null;
   }
 
@@ -1749,13 +1875,21 @@ function openTelemetryWorkspace() {
   setStatus(t('sessions.telemetryPending'));
 }
 
-async function loadLiveSessionSnapshot() {
+async function loadLiveSessionSnapshot(signal) {
   try {
-    const snapshot = await fetchJson('/api/live-session/current');
+    const snapshot = await fetchJson('/api/live-session/current', { signal });
     return isLiveSessionSnapshotUsable(snapshot) ? snapshot : null;
-  } catch {
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw error;
+    }
+
     return null;
   }
+}
+
+function isAbortError(error) {
+  return error?.name === 'AbortError';
 }
 
 function isLiveSessionSnapshotUsable(snapshot) {
@@ -1788,8 +1922,53 @@ function isSessionMatchingLiveSnapshot(session, liveSession) {
     return false;
   }
 
-  return namesEqual(session.trackName ?? '', liveSession.session.trackName ?? '')
-    && String(session.sessionKind) === String(liveSession.session.kind);
+  const liveSource = String(liveSession.source ?? '').trim();
+  const persistedSource = String(session.source ?? '').trim();
+  const estimatedLiveStartMs = getLiveSessionEstimatedStartMs(liveSession);
+  const persistedFirstSeenMs = new Date(session.firstSeenUtc).getTime();
+  const startedBeforeCurrentLiveSession = Number.isFinite(estimatedLiveStartMs)
+    && Number.isFinite(persistedFirstSeenMs)
+    && persistedFirstSeenMs < estimatedLiveStartMs - sessionSummaryStartSkewMs;
+
+  // A later first persistence is valid; only reject summaries that clearly predate this live-session start.
+  return Boolean(liveSource)
+    && Boolean(persistedSource)
+    && namesEqual(session.trackName ?? '', liveSession.session.trackName ?? '')
+    && namesEqual(persistedSource, liveSource)
+    && String(session.sessionKind) === String(liveSession.session.kind)
+    && isSessionPhaseActive(session.sessionPhase)
+    && !startedBeforeCurrentLiveSession;
+}
+
+function getLiveSessionEstimatedStartMs(liveSession) {
+  const snapshotMs = new Date(liveSession?.timestampUtc).getTime();
+  const elapsedSeconds = Number(liveSession?.session?.currentSessionSeconds);
+  if (!Number.isFinite(snapshotMs) || !Number.isFinite(elapsedSeconds) || elapsedSeconds < 0) {
+    return Number.NaN;
+  }
+
+  return snapshotMs - elapsedSeconds * 1000;
+}
+
+function buildLiveSessionSignature(liveSession) {
+  if (!isLiveSessionSnapshotUsable(liveSession)) {
+    return 'unavailable';
+  }
+
+  return [
+    String(liveSession.source ?? ''),
+    String(liveSession.session.trackName ?? '').trim().toUpperCase(),
+    String(liveSession.session.kind ?? ''),
+    String(liveSession.session.phase ?? ''),
+    getLiveSessionSignatureStartBucket(liveSession),
+  ].join('|');
+}
+
+function getLiveSessionSignatureStartBucket(liveSession) {
+  const estimatedStartMs = getLiveSessionEstimatedStartMs(liveSession);
+  return Number.isFinite(estimatedStartMs)
+    ? String(Math.floor(estimatedStartMs / liveSessionSignatureStartBucketMs))
+    : '';
 }
 
 function buildSessionWorkspace(sessions, liveSession) {
@@ -1830,20 +2009,81 @@ function findActiveSessionSummary(sessions, liveSession, now) {
 }
 
 function findWorkspaceSessionById(sessionId) {
-  if (!latestSessionWorkspace || !sessionId) {
+  if (!sessionId) {
     return null;
   }
 
-  const allSessions = [
-    ...(latestSessionWorkspace.recentSessions ?? []),
-    ...(latestSessionWorkspace.olderSessions ?? []),
-  ];
-
-  if (latestSessionWorkspace.activeSessionSummary) {
-    allSessions.push(latestSessionWorkspace.activeSessionSummary);
-  }
+  const allSessions = getWorkspaceSessions();
 
   return allSessions.find(session => session.sessionId === sessionId) ?? null;
+}
+
+function getWorkspaceSessions(workspace = latestSessionWorkspace) {
+  if (!workspace) {
+    return [];
+  }
+
+  const sessions = [
+    ...(workspace.recentSessions ?? []),
+    ...(workspace.olderSessions ?? []),
+  ];
+  if (workspace.activeSessionSummary
+    && !sessions.some(session => session.sessionId === workspace.activeSessionSummary.sessionId)) {
+    sessions.push(workspace.activeSessionSummary);
+  }
+
+  return sessions;
+}
+
+function renderLiveSessionSnapshot(liveSession) {
+  const activeSessionSummary = findActiveSessionSummary(getWorkspaceSessions(), liveSession, Date.now());
+  renderLiveSessionSurface(liveSession, activeSessionSummary);
+}
+
+function updateSessionSummaryReconciliationState(workspace) {
+  const isAwaitingPersistedSummary = isLiveSessionActive(workspace.liveSession)
+    && !workspace.activeSessionSummary;
+  sessionSummaryReconciliationAttempts = isAwaitingPersistedSummary
+    ? Math.min(sessionSummaryReconciliationAttempts + 1, maxSessionSummaryReconciliationAttempts)
+    : 0;
+}
+
+function resetSessionWorkspaceState() {
+  sessionWorkspaceStateSequence += 1;
+  sessionLoadSequence += 1;
+  activeSessionWorkspaceTab = 'recent';
+  openSessionResultTabs = [];
+  activeSessionResultTabId = null;
+  latestSessionWorkspace = null;
+  latestSessionLiveSignature = null;
+  sessionSummaryReconciliationAttempts = 0;
+  renderLiveSessionSurface(null, null);
+  renderSessionCollection(recentSessionsSurfaceElement, [], t('sessions.noRecent'));
+  renderOlderSessionGroups([]);
+  sessionsStatusElement.textContent = t('sessions.description');
+  renderSelectedSessionWorkspace();
+}
+
+function isSessionWorkspaceStateCurrent(workspaceStateSequence) {
+  return isDashboardAuthenticated && workspaceStateSequence === sessionWorkspaceStateSequence;
+}
+
+function beginManualSessionActivity() {
+  manualSessionLoadCount += 1;
+  return ++sessionLoadSequence;
+}
+
+function endManualSessionActivity() {
+  manualSessionLoadCount = Math.max(0, manualSessionLoadCount - 1);
+}
+
+function isSessionLoadCurrent(workspaceStateSequence, loadSequence) {
+  return isSessionWorkspaceStateCurrent(workspaceStateSequence)
+    && loadSequence === sessionLoadSequence;
+}
+
+function isSessionOperationCurrent(workspaceStateSequence, operationSequence) {
+  return isSessionLoadCurrent(workspaceStateSequence, operationSequence);
 }
 
 function getSessionDeletionProtectionKey(session, workspace = latestSessionWorkspace) {
@@ -3141,6 +3381,142 @@ function stopStatusPolling() {
   statusPollingTimer = 0;
 }
 
+function shouldPollSessions() {
+  return isDashboardAuthenticated
+    && !dashboardPanel.hidden
+    && document.visibilityState === 'visible'
+    && document.getElementById('sessionsTab')?.classList.contains('active');
+}
+
+function startSessionPolling() {
+  if (isDashboardInitializing || isSessionPolling || !shouldPollSessions()) {
+    return;
+  }
+
+  isSessionPolling = true;
+  pollSessionsOnce();
+}
+
+function stopSessionPolling({ abortInFlight = true } = {}) {
+  isSessionPolling = false;
+  window.clearTimeout(sessionPollingTimer);
+  sessionPollingTimer = 0;
+  sessionPollingSequence += 1;
+
+  if (abortInFlight && sessionPollingAbortController) {
+    sessionPollingAbortController.abort();
+    sessionPollingAbortController = null;
+  }
+}
+
+function scheduleSessionPolling() {
+  if (!isSessionPolling || !shouldPollSessions()) {
+    stopSessionPolling();
+    return;
+  }
+
+  sessionPollingTimer = window.setTimeout(pollSessionsOnce, sessionPollingIntervalMs);
+}
+
+function shouldReconcileSessionSummaries(liveSession, signatureChanged) {
+  if (signatureChanged) {
+    sessionSummaryReconciliationAttempts = 0;
+    return true;
+  }
+
+  if (!isLiveSessionActive(liveSession)) {
+    return false;
+  }
+
+  const activeSessionSummary = findActiveSessionSummary(getWorkspaceSessions(), liveSession, Date.now());
+  return !activeSessionSummary
+    && sessionSummaryReconciliationAttempts < maxSessionSummaryReconciliationAttempts;
+}
+
+async function confirmSessionPollingAuthentication(signal) {
+  if (Date.now() < nextSessionAuthorizationCheckEpochMs) {
+    return true;
+  }
+
+  try {
+    const session = await fetchJson('/api/admin/session', { signal });
+    if (session.bootstrapRequired) {
+      showSetup();
+      return false;
+    }
+
+    if (!session.isAuthenticated) {
+      showLogin();
+      return false;
+    }
+
+    nextSessionAuthorizationCheckEpochMs = Date.now() + sessionAuthorizationCheckIntervalMs;
+    return true;
+  } catch (error) {
+    if (isAbortError(error) || error?.status === 401) {
+      return false;
+    }
+
+    throw error;
+  }
+}
+
+async function pollSessionsOnce() {
+  if (!isSessionPolling || !shouldPollSessions()) {
+    stopSessionPolling();
+    return;
+  }
+
+  const sequence = ++sessionPollingSequence;
+  const pollLoadSequence = sessionLoadSequence;
+  const abortController = new AbortController();
+  sessionPollingAbortController = abortController;
+
+  try {
+    if (manualSessionLoadCount > 0) {
+      return;
+    }
+
+    if (!await confirmSessionPollingAuthentication(abortController.signal)) {
+      return;
+    }
+
+    if (manualSessionLoadCount > 0 || pollLoadSequence !== sessionLoadSequence) {
+      return;
+    }
+
+    const liveSession = await loadLiveSessionSnapshot(abortController.signal);
+    if (abortController.signal.aborted
+      || sequence !== sessionPollingSequence
+      || manualSessionLoadCount > 0
+      || pollLoadSequence !== sessionLoadSequence) {
+      return;
+    }
+
+    const liveSignature = buildLiveSessionSignature(liveSession);
+    const signatureChanged = liveSignature !== latestSessionLiveSignature;
+    latestSessionLiveSignature = liveSignature;
+    renderLiveSessionSnapshot(liveSession);
+
+    // Persistence trails the live feed briefly; retry only a few times until the live card can open results.
+    if (shouldReconcileSessionSummaries(liveSession, signatureChanged)) {
+      await loadSessions({ refreshOpenTabs: false, signal: abortController.signal });
+    }
+  } catch (error) {
+    if (!isAbortError(error)) {
+      showError(error);
+    }
+  } finally {
+    if (sessionPollingAbortController === abortController) {
+      sessionPollingAbortController = null;
+    }
+
+    if (!abortController.signal.aborted && sequence === sessionPollingSequence) {
+      scheduleSessionPolling();
+    }
+  }
+}
+
 function shouldPollDriverTrackerTracks() {
   return !dashboardPanel.hidden
     && document.visibilityState === 'visible'
@@ -3196,15 +3572,18 @@ function pollDriverTrackerTracksOnce() {
 
 function handleDocumentVisibilityChange() {
   if (document.visibilityState !== 'visible') {
+    stopSessionPolling();
     stopDriverTrackerPolling();
     return;
   }
 
+  startSessionPolling();
   startDriverTrackerPolling();
 }
 
 function handleTabChange(tabId) {
   if (tabId === 'statusTab') {
+    stopSessionPolling();
     stopDriverTrackerPolling();
     if (statusDiagnosticDetailsElement.open) {
       stopStatusPolling();
@@ -3218,6 +3597,7 @@ function handleTabChange(tabId) {
   stopStatusPolling();
 
   if (tabId === 'trackerTab') {
+    stopSessionPolling();
     loadDriverTrackerTracks({
       includeCurrentTrackGeometry: true,
       forceSelectedGeometryRefresh: true,
@@ -3226,6 +3606,13 @@ function handleTabChange(tabId) {
     return;
   }
 
+  if (tabId === 'sessionsTab') {
+    stopDriverTrackerPolling();
+    startSessionPolling();
+    return;
+  }
+
+  stopSessionPolling();
   stopDriverTrackerPolling();
 }
 
@@ -3408,7 +3795,10 @@ function formatCandidate(candidate) {
 
 function showSetup() {
   stopStatusPolling();
+  stopSessionPolling();
   stopDriverTrackerPolling();
+  isDashboardAuthenticated = false;
+  resetSessionWorkspaceState();
   setupPanel.hidden = false;
   loginPanel.hidden = true;
   dashboardPanel.hidden = true;
@@ -3418,7 +3808,10 @@ function showSetup() {
 
 function showLogin() {
   stopStatusPolling();
+  stopSessionPolling();
   stopDriverTrackerPolling();
+  isDashboardAuthenticated = false;
+  resetSessionWorkspaceState();
   setupPanel.hidden = true;
   loginPanel.hidden = false;
   dashboardPanel.hidden = true;
@@ -3427,7 +3820,10 @@ function showLogin() {
 }
 
 function showDashboard(session) {
+  stopSessionPolling();
   stopDriverTrackerPolling();
+  isDashboardAuthenticated = true;
+  nextSessionAuthorizationCheckEpochMs = Date.now() + sessionAuthorizationCheckIntervalMs;
   setupPanel.hidden = true;
   loginPanel.hidden = true;
   dashboardPanel.hidden = false;

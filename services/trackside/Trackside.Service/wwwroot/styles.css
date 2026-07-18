@@ -708,6 +708,38 @@ tbody tr:last-child td {
   min-width: 920px;
 }
 
+.driverTrackerTracksTable {
+  min-width: 1180px;
+  table-layout: fixed;
+}
+
+.driverTrackerTracksTable th:nth-child(7),
+.driverTrackerTracksTable td:nth-child(7) {
+  width: 260px;
+  max-width: 260px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+  white-space: normal;
+}
+
+.driverTrackerTracksTable th:nth-child(8),
+.driverTrackerTracksTable td:nth-child(8) {
+  width: 220px;
+  vertical-align: top;
+}
+
+.driverTrackerTracksTable .tableActions {
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.driverTrackerTracksTable .tableButton {
+  flex: 0 1 auto;
+  white-space: nowrap;
+}
+
 .sessionsTable th:first-child,
 .sessionsTable td:first-child {
   width: 74px;
@@ -1348,7 +1380,8 @@ tbody tr:last-child td {
   display: flex;
   align-items: flex-end;
   flex-wrap: wrap;
-  gap: 8px 10px;
+  column-gap: 10px;
+  row-gap: 0;
   width: 100%;
   min-width: 0;
   border-bottom: 1px solid var(--session-app-border);
@@ -1361,6 +1394,10 @@ tbody tr:last-child td {
   align-items: flex-end;
   flex-wrap: wrap;
   gap: 2px;
+}
+
+.sessionWorkspaceOverviewTabs .sessionWorkspaceTab {
+  margin-bottom: -1px;
 }
 
 .sessionWorkspaceTab {
@@ -1380,7 +1417,6 @@ tbody tr:last-child td {
   border-bottom-color: transparent;
   background: linear-gradient(180deg, rgba(236, 241, 247, .98), rgba(229, 236, 244, .98));
   color: var(--session-app-text);
-  transform: translateY(1px);
 }
 
 .sessionWorkspaceOverviewTabs .sessionWorkspaceTab:focus-visible {
@@ -1398,7 +1434,7 @@ tbody tr:last-child td {
   min-width: 300px;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 0 0 2px 4px;
+  padding: 0 0 0 4px;
   scrollbar-width: thin;
 }
 
@@ -1414,6 +1450,7 @@ tbody tr:last-child td {
   border-radius: 8px 8px 0 0;
   background: linear-gradient(180deg, rgba(203, 215, 229, .98), rgba(190, 204, 220, .98));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .42);
+  margin-bottom: -1px;
   overflow: hidden;
 }
 
@@ -1430,7 +1467,6 @@ tbody tr:last-child td {
   border-color: #6f839a;
   border-bottom-color: transparent;
   background: linear-gradient(180deg, rgba(238, 243, 248, .99), rgba(230, 236, 243, .99));
-  transform: translateY(1px);
 }
 
 .sessionWorkspaceResultTabButton {
@@ -1689,12 +1725,17 @@ tbody tr:last-child td {
 }
 
 @media (max-width: 1366px) {
+  .sessionWorkspaceTabs {
+    column-gap: 10px;
+    row-gap: 0;
+  }
+
   .sessionWorkspaceResultRail {
     flex: 1 1 100%;
     width: 100%;
     max-width: 100%;
     min-width: 0;
-    padding: 6px 0 2px;
+    padding: 0;
   }
 
   .sessionWorkspaceResultTab {
@@ -1707,7 +1748,8 @@ tbody tr:last-child td {
     display: grid;
     grid-template-columns: 1fr;
     align-items: stretch;
-    gap: 8px;
+    column-gap: 10px;
+    row-gap: 0;
   }
 
   .sessionWorkspaceOverviewTabs {
@@ -1719,7 +1761,7 @@ tbody tr:last-child td {
   .sessionWorkspaceResultRail {
     flex: 1 1 auto;
     min-width: 0;
-    padding: 0 2px 2px 0;
+    padding: 0;
     margin-bottom: -1px;
   }
 
