@@ -35,7 +35,7 @@ public static class TracksideServiceCollectionExtensions
             .Validate(options => options.LiveSession.PublishIntervalSeconds is >= TracksideLiveSessionOptions.MinimumPublishIntervalSeconds and <= 60.0,
                 "Trackside:LiveSession:PublishIntervalSeconds must be between 0.25 and 60 seconds.")
             .Validate(options => options.DriverTracker.ClientRefreshHz is >= TracksideDriverTrackerOptions.MinimumClientRefreshHz and <= TracksideDriverTrackerOptions.MaximumClientRefreshHz,
-                "Trackside:DriverTracker:ClientRefreshHz must be between 1 and 60 Hz.")
+                "Trackside:DriverTracker:ClientRefreshHz must be between 1 and 120 Hz.")
             .Validate(options => options.DriverTracker.GeometryRecordingLaps is >= TracksideDriverTrackerOptions.MinimumGeometryRecordingLaps and <= TracksideDriverTrackerOptions.MaximumGeometryRecordingLaps,
                 "Trackside:DriverTracker:GeometryRecordingLaps must be between 1 and 20.")
             .Validate(options => !string.IsNullOrWhiteSpace(options.Deployment.InstallMode),
@@ -67,7 +67,7 @@ public static class TracksideServiceCollectionExtensions
         services.AddOptions<TracksideDriverTrackerOptions>()
             .Bind(configuration.GetSection($"{TracksideOptions.SectionName}:{nameof(TracksideOptions.DriverTracker)}"))
             .Validate(options => options.ClientRefreshHz is >= TracksideDriverTrackerOptions.MinimumClientRefreshHz and <= TracksideDriverTrackerOptions.MaximumClientRefreshHz,
-                "Trackside:DriverTracker:ClientRefreshHz must be between 1 and 60 Hz.")
+                "Trackside:DriverTracker:ClientRefreshHz must be between 1 and 120 Hz.")
             .Validate(options => options.GeometryRecordingLaps is >= TracksideDriverTrackerOptions.MinimumGeometryRecordingLaps and <= TracksideDriverTrackerOptions.MaximumGeometryRecordingLaps,
                 "Trackside:DriverTracker:GeometryRecordingLaps must be between 1 and 20.")
             .ValidateOnStart();
@@ -79,8 +79,11 @@ public static class TracksideServiceCollectionExtensions
         services.AddSingleton<AdminUserStore>();
         services.AddSingleton<ILiveDataPublisher, LiveDataPublisher>();
         services.AddSingleton<TrackGeometryRecorder>();
+        services.AddSingleton<TrackerPositionSignalRPublisher>();
         services.AddSingleton<ILiveDataConsumer<ScoringContextFrame>>(serviceProvider => serviceProvider.GetRequiredService<TrackGeometryRecorder>());
+        services.AddSingleton<ILiveDataConsumer<ScoringContextFrame>>(serviceProvider => serviceProvider.GetRequiredService<TrackerPositionSignalRPublisher>());
         services.AddSingleton<ILiveDataConsumer<TelemetryPositionFrame>>(serviceProvider => serviceProvider.GetRequiredService<TrackGeometryRecorder>());
+        services.AddSingleton<ILiveDataConsumer<TelemetryPositionFrame>>(serviceProvider => serviceProvider.GetRequiredService<TrackerPositionSignalRPublisher>());
         services.AddSingleton<ILiveDataConsumer<TrackGeometryChangedFrame>, TrackGeometrySignalRPublisher>();
         services.AddSingleton(ResolveSqliteStoreOptions);
         services.AddSingleton<ITracksideStore, SqliteTracksideStore>();
@@ -94,6 +97,7 @@ public static class TracksideServiceCollectionExtensions
         services.AddSingleton<ILiveSessionSource, ReloadingLiveSessionSource>();
         services.AddHostedService<TracksidePersistenceInitializer>();
         services.AddHostedService<TracksideRetentionCleanupWorker>();
+        services.AddHostedService(serviceProvider => serviceProvider.GetRequiredService<TrackerPositionSignalRPublisher>());
         services.AddHostedService<LiveSessionPublisher>();
 
         return services;

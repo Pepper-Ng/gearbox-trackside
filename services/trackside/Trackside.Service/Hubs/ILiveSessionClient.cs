@@ -21,4 +21,11 @@ public interface ILiveSessionClient
     /// <param name="geometry">Generated track geometry response.</param>
     /// <returns>A task that completes when SignalR has dispatched the message.</returns>
     Task TrackGeometryUpdated(TrackGeometryResponse geometry);
+
+    /// <summary>
+    /// Receives a compact high-rate Tracker position update.
+    /// </summary>
+    /// <param name="update">Latest projected driver positions and session time.</param>
+    /// <returns>A task that completes when SignalR has dispatched the message.</returns>
+    Task TrackerPositionsUpdated(TrackerPositionUpdate update);
 }

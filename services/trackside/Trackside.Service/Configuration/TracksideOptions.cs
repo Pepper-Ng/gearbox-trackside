@@ -138,17 +138,17 @@ public enum KioskDisplayMode
 public sealed class TracksideDriverTrackerOptions
 {
     /// <summary>
-    /// Minimum supported browser tracker refresh rate.
+    /// Minimum supported compact Tracker publish rate.
     /// </summary>
     public const double MinimumClientRefreshHz = 1.0;
 
     /// <summary>
-    /// Maximum supported browser tracker refresh rate.
+    /// Maximum supported compact Tracker publish rate.
     /// </summary>
-    public const double MaximumClientRefreshHz = 60.0;
+    public const double MaximumClientRefreshHz = 120.0;
 
     /// <summary>
-    /// Default browser tracker refresh rate.
+    /// Default compact Tracker publish rate.
     /// </summary>
     public const double DefaultClientRefreshHz = 30.0;
 
@@ -168,7 +168,7 @@ public sealed class TracksideDriverTrackerOptions
     public const int DefaultGeometryRecordingLaps = 1;
 
     /// <summary>
-    /// Browser-side tracker refresh rate in Hertz. This does not control source polling freshness.
+    /// Compact Tracker SignalR publish rate in Hertz. Source polling freshness remains separately configured.
     /// </summary>
     public double ClientRefreshHz { get; init; } = DefaultClientRefreshHz;
 

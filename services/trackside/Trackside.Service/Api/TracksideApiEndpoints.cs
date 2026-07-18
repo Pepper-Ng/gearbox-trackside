@@ -606,7 +606,7 @@ public static class TracksideApiEndpoints
     {
         if (!double.IsFinite(request.ClientRefreshHz) || request.ClientRefreshHz is < TracksideDriverTrackerOptions.MinimumClientRefreshHz or > TracksideDriverTrackerOptions.MaximumClientRefreshHz)
         {
-            return Results.BadRequest(new { error = "ClientRefreshHz must be between 1 and 60." });
+            return Results.BadRequest(new { error = "ClientRefreshHz must be between 1 and 120." });
         }
 
         if (request.GeometryRecordingLaps is < TracksideDriverTrackerOptions.MinimumGeometryRecordingLaps or > TracksideDriverTrackerOptions.MaximumGeometryRecordingLaps)

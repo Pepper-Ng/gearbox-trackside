@@ -25,4 +25,13 @@ public sealed class LiveSessionHub : Hub<ILiveSessionClient>
     /// </summary>
     /// <returns>The latest snapshot, or null if no source read has completed yet.</returns>
     public Task<LiveSessionSnapshot?> GetCurrentSession() => Task.FromResult(_state.Current);
+
+    /// <summary>
+    /// Enables or disables compact high-rate Tracker updates for this connection.
+    /// </summary>
+    /// <param name="enabled">True while the browser displays Tracker or Combined content.</param>
+    /// <returns>A task that completes after SignalR updates group membership.</returns>
+    public Task SetTrackerUpdatesEnabled(bool enabled) => enabled
+        ? Groups.AddToGroupAsync(Context.ConnectionId, TrackerPositionSignalRPublisher.TrackerClientGroup)
+        : Groups.RemoveFromGroupAsync(Context.ConnectionId, TrackerPositionSignalRPublisher.TrackerClientGroup);
 }

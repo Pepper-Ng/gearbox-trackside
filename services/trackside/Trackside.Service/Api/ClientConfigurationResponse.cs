@@ -38,7 +38,7 @@ public sealed record ClientConfigurationResponse
     public KioskDisplayMode DefaultDisplayMode { get; init; } = KioskDisplayMode.Monthly;
 
     /// <summary>
-    /// Browser-side driver tracker refresh/redraw rate in Hertz. Source freshness is determined separately.
+    /// Configured compact Tracker publish rate in Hertz, exposed for browser diagnostics.
     /// </summary>
     public double DriverTrackerClientRefreshHz { get; init; } = TracksideDriverTrackerOptions.DefaultClientRefreshHz;
 
