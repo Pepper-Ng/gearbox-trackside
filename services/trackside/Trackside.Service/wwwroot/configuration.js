@@ -99,13 +99,15 @@ const statusTrackerStateElement = document.querySelector('#statusTrackerState');
 const statusTrackerTrackElement = document.querySelector('#statusTrackerTrack');
 const statusTrackerCoverageElement = document.querySelector('#statusTrackerCoverage');
 const statusTrackerDetailElement = document.querySelector('#statusTrackerDetail');
-const advancedStatusSummaryElement = document.querySelector('#advancedStatusSummary');
+const statusDiagnosticDetailsElement = document.querySelector('.statusDiagnosticDetails');
 const fixturePathDiagnosticElement = document.querySelector('#fixturePathDiagnostic');
-const advancedStatusElement = document.querySelector('#advancedStatus');
+const rawStatusElement = document.querySelector('#rawStatus');
 const refreshStatusButton = document.querySelector('#refreshStatus');
 let isPopulatingSourceForm = false;
 let autoSaveTimer = 0;
-let autoSaveSequence = 0;
+let sourceEditVersion = 0;
+let lastSavedSourceEditVersion = 0;
+let sourceSavePromise = null;
 let hasLoadedSourceConfiguration = false;
 let sourceFixturePathValue = '';
 let sourceDriverAliases = {};
@@ -147,7 +149,6 @@ const translations = {
     'language.label': 'Language',
     'nav.kiosk': 'Kiosk',
     'nav.logout': 'Logout',
-    'tabs.source': 'Source',
     'tabs.sessionSetup': 'Session Setup',
     'tabs.sessions': 'Sessions',
     'tabs.tracker': 'Tracker',
@@ -188,6 +189,9 @@ const translations = {
     'login.submit': 'Login',
     'sourceConfig.title': 'Live Source',
     'sourceConfig.description': 'Choose the timing source, memory-map discovery behavior, and polling rates used by the live kiosk feed.',
+    'sourceConfig.selectionTitle': 'Source Selection',
+    'sourceConfig.behaviorTitle': 'Source Behavior',
+    'sourceConfig.pollingTitle': 'Polling Rates',
     'source.mode': 'Source mode',
     'source.fixture': 'Fixture',
     'source.sharedMemory': 'Shared memory',
@@ -203,10 +207,10 @@ const translations = {
     'source.telemetryEnabled': 'Enable telemetry loop',
     'source.telemetryPollHz': 'Telemetry poll Hz',
     'source.driverAliasesJson': 'Driver aliases JSON',
-    'source.refresh': 'Refresh',
     'discovery.title': 'Shared Memory Discovery',
     'discovery.noResult': 'No discovery result yet.',
     'discovery.noPid': 'no PID',
+    'discovery.refreshButton': 'Reload Source & Discovery',
     'kioskDisplay.title': 'Kiosk Display',
     'kioskDisplay.defaultMode': 'Default display mode',
     'kioskDisplay.saveButton': 'Save Display Mode',
@@ -375,7 +379,7 @@ const translations = {
     'discovery.ambiguousMaps': 'Ambiguous Maps',
     'aria.firstAdmin': 'First admin setup',
     'aria.login': 'Admin login',
-    'aria.sourceConfiguration': 'Source configuration',
+    'aria.advancedConfiguration': 'Advanced source configuration',
     'aria.sharedMemoryDiscovery': 'Shared-memory discovery',
     'changePassword.title': 'Change Password',
     'changePassword.username': 'Username',
@@ -406,18 +410,14 @@ const translations = {
     'statusPanel.snapshotWaiting': 'Waiting for current session snapshot',
     'statusPanel.noActiveSession': 'No active session',
     'statusPanel.trackerMix': '{complete} complete, {partial} partial, {recording} recording.',
-    'advancedStatus.title': 'Advanced',
-    'advancedStatus.description': 'Troubleshooting details for source, persistence, and tracker behavior.',
-    'advancedStatus.sourceMode': 'Source mode',
-    'advancedStatus.sourceState': 'Source state',
-    'advancedStatus.persistence': 'Persistence',
-    'advancedStatus.tracker': 'Tracker',
-    'advancedStatus.fixturePathLabel': 'Fixture path diagnostic (read-only)',
-    'advancedStatus.fixturePathNote': 'Only relevant to fixture/demo/fallback operation. This field is diagnostic and not part of routine source editing.',
-    'advancedStatus.fixturePathUnset': 'No fixture path configured.',
-    'advancedStatus.rawTitle': 'Raw Status JSON',
-    'advancedStatus.noStatus': 'No status loaded.',
-    'advancedStatus.refreshButton': 'Refresh Status',
+    'statusPanel.diagnosticsTitle': 'Diagnostic Status',
+    'statusPanel.diagnosticsDescription': 'Raw service status for administrator troubleshooting.',
+    'statusPanel.noStatus': 'No status loaded.',
+    'statusPanel.refreshButton': 'Refresh Status',
+    'advancedConfig.fixtureTitle': 'Fixture Fallback',
+    'advancedConfig.fixturePathLabel': 'Fixture path diagnostic (read-only)',
+    'advancedConfig.fixturePathNote': 'Only relevant to fixture/demo/fallback operation. This field is diagnostic and not part of routine source editing.',
+    'advancedConfig.fixturePathUnset': 'No fixture path configured.',
     'sessions.empty': 'No persisted sessions yet.',
     'sessions.noParticipants': 'No participants persisted for this session.',
     'participants.noCompletedLaps': 'No completed laps persisted for this participant.',
@@ -433,7 +433,6 @@ const translations = {
     'language.label': 'Taal',
     'nav.kiosk': 'Kiosk',
     'nav.logout': 'Uitloggen',
-    'tabs.source': 'Bron',
     'tabs.sessionSetup': 'Sessie voorbereiden',
     'tabs.sessions': 'Sessies',
     'tabs.tracker': 'Tracker',
@@ -474,6 +473,9 @@ const translations = {
     'login.submit': 'Inloggen',
     'sourceConfig.title': 'Live bron',
     'sourceConfig.description': 'Kies de timingbron, memory-map ontdekking en polling-snelheden voor de live kioskfeed.',
+    'sourceConfig.selectionTitle': 'Bronselectie',
+    'sourceConfig.behaviorTitle': 'Brongedrag',
+    'sourceConfig.pollingTitle': 'Pollingsnelheden',
     'source.mode': 'Bronmodus',
     'source.fixture': 'Fixture',
     'source.sharedMemory': 'Gedeeld geheugen',
@@ -489,10 +491,10 @@ const translations = {
     'source.telemetryEnabled': 'Telemetry loop inschakelen',
     'source.telemetryPollHz': 'Telemetry poll Hz',
     'source.driverAliasesJson': 'Driver-aliases JSON',
-    'source.refresh': 'Vernieuwen',
     'discovery.title': 'Shared-memory ontdekking',
     'discovery.noResult': 'Nog geen ontdekresultaat.',
     'discovery.noPid': 'geen PID',
+    'discovery.refreshButton': 'Bron en ontdekking herladen',
     'kioskDisplay.title': 'Kioskweergave',
     'kioskDisplay.defaultMode': 'Standaard weergavemodus',
     'kioskDisplay.saveButton': 'Weergavemodus opslaan',
@@ -661,7 +663,7 @@ const translations = {
     'discovery.ambiguousMaps': 'Ambigue kaarten',
     'aria.firstAdmin': 'Eerste beheerder instellen',
     'aria.login': 'Beheer login',
-    'aria.sourceConfiguration': 'Bronconfiguratie',
+    'aria.advancedConfiguration': 'Geavanceerde bronconfiguratie',
     'aria.sharedMemoryDiscovery': 'Shared-memory ontdekking',
     'changePassword.title': 'Wachtwoord wijzigen',
     'changePassword.username': 'Gebruikersnaam',
@@ -692,18 +694,14 @@ const translations = {
     'statusPanel.snapshotWaiting': 'Wachten op huidige sessiesnapshot',
     'statusPanel.noActiveSession': 'Geen actieve sessie',
     'statusPanel.trackerMix': '{complete} volledig, {partial} gedeeltelijk, {recording} opname.',
-    'advancedStatus.title': 'Geavanceerd',
-    'advancedStatus.description': 'Probleemoplossingsdetails voor bron-, opslag- en tracker-gedrag.',
-    'advancedStatus.sourceMode': 'Bronmodus',
-    'advancedStatus.sourceState': 'Bronstatus',
-    'advancedStatus.persistence': 'Persistente opslag',
-    'advancedStatus.tracker': 'Tracker',
-    'advancedStatus.fixturePathLabel': 'Fixture-pad diagnostiek (alleen lezen)',
-    'advancedStatus.fixturePathNote': 'Alleen relevant voor fixture/demo/fallback-gebruik. Dit veld is diagnostisch en geen regulier bewerkveld voor broninstellingen.',
-    'advancedStatus.fixturePathUnset': 'Geen fixture-pad geconfigureerd.',
-    'advancedStatus.rawTitle': 'Ruwe status-JSON',
-    'advancedStatus.noStatus': 'Nog geen status geladen.',
-    'advancedStatus.refreshButton': 'Status verversen',
+    'statusPanel.diagnosticsTitle': 'Diagnostische status',
+    'statusPanel.diagnosticsDescription': 'Ruwe servicestatus voor probleemoplossing door beheerders.',
+    'statusPanel.noStatus': 'Nog geen status geladen.',
+    'statusPanel.refreshButton': 'Status verversen',
+    'advancedConfig.fixtureTitle': 'Fixture-fallback',
+    'advancedConfig.fixturePathLabel': 'Fixture-pad diagnostiek (alleen lezen)',
+    'advancedConfig.fixturePathNote': 'Alleen relevant voor fixture/demo/fallback-gebruik. Dit veld is diagnostisch en geen regulier bewerkveld voor broninstellingen.',
+    'advancedConfig.fixturePathUnset': 'Geen fixture-pad geconfigureerd.',
     'sessions.empty': 'Nog geen opgeslagen sessies.',
     'sessions.noParticipants': 'Geen deelnemers opgeslagen voor deze sessie.',
     'participants.noCompletedLaps': 'Geen voltooide ronden opgeslagen voor deze deelnemer.',
@@ -752,7 +750,7 @@ function setLanguage(language) {
   });
 
   renderStatusDashboard();
-  renderAdvancedDiagnostics();
+  renderFixturePathDiagnostic();
   renderDriverTrackerTracks(latestDriverTrackerCatalog);
   renderDriverTrackerGeometryPanel();
 }
@@ -763,7 +761,7 @@ setupPanel.addEventListener('keydown', event => submitAuthPanelOnEnter(event, cr
 loginPanel.addEventListener('keydown', event => submitAuthPanelOnEnter(event, login));
 logoutButton.addEventListener('click', () => logout().catch(showError));
 languageSelectElement.addEventListener('change', () => saveLocalizationChoice(languageSelectElement.value).catch(showError));
-refreshElement.addEventListener('click', () => loadConfiguration().catch(showError));
+refreshElement.addEventListener('click', () => reloadConfiguration().catch(showError));
 refreshSessionsButton.addEventListener('click', () => loadSessions().catch(showError));
 deleteEmptySessionsButton.addEventListener('click', () => deleteEmptyHistoricalSessions().catch(showError));
 sessionOverviewLiveTabButtonElement.addEventListener('click', () => activateSessionWorkspaceTab('live'));
@@ -792,6 +790,19 @@ runRetentionCleanupButton.addEventListener('click', () => runRetentionCleanup().
 createAdminButton.addEventListener('click', () => createAdmin().catch(showError));
 changePasswordButton.addEventListener('click', () => changePassword().catch(showError));
 refreshStatusButton.addEventListener('click', () => refreshOperationalStatus().catch(showError));
+statusDiagnosticDetailsElement.addEventListener('toggle', () => {
+  if (!document.getElementById('statusTab')?.classList.contains('active')) {
+    return;
+  }
+
+  if (statusDiagnosticDetailsElement.open) {
+    // Pin the raw payload while it is being inspected or copied; manual refresh remains available.
+    stopStatusPolling();
+    refreshOperationalStatus().catch(showError);
+  } else {
+    startStatusPolling();
+  }
+});
 renderSessionWorkspaceNavigation();
 bindSourceAutoSave();
 bindDriverTrackerAutoSave();
@@ -826,7 +837,7 @@ async function loadSession() {
   }
 
   showDashboard(session);
-  await Promise.all([loadConfiguration(), loadSessionSetup(), loadSessions(), loadKioskSettings(), loadDriverTrackerSettings(), loadDriverTrackerTracks(), loadLeaderboards(), loadUsers(), loadAdvancedStatus()]);
+  await Promise.all([loadConfiguration(), loadSessionSetup(), loadSessions(), loadKioskSettings(), loadDriverTrackerSettings(), loadDriverTrackerTracks(), loadLeaderboards(), loadUsers(), loadAdminStatus()]);
 }
 
 async function createFirstAdmin() {
@@ -836,7 +847,7 @@ async function createFirstAdmin() {
     password: setupPasswordElement.value,
   });
   showDashboard(session);
-  await Promise.all([loadConfiguration(), loadSessionSetup(), loadSessions(), loadKioskSettings(), loadDriverTrackerSettings(), loadDriverTrackerTracks(), loadLeaderboards(), loadUsers(), loadAdvancedStatus()]);
+  await Promise.all([loadConfiguration(), loadSessionSetup(), loadSessions(), loadKioskSettings(), loadDriverTrackerSettings(), loadDriverTrackerTracks(), loadLeaderboards(), loadUsers(), loadAdminStatus()]);
 }
 
 async function login() {
@@ -845,7 +856,7 @@ async function login() {
     password: loginPasswordElement.value,
   });
   showDashboard(session);
-  await Promise.all([loadConfiguration(), loadSessionSetup(), loadSessions(), loadKioskSettings(), loadDriverTrackerSettings(), loadDriverTrackerTracks(), loadLeaderboards(), loadUsers(), loadAdvancedStatus()]);
+  await Promise.all([loadConfiguration(), loadSessionSetup(), loadSessions(), loadKioskSettings(), loadDriverTrackerSettings(), loadDriverTrackerTracks(), loadLeaderboards(), loadUsers(), loadAdminStatus()]);
 }
 
 async function logout() {
@@ -854,24 +865,61 @@ async function logout() {
 }
 
 async function loadConfiguration() {
+  const editVersion = sourceEditVersion;
   const configuration = await fetchJson('/api/configuration/source');
+  if (editVersion !== sourceEditVersion) {
+    return;
+  }
+
   populateForm(configuration);
   renderDiscovery(configuration.discovery);
   setStatus(`Loaded admin configuration from ${configuration.writableConfigurationPath}`);
 }
 
 async function saveConfiguration() {
-  const sequence = ++autoSaveSequence;
-  const payload = readSourceConfigurationForm();
-  setStatus(t('status.sourceSaving'));
-  const saved = await putJson('/api/configuration/source', payload);
-  if (sequence !== autoSaveSequence) {
-    return;
+  const previousSave = sourceSavePromise;
+  const currentSave = (async () => {
+    if (previousSave) {
+      await previousSave.catch(() => {});
+    }
+
+    const editVersion = sourceEditVersion;
+    const payload = readSourceConfigurationForm();
+    setStatus(t('status.sourceSaving'));
+    const saved = await putJson('/api/configuration/source', payload);
+    lastSavedSourceEditVersion = Math.max(lastSavedSourceEditVersion, editVersion);
+    if (editVersion !== sourceEditVersion) {
+      return;
+    }
+
+    populateForm(saved);
+    renderDiscovery(saved.discovery);
+    setStatus(`Saved admin configuration to ${saved.writableConfigurationPath}`);
+  })();
+
+  sourceSavePromise = currentSave;
+  try {
+    await currentSave;
+  } finally {
+    if (sourceSavePromise === currentSave) {
+      sourceSavePromise = null;
+    }
+  }
+}
+
+async function reloadConfiguration() {
+  window.clearTimeout(autoSaveTimer);
+  autoSaveTimer = 0;
+  if (sourceSavePromise) {
+    await sourceSavePromise;
   }
 
-  populateForm(saved);
-  renderDiscovery(saved.discovery);
-  setStatus(`Saved admin configuration to ${saved.writableConfigurationPath}`);
+  // Edits can arrive while a save is in flight; catch up every observed version before reloading.
+  while (lastSavedSourceEditVersion < sourceEditVersion) {
+    await saveConfiguration();
+  }
+
+  await loadConfiguration();
 }
 
 async function loadUsers() {
@@ -896,7 +944,7 @@ async function loadSessions() {
   latestSessionWorkspace = workspace;
   renderLiveSessionSurface(workspace.liveSession, workspace.activeSessionSummary);
   renderSessionCollection(recentSessionsSurfaceElement, workspace.recentSessions, t('sessions.noRecent'), {
-    sourceTab: 'recent',
+    originTab: 'recent',
     includeDeleteAction: false,
   });
   renderOlderSessionGroups(workspace.olderGroups);
@@ -929,12 +977,12 @@ async function loadSessions() {
   });
 }
 
-async function loadSessionDetail(sessionId, { activateTab = true, updateStatus = true, sourceTab = null } = {}) {
+async function loadSessionDetail(sessionId, { activateTab = true, updateStatus = true, originTab = null } = {}) {
   const session = await fetchJson(`/api/admin/sessions/${encodeURIComponent(sessionId)}`);
   selectedSessionId = session.sessionId;
   selectedSessionDetail = session;
-  if (sourceTab) {
-    selectedSessionOriginTab = normalizeSessionWorkspaceOverviewTab(sourceTab);
+  if (originTab) {
+    selectedSessionOriginTab = normalizeSessionWorkspaceOverviewTab(originTab);
   }
   if (!(session.participants ?? []).some(participant => participant.participantId === selectedParticipantId)) {
     selectedParticipantId = null;
@@ -1479,7 +1527,7 @@ function renderOlderSessionGroups(groups) {
     const cards = document.createElement('div');
     cards.className = 'sessionCardGrid';
     group.sessions.forEach(session => cards.appendChild(createSessionCard(session, {
-      sourceTab: 'older',
+      originTab: 'older',
       includeDeleteAction: true,
     })));
     details.appendChild(cards);
@@ -1493,7 +1541,7 @@ function createLiveSessionCard(liveSession, activeSessionSummary) {
   const actions = activeSessionSummary?.sessionId
     ? [{
       label: t('sessions.openResults'),
-      onClick: () => loadSessionDetail(activeSessionSummary.sessionId, { sourceTab: 'live' }).catch(showError),
+      onClick: () => loadSessionDetail(activeSessionSummary.sessionId, { originTab: 'live' }).catch(showError),
     }]
     : [];
 
@@ -1510,10 +1558,10 @@ function createLiveSessionCard(liveSession, activeSessionSummary) {
   });
 }
 
-function createSessionCard(session, { sourceTab = 'recent', includeDeleteAction = false } = {}) {
+function createSessionCard(session, { originTab = 'recent', includeDeleteAction = false } = {}) {
   const actions = [{
     label: t('sessions.openResults'),
-    onClick: () => loadSessionDetail(session.sessionId, { sourceTab }).catch(showError),
+    onClick: () => loadSessionDetail(session.sessionId, { originTab }).catch(showError),
   }];
 
   if (includeDeleteAction && canDeleteSessionFromWorkspace(session, latestSessionWorkspace)) {
@@ -1939,7 +1987,6 @@ async function loadDriverTrackerTracks() {
   renderDriverTrackerTracks(latestDriverTrackerCatalog);
   renderDriverTrackerGeometryPanel();
   renderStatusDashboard();
-  renderAdvancedDiagnostics();
 }
 
 async function saveLocalizationChoice(language) {
@@ -2419,7 +2466,7 @@ async function changePassword() {
   setStatus(t('status.passwordChanged'));
 }
 
-async function loadAdvancedStatus() {
+async function loadAdminStatus() {
   await refreshOperationalStatus();
 }
 
@@ -2440,7 +2487,7 @@ async function refreshOperationalStatus() {
       // Keep the last known catalog when this optional status-side fetch fails.
     }
 
-    advancedStatusElement.textContent = JSON.stringify(latestAdminStatus, null, 2);
+    rawStatusElement.textContent = JSON.stringify(latestAdminStatus, null, 2);
     syncSelectedDriverTrackerTrack();
     const trackerTabActive = document.getElementById('trackerTab')?.classList.contains('active');
     if (trackerTabActive) {
@@ -2448,7 +2495,6 @@ async function refreshOperationalStatus() {
       renderDriverTrackerGeometryPanel();
     }
     renderStatusDashboard();
-    renderAdvancedDiagnostics();
   } finally {
     isStatusRefreshBusy = false;
   }
@@ -2478,16 +2524,16 @@ function stopStatusPolling() {
 
 function handleTabChange(tabId) {
   if (tabId === 'statusTab') {
-    startStatusPolling();
+    if (statusDiagnosticDetailsElement.open) {
+      stopStatusPolling();
+      refreshOperationalStatus().catch(showError);
+    } else {
+      startStatusPolling();
+    }
     return;
   }
 
   stopStatusPolling();
-
-  if (tabId === 'advancedTab') {
-    refreshOperationalStatus().catch(showError);
-    return;
-  }
 
   if (tabId === 'trackerTab') {
     loadDriverTrackerTracks().catch(showError);
@@ -2577,25 +2623,10 @@ function buildTrackerOperationalSummary() {
   };
 }
 
-function renderAdvancedDiagnostics() {
-  const health = latestAdminStatus?.health;
-  const persistence = latestAdminStatus?.persistence;
-  const trackerSummary = buildTrackerOperationalSummary();
-  const sourceState = latestLiveStatusSnapshot?.status ?? health?.currentSourceStatus ?? t('statusPanel.notAvailable');
-  const persistenceText = persistence
-    ? `${persistence.isEnabled ? t('statusPanel.persistenceEnabled') : t('statusPanel.persistenceDisabled')} (${persistence.provider ?? t('statusPanel.notAvailable')})`
-    : t('statusPanel.notAvailable');
-
-  renderStatusFacts(advancedStatusSummaryElement, [
-    { label: t('advancedStatus.sourceMode'), value: health?.sourceMode ?? t('statusPanel.notAvailable') },
-    { label: t('advancedStatus.sourceState'), value: sourceState },
-    { label: t('advancedStatus.persistence'), value: persistenceText },
-    { label: t('advancedStatus.tracker'), value: `${driverTrackerStateLabel(trackerSummary.state)} - ${trackerSummary.detail}` },
-  ]);
-
-  fixturePathDiagnosticElement.value = sourceFixturePathValue || t('advancedStatus.fixturePathUnset');
+function renderFixturePathDiagnostic() {
+  fixturePathDiagnosticElement.value = sourceFixturePathValue || t('advancedConfig.fixturePathUnset');
   if (!latestAdminStatus) {
-    advancedStatusElement.textContent = t('advancedStatus.noStatus');
+    rawStatusElement.textContent = t('statusPanel.noStatus');
   }
 }
 
@@ -2627,7 +2658,7 @@ function populateForm(configuration) {
   scoringPollHzElement.value = sharedMemory.scoringPollHz ?? 10;
   telemetryEnabledElement.checked = sharedMemory.telemetry?.enabled ?? false;
   telemetryPollHzElement.value = sharedMemory.telemetry?.pollHz ?? 100;
-  fixturePathDiagnosticElement.value = sourceFixturePathValue || t('advancedStatus.fixturePathUnset');
+  renderFixturePathDiagnostic();
   hasLoadedSourceConfiguration = true;
   isPopulatingSourceForm = false;
 }
@@ -2711,12 +2742,14 @@ function showDashboard(session) {
   logoutButton.hidden = false;
   setStatus(t('status.signedIn', { name: session.displayName ?? session.username }));
   passwordUsernameElement.value = session.username ?? '';
-  showTab(localStorage.getItem(tabStorageKey) || 'sourceTab', false);
+  showTab(localStorage.getItem(tabStorageKey) || 'sessionSetupTab', false);
 }
 
 function showTab(tabId, persist = true) {
-  const target = document.getElementById(tabId) ? tabId : 'sourceTab';
-  if (persist) {
+  // Existing browsers may still remember the removed Source tab; preserve intent by opening Advanced.
+  const requestedTab = tabId === 'sourceTab' ? 'advancedTab' : tabId;
+  const target = document.getElementById(requestedTab) ? requestedTab : 'sessionSetupTab';
+  if (persist || tabId === 'sourceTab') {
     localStorage.setItem(tabStorageKey, target);
   }
   document.querySelectorAll('[data-tab]').forEach(button => {
@@ -2892,8 +2925,10 @@ function scheduleSourceAutoSave(delayMilliseconds) {
   }
 
   window.clearTimeout(autoSaveTimer);
+  sourceEditVersion += 1;
   setStatus(delayMilliseconds === 0 ? t('status.sourceSaving') : t('status.sourceChanged'));
   autoSaveTimer = window.setTimeout(() => {
+    autoSaveTimer = 0;
     saveConfiguration().catch(showError);
   }, delayMilliseconds);
 }
