@@ -637,6 +637,39 @@ tbody tr:last-child td {
   accent-color: var(--gt-blue);
 }
 
+.sourceControlGroup {
+  min-width: 0;
+  margin: 0;
+  border: 1px solid rgba(255, 255, 255, .09);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .025);
+  padding: 14px;
+}
+
+.sourceControlGroup legend {
+  color: var(--gt-soft);
+  font-family: "Rajdhani", "Bahnschrift", "Segoe UI", sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  padding: 0 8px;
+  text-transform: uppercase;
+}
+
+.sourceControlGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px 16px;
+}
+
+.sourceControlGridPair {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.sourceControlGrid .checkboxLabel {
+  align-self: stretch;
+}
+
 .buttonRow {
   flex-wrap: wrap;
   margin-top: 4px;
@@ -725,6 +758,42 @@ tbody tr:last-child td {
   margin: 0;
   padding: 14px;
   white-space: pre-wrap;
+}
+
+.statusDiagnosticDetails {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .025);
+}
+
+.statusDiagnosticDetails summary {
+  cursor: pointer;
+  color: var(--gt-soft);
+  font-family: "Rajdhani", "Bahnschrift", "Segoe UI", sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  padding: 14px 16px;
+  text-transform: uppercase;
+}
+
+.statusDiagnosticDetails[open] summary {
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+}
+
+.statusDiagnosticDetails > p {
+  margin: 14px 16px 0;
+  color: var(--gt-muted);
+  line-height: 1.45;
+}
+
+.statusDiagnosticDetails .statusBlock {
+  margin: 14px 16px 0;
+}
+
+.statusDiagnosticDetails .buttonRow {
+  margin: 12px 16px 16px;
 }
 
 .statusUpdatedAt {
@@ -1626,6 +1695,10 @@ tbody tr:last-child td {
   .buttonRow {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .sourceControlGridPair {
+    grid-template-columns: 1fr;
   }
 
   .statusFactsGrid {

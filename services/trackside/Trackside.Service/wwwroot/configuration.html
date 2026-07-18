@@ -67,88 +67,16 @@
 
     <section id="dashboardPanel" class="dashboardShell" hidden>
       <nav class="adminTabs" aria-label="Admin sections">
-      <button class="active" data-tab="sourceTab" type="button" data-i18n="tabs.source">Source</button>
-        <button data-tab="sessionSetupTab" type="button" data-i18n="tabs.sessionSetup">Session Setup</button>
-      <button data-tab="sessionsTab" type="button" data-i18n="tabs.sessions">Sessions</button>
-      <button data-tab="trackerTab" type="button" data-i18n="tabs.tracker">Tracker</button>
+        <button class="active" data-tab="sessionSetupTab" type="button" data-i18n="tabs.sessionSetup">Session Setup</button>
+        <button data-tab="sessionsTab" type="button" data-i18n="tabs.sessions">Sessions</button>
+        <button data-tab="trackerTab" type="button" data-i18n="tabs.tracker">Tracker</button>
         <button data-tab="leaderboardsTab" type="button" data-i18n="tabs.leaderboards">Leaderboards</button>
         <button data-tab="usersTab" type="button" data-i18n="tabs.admins">Admins</button>
         <button data-tab="statusTab" type="button" data-i18n="tabs.status">Status</button>
         <button data-tab="advancedTab" type="button" data-i18n="tabs.advanced">Advanced</button>
       </nav>
 
-          <section id="sourceTab" class="adminTab active" data-i18n-aria="aria.sourceConfiguration" aria-label="Source configuration">
-        <section class="configurationPanel">
-          <h2 data-i18n="sourceConfig.title">Live Source</h2>
-          <p class="wideField" data-i18n="sourceConfig.description">Choose the timing source, memory-map discovery behavior, and polling rates used by the live kiosk feed.</p>
-          <label>
-            <span data-i18n="source.mode">Source mode</span>
-            <select id="sourceMode">
-              <option value="Fixture" data-i18n="source.fixture">Fixture</option>
-              <option value="SharedMemory" data-i18n="source.sharedMemory">SharedMemory</option>
-            </select>
-          </label>
-          <label>
-            <span data-i18n="source.scoringMapName">Exact scoring map</span>
-            <input id="scoringMapName" type="text" spellcheck="false" placeholder="$rFactor2SMMP_Scoring$12345" data-i18n-placeholder="source.scoringMapNamePlaceholder">
-          </label>
-          <label>
-            <span data-i18n="source.processId">Dedicated server PID</span>
-            <input id="processId" type="number" min="0" step="1">
-          </label>
-          <label class="checkboxLabel">
-            <input id="autoDiscover" type="checkbox">
-            <span data-i18n="source.autoDiscover">Auto-discover memory maps</span>
-          </label>
-          <label>
-            <span data-i18n="source.processNames">Dedicated server process names</span>
-            <input id="processNames" type="text" spellcheck="false" placeholder="" data-i18n-placeholder="source.processNamesPlaceholder">
-          </label>
-          <label>
-            <span data-i18n="source.multipleMapPolicy">Multiple map policy</span>
-            <select id="multipleMapPolicy">
-              <option value="RequireExplicitSelection" data-i18n="source.requireExplicitSelection">RequireExplicitSelection</option>
-              <option value="UseFirstDiscovered" data-i18n="source.useFirstDiscovered">UseFirstDiscovered</option>
-            </select>
-          </label>
-          <label>
-            <span data-i18n="source.scoringPollHz">Scoring poll Hz</span>
-            <input id="scoringPollHz" type="number" min="0.25" max="60" step="0.25">
-          </label>
-          <label class="checkboxLabel">
-            <input id="telemetryEnabled" type="checkbox">
-            <span data-i18n="source.telemetryEnabled">Enable telemetry loop scaffold</span>
-          </label>
-          <label>
-            <span data-i18n="source.telemetryPollHz">Telemetry poll Hz</span>
-            <input id="telemetryPollHz" type="number" min="1" max="200" step="1">
-          </label>
-          <div class="buttonRow">
-            <button id="refreshDiscovery" type="button" data-i18n="source.refresh">Refresh</button>
-          </div>
-        </section>
-
-        <section class="configurationPanel" data-i18n-aria="aria.sharedMemoryDiscovery" aria-label="Shared-memory discovery">
-          <h2 data-i18n="discovery.title">Shared Memory Discovery</h2>
-          <p id="discoveryStatus" data-i18n="discovery.noResult">No discovery result yet.</p>
-          <div class="candidateLists">
-            <div>
-              <h3 data-i18n="discovery.candidateOrder">Candidate Order</h3>
-              <ul id="candidateMaps"></ul>
-            </div>
-            <div>
-              <h3 data-i18n="discovery.discoveredMaps">Discovered Maps</h3>
-              <ul id="discoveredMaps"></ul>
-            </div>
-            <div>
-              <h3 data-i18n="discovery.ambiguousMaps">Ambiguous Maps</h3>
-              <ul id="ambiguousMaps"></ul>
-            </div>
-          </div>
-        </section>
-      </section>
-
-      <section id="sessionSetupTab" class="adminTab" hidden aria-label="Session setup">
+      <section id="sessionSetupTab" class="adminTab active" aria-label="Session setup">
         <section class="configurationPanel">
           <h2 data-i18n="setup.title">Prepare Session</h2>
           <p class="wideField" data-i18n="setup.description">Prepared rig assignments stay active for future sessions until changed or cleared.</p>
@@ -471,26 +399,109 @@
               </dl>
             </article>
           </div>
+          <details class="wideField statusDiagnosticDetails">
+            <summary data-i18n="statusPanel.diagnosticsTitle">Diagnostic Status</summary>
+            <p data-i18n="statusPanel.diagnosticsDescription">Raw service status for administrator troubleshooting.</p>
+            <pre id="rawStatus" class="statusBlock">No status loaded.</pre>
+            <div class="buttonRow">
+              <button id="refreshStatus" type="button" data-i18n="statusPanel.refreshButton">Refresh Status</button>
+            </div>
+          </details>
         </section>
       </section>
 
-      <section id="advancedTab" class="adminTab" hidden aria-label="Advanced diagnostics">
+      <section id="advancedTab" class="adminTab" hidden data-i18n-aria="aria.advancedConfiguration" aria-label="Advanced configuration">
         <section class="configurationPanel">
-          <h2 data-i18n="advancedStatus.title">Advanced</h2>
-          <p class="wideField" data-i18n="advancedStatus.description">Troubleshooting details for source, persistence, and tracker behavior.</p>
-          <div id="advancedStatusSummary" class="wideField statusFactsGrid"></div>
+          <h2 data-i18n="sourceConfig.title">Live Source</h2>
+          <p class="wideField" data-i18n="sourceConfig.description">Choose the timing source, memory-map discovery behavior, and polling rates used by the live kiosk feed.</p>
+          <fieldset class="wideField sourceControlGroup">
+            <legend data-i18n="sourceConfig.selectionTitle">Source Selection</legend>
+            <div class="sourceControlGrid">
+              <label>
+                <span data-i18n="source.mode">Source mode</span>
+                <select id="sourceMode">
+                  <option value="Fixture" data-i18n="source.fixture">Fixture</option>
+                  <option value="SharedMemory" data-i18n="source.sharedMemory">SharedMemory</option>
+                </select>
+              </label>
+              <label>
+                <span data-i18n="source.scoringMapName">Exact scoring map</span>
+                <input id="scoringMapName" type="text" spellcheck="false" placeholder="$rFactor2SMMP_Scoring$12345" data-i18n-placeholder="source.scoringMapNamePlaceholder">
+              </label>
+              <label>
+                <span data-i18n="source.processId">Dedicated server PID</span>
+                <input id="processId" type="number" min="0" step="1">
+              </label>
+              <label>
+                <span data-i18n="source.processNames">Dedicated server process names</span>
+                <input id="processNames" type="text" spellcheck="false" placeholder="" data-i18n-placeholder="source.processNamesPlaceholder">
+              </label>
+              <label>
+                <span data-i18n="source.multipleMapPolicy">Multiple map policy</span>
+                <select id="multipleMapPolicy">
+                  <option value="RequireExplicitSelection" data-i18n="source.requireExplicitSelection">RequireExplicitSelection</option>
+                  <option value="UseFirstDiscovered" data-i18n="source.useFirstDiscovered">UseFirstDiscovered</option>
+                </select>
+              </label>
+            </div>
+          </fieldset>
+          <fieldset class="wideField sourceControlGroup">
+            <legend data-i18n="sourceConfig.behaviorTitle">Source Behavior</legend>
+            <div class="sourceControlGrid sourceControlGridPair">
+              <label class="checkboxLabel">
+                <input id="autoDiscover" type="checkbox">
+                <span data-i18n="source.autoDiscover">Auto-discover memory maps</span>
+              </label>
+              <label class="checkboxLabel">
+                <input id="telemetryEnabled" type="checkbox">
+                <span data-i18n="source.telemetryEnabled">Enable telemetry loop scaffold</span>
+              </label>
+            </div>
+          </fieldset>
+          <fieldset class="wideField sourceControlGroup">
+            <legend data-i18n="sourceConfig.pollingTitle">Polling Rates</legend>
+            <div class="sourceControlGrid sourceControlGridPair">
+              <label>
+                <span data-i18n="source.scoringPollHz">Scoring poll Hz</span>
+                <input id="scoringPollHz" type="number" min="0.25" max="60" step="0.25">
+              </label>
+              <label>
+                <span data-i18n="source.telemetryPollHz">Telemetry poll Hz</span>
+                <input id="telemetryPollHz" type="number" min="1" max="200" step="1">
+              </label>
+            </div>
+          </fieldset>
+        </section>
+
+        <section class="configurationPanel" data-i18n-aria="aria.sharedMemoryDiscovery" aria-label="Shared-memory discovery">
+          <h2 data-i18n="discovery.title">Shared Memory Discovery</h2>
+          <p id="discoveryStatus" data-i18n="discovery.noResult">No discovery result yet.</p>
+          <div class="candidateLists">
+            <div>
+              <h3 data-i18n="discovery.candidateOrder">Candidate Order</h3>
+              <ul id="candidateMaps"></ul>
+            </div>
+            <div>
+              <h3 data-i18n="discovery.discoveredMaps">Discovered Maps</h3>
+              <ul id="discoveredMaps"></ul>
+            </div>
+            <div>
+              <h3 data-i18n="discovery.ambiguousMaps">Ambiguous Maps</h3>
+              <ul id="ambiguousMaps"></ul>
+            </div>
+          </div>
+          <div class="buttonRow">
+            <button id="refreshDiscovery" type="button" data-i18n="discovery.refreshButton">Reload Source &amp; Discovery</button>
+          </div>
+        </section>
+
+        <section class="configurationPanel">
+          <h2 data-i18n="advancedConfig.fixtureTitle">Fixture Fallback</h2>
           <label class="wideField">
-            <span data-i18n="advancedStatus.fixturePathLabel">Fixture path diagnostic (read-only)</span>
+            <span data-i18n="advancedConfig.fixturePathLabel">Fixture path diagnostic (read-only)</span>
             <input id="fixturePathDiagnostic" type="text" readonly>
           </label>
-          <p class="wideField advancedDiagnosticNote" data-i18n="advancedStatus.fixturePathNote">Only relevant for fixture/demo/fallback operation. This field is diagnostic and not part of routine source editing.</p>
-        </section>
-        <section class="configurationPanel">
-          <h2 data-i18n="advancedStatus.rawTitle">Raw Status JSON</h2>
-          <pre id="advancedStatus" class="statusBlock">No status loaded.</pre>
-          <div class="buttonRow">
-            <button id="refreshStatus" type="button" data-i18n="advancedStatus.refreshButton">Refresh Status</button>
-          </div>
+          <p class="wideField advancedDiagnosticNote" data-i18n="advancedConfig.fixturePathNote">Only relevant for fixture/demo/fallback operation. This field is diagnostic and not part of routine source editing.</p>
         </section>
       </section>
     </section>
