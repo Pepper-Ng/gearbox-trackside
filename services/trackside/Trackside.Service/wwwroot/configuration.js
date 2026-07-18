@@ -132,6 +132,12 @@ let latestSelectedTrackGeometry = null;
 let selectedTrackGeometrySequence = 0;
 let selectedTrackGeometryAbortController = null;
 let latestDriverTrackerCatalog = [];
+let driverTrackerTracksLoadSequence = 0;
+let driverTrackerTracksLoadPromise = null;
+let driverTrackerTracksAbortController = null;
+let selectedDriverTrackerCatalogToken = null;
+let driverTrackerPollingTimer = 0;
+let isDriverTrackerPolling = false;
 let latestLiveStatusSnapshot = null;
 let latestAdminStatus = null;
 let statusPollingTimer = 0;
@@ -173,6 +179,7 @@ const translations = {
     'status.driverTrackerSaving': 'Saving driver tracker settings...',
     'status.driverTrackerSaved': 'Driver tracker settings saved.',
     'status.driverTrackerRecordingStarted': 'Geometry recording started.',
+    'status.driverTrackerOutlineDeleted': 'Deleted outline geometry for {track}.',
     'status.monthlyTrackStarted': 'Monthly track started with fresh stats.',
     'status.monthlyTrackReset': 'Monthly track stats reset.',
     'firstAdmin.title': 'First Admin',
@@ -234,6 +241,7 @@ const translations = {
     'driverTracker.detail': 'Detail',
     'driverTracker.actions': 'Actions',
     'driverTracker.phase4Note': 'Track-outline generation was not venue-validated in Phase 4. Treat this as operator tooling and confirm on-site behavior before race-night reliance.',
+    'driverTracker.actionHelp': 'Improve Outline keeps stored geometry and averages more completed laps. Start Over clears the stored outline and records fresh laps.',
     'driverTracker.currentGeometryTitle': 'Selected Track Geometry',
     'driverTracker.selectionHint': 'Select a track row to inspect its geometry state and stored outline.',
     'driverTracker.selectionLoaded': 'Selected track {track}. Its stored outline is shown when complete geometry is available.',
@@ -248,10 +256,19 @@ const translations = {
     'driverTracker.activeTrack': 'Track',
     'driverTracker.lapProgress': 'Lap progress',
     'driverTracker.noSelection': 'Select a track row to inspect geometry state.',
-    'driverTracker.outlineReady': 'Showing the stored outline for the selected track.',
+    'driverTracker.outlineLoading': 'Loading selected track outline...',
     'driverTracker.outlineUnavailable': 'No complete stored outline is available for the selected track yet.',
-    'driverTracker.improve': 'Improve',
-    'driverTracker.restart': 'Restart',
+    'driverTracker.improve': 'Improve Outline',
+    'driverTracker.improveTitle': 'Keep the stored outline and add completed laps to improve averaging.',
+    'driverTracker.improveAria': 'Improve outline for {track}',
+    'driverTracker.restart': 'Start Over',
+    'driverTracker.restartTitle': 'Clear the stored outline and record a fresh outline from new laps.',
+    'driverTracker.restartAria': 'Start over outline recording for {track}',
+    'driverTracker.delete': 'Delete Outline',
+    'driverTracker.deleteTitle': 'Delete stored and in-progress outline geometry for this track only.',
+    'driverTracker.deleteAria': 'Delete outline for {track}',
+    'driverTracker.confirmStartOver': 'Start over outline recording for {track}? This clears stored and in-progress outline geometry for this track only. Sessions and laps are not deleted.',
+    'driverTracker.confirmDeleteOutline': 'Delete outline for {track}? This removes stored and in-progress outline geometry for this track only. Sessions and laps are not deleted.',
     'monthlyTrack.title': 'Monthly Track',
     'monthlyTrack.noActive': 'No active monthly track.',
     'monthlyTrack.trackName': 'Track name',
@@ -457,6 +474,7 @@ const translations = {
     'status.driverTrackerSaving': 'Drivertracker-instellingen opslaan...',
     'status.driverTrackerSaved': 'Drivertracker-instellingen opgeslagen.',
     'status.driverTrackerRecordingStarted': 'Geometrie-opname gestart.',
+    'status.driverTrackerOutlineDeleted': 'Contourgeometrie verwijderd voor {track}.',
     'status.monthlyTrackStarted': 'Maandelijk klassement gestart met frisse statistieken.',
     'status.monthlyTrackReset': 'Maandelijkse klassementstatistieken gereset.',
     'firstAdmin.title': 'Eerste beheerder',
@@ -518,6 +536,7 @@ const translations = {
     'driverTracker.detail': 'Toelichting',
     'driverTracker.actions': 'Acties',
     'driverTracker.phase4Note': 'Generatie van baancontouren is in fase 4 niet op de locatie gevalideerd. Gebruik dit als operatorhulpmiddel en bevestig gedrag op locatie voordat je erop vertrouwt tijdens racedagen.',
+    'driverTracker.actionHelp': 'Contour verbeteren behoudt de opgeslagen geometrie en middelt extra voltooide ronden. Opnieuw starten wist de opgeslagen contour en neemt nieuwe ronden op.',
     'driverTracker.currentGeometryTitle': 'Geometrie van geselecteerde baan',
     'driverTracker.selectionHint': 'Selecteer een baanrij om de geometriestatus en opgeslagen baancontour te bekijken.',
     'driverTracker.selectionLoaded': 'Baan {track} geselecteerd. De opgeslagen contour wordt getoond zodra volledige geometrie beschikbaar is.',
@@ -532,10 +551,19 @@ const translations = {
     'driverTracker.activeTrack': 'Baan',
     'driverTracker.lapProgress': 'Rondevoortgang',
     'driverTracker.noSelection': 'Selecteer een baanrij om geometriestatus te bekijken.',
-    'driverTracker.outlineReady': 'De opgeslagen contour voor de geselecteerde baan wordt getoond.',
+    'driverTracker.outlineLoading': 'Contour van geselecteerde baan laden...',
     'driverTracker.outlineUnavailable': 'Voor de geselecteerde baan is nog geen volledige opgeslagen contour beschikbaar.',
-    'driverTracker.improve': 'Verbeteren',
-    'driverTracker.restart': 'Herstarten',
+    'driverTracker.improve': 'Contour verbeteren',
+    'driverTracker.improveTitle': 'Behoud de opgeslagen contour en voeg voltooide ronden toe om het gemiddelde te verbeteren.',
+    'driverTracker.improveAria': 'Contour verbeteren voor {track}',
+    'driverTracker.restart': 'Opnieuw starten',
+    'driverTracker.restartTitle': 'Wis de opgeslagen contour en neem een nieuwe contour op met nieuwe ronden.',
+    'driverTracker.restartAria': 'Contouropname opnieuw starten voor {track}',
+    'driverTracker.delete': 'Contour verwijderen',
+    'driverTracker.deleteTitle': 'Verwijder opgeslagen en lopende contourgeometrie voor alleen deze baan.',
+    'driverTracker.deleteAria': 'Contour verwijderen voor {track}',
+    'driverTracker.confirmStartOver': 'Contouropname opnieuw starten voor {track}? Dit wist opgeslagen en lopende contourgeometrie voor alleen deze baan. Sessies en ronden blijven behouden.',
+    'driverTracker.confirmDeleteOutline': 'Contour verwijderen voor {track}? Dit verwijdert opgeslagen en lopende contourgeometrie voor alleen deze baan. Sessies en ronden blijven behouden.',
     'monthlyTrack.title': 'Maandelijkse baan',
     'monthlyTrack.noActive': 'Geen actieve maandelijkse baan.',
     'monthlyTrack.trackName': 'Baannaam',
@@ -783,7 +811,7 @@ saveDriverTrackerSettingsButton.addEventListener('click', () => {
   window.clearTimeout(driverTrackerSaveTimer);
   saveDriverTrackerSettings().catch(showError);
 });
-refreshDriverTrackerTracksButton.addEventListener('click', () => loadDriverTrackerTracks().catch(showError));
+refreshDriverTrackerTracksButton.addEventListener('click', () => refreshDriverTrackerTracksManually().catch(showError));
 setMonthlyTrackButton.addEventListener('click', () => setMonthlyTrack().catch(showError));
 resetMonthlyTrackButton.addEventListener('click', () => resetMonthlyTrack().catch(showError));
 runRetentionCleanupButton.addEventListener('click', () => runRetentionCleanup().catch(showError));
@@ -811,6 +839,7 @@ loadLanguageChoice().catch(showError);
 document.querySelectorAll('[data-tab]').forEach(button => {
   button.addEventListener('click', () => showTab(button.dataset.tab));
 });
+document.addEventListener('visibilitychange', handleDocumentVisibilityChange);
 
 loadSession().catch(showError);
 
@@ -860,6 +889,7 @@ async function login() {
 }
 
 async function logout() {
+  stopDriverTrackerPolling();
   await fetch('/api/admin/session', { method: 'DELETE', credentials: 'same-origin' });
   showLogin();
 }
@@ -1967,26 +1997,109 @@ async function loadDriverTrackerSettings() {
   }
 }
 
-async function loadDriverTrackerTracks() {
-  const [catalog, currentGeometry] = await Promise.all([
-    fetchJson('/api/admin/driver-tracker/tracks'),
-    fetchCurrentTrackGeometrySafe(),
-  ]);
-
-  latestDriverTrackerCatalog = catalog.tracks ?? [];
-  latestCurrentTrackGeometry = currentGeometry;
-  syncSelectedDriverTrackerTrack();
-  if (currentGeometry?.trackName && namesEqual(currentGeometry.trackName, selectedDriverTrackerTrackName)) {
-    selectedTrackGeometryAbortController?.abort();
-    selectedTrackGeometryAbortController = null;
-    selectedTrackGeometrySequence += 1;
-    latestSelectedTrackGeometry = currentGeometry;
-  } else {
-    await loadSelectedDriverTrackerGeometry({ renderAfterLoad: false });
+async function loadDriverTrackerTracks({ includeCurrentTrackGeometry = true, forceSelectedGeometryRefresh = false } = {}) {
+  if (driverTrackerTracksLoadPromise) {
+    return driverTrackerTracksLoadPromise;
   }
-  renderDriverTrackerTracks(latestDriverTrackerCatalog);
-  renderDriverTrackerGeometryPanel();
-  renderStatusDashboard();
+
+  const sequence = ++driverTrackerTracksLoadSequence;
+  const abortController = new AbortController();
+  driverTrackerTracksAbortController?.abort();
+  driverTrackerTracksAbortController = abortController;
+
+  const loadPromise = (async () => {
+    try {
+      const catalogPromise = fetchJson('/api/admin/driver-tracker/tracks', { signal: abortController.signal });
+      const currentGeometryPromise = includeCurrentTrackGeometry
+        ? fetchCurrentTrackGeometrySafe(abortController.signal)
+        : Promise.resolve(null);
+      const [catalog, currentGeometry] = await Promise.all([catalogPromise, currentGeometryPromise]);
+
+      if (sequence !== driverTrackerTracksLoadSequence) {
+        return;
+      }
+
+      latestDriverTrackerCatalog = catalog.tracks ?? [];
+      if (includeCurrentTrackGeometry) {
+        latestCurrentTrackGeometry = currentGeometry;
+      }
+
+      const selectionChanged = syncSelectedDriverTrackerTrack();
+      const selectedCatalog = findTrackByName(latestDriverTrackerCatalog, selectedDriverTrackerTrackName);
+      const selectedCatalogToken = buildSelectedDriverTrackerCatalogToken(selectedCatalog);
+      let selectedGeometryWasUpdated = false;
+
+      if (includeCurrentTrackGeometry
+        && currentGeometry?.trackName
+        && namesEqual(currentGeometry.trackName, selectedDriverTrackerTrackName)) {
+        selectedTrackGeometryAbortController?.abort();
+        selectedTrackGeometryAbortController = null;
+        selectedTrackGeometrySequence += 1;
+        latestSelectedTrackGeometry = currentGeometry;
+        selectedDriverTrackerCatalogToken = selectedCatalogToken;
+        selectedGeometryWasUpdated = true;
+      }
+
+      const shouldRefreshSelectedGeometry = Boolean(selectedDriverTrackerTrackName)
+        && !selectedGeometryWasUpdated
+        && (forceSelectedGeometryRefresh
+          || selectionChanged
+          || selectedCatalogToken !== selectedDriverTrackerCatalogToken);
+
+      if (shouldRefreshSelectedGeometry) {
+        await loadSelectedDriverTrackerGeometry({
+          renderAfterLoad: false,
+          expectedCatalogToken: selectedCatalogToken,
+        });
+      }
+
+      if (sequence !== driverTrackerTracksLoadSequence) {
+        return;
+      }
+
+      renderDriverTrackerTracks(latestDriverTrackerCatalog);
+      renderDriverTrackerGeometryPanel();
+      renderStatusDashboard();
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return;
+      }
+
+      throw error;
+    } finally {
+      if (driverTrackerTracksAbortController === abortController) {
+        driverTrackerTracksAbortController = null;
+      }
+    }
+  })();
+
+  driverTrackerTracksLoadPromise = loadPromise;
+  try {
+    await loadPromise;
+  } finally {
+    if (driverTrackerTracksLoadPromise === loadPromise) {
+      driverTrackerTracksLoadPromise = null;
+    }
+  }
+}
+
+async function refreshDriverTrackerTracksManually() {
+  await refreshDriverTrackerTracksAfterCurrentLoad({
+    includeCurrentTrackGeometry: true,
+    forceSelectedGeometryRefresh: true,
+  });
+}
+
+async function refreshDriverTrackerTracksAfterCurrentLoad(options) {
+  if (driverTrackerTracksLoadPromise) {
+    try {
+      await driverTrackerTracksLoadPromise;
+    } catch {
+      // A fresh explicit refresh below gets its own chance after a failed background poll.
+    }
+  }
+
+  await loadDriverTrackerTracks(options);
 }
 
 async function saveLocalizationChoice(language) {
@@ -2092,6 +2205,8 @@ function renderDriverTrackerTracks(tracks) {
     appendActionsCell(row, [
       {
         label: t('driverTracker.improve'),
+        title: t('driverTracker.improveTitle'),
+        ariaLabel: t('driverTracker.improveAria', { track: trackName }),
         onClick: () => {
           if (!trackName) {
             return;
@@ -2102,12 +2217,27 @@ function renderDriverTrackerTracks(tracks) {
       },
       {
         label: t('driverTracker.restart'),
+        title: t('driverTracker.restartTitle'),
+        ariaLabel: t('driverTracker.restartAria', { track: trackName }),
         onClick: () => {
           if (!trackName) {
             return;
           }
 
           startDriverTrackerRecording(trackName, true).catch(showError);
+        },
+      },
+      {
+        label: t('driverTracker.delete'),
+        title: t('driverTracker.deleteTitle'),
+        ariaLabel: t('driverTracker.deleteAria', { track: trackName }),
+        danger: true,
+        onClick: () => {
+          if (!trackName) {
+            return;
+          }
+
+          deleteDriverTrackerOutline(trackName).catch(showError);
         },
       },
     ]);
@@ -2202,6 +2332,26 @@ function namesEqual(left, right) {
     && left.localeCompare(right, undefined, { sensitivity: 'accent' }) === 0;
 }
 
+function sameTrackName(left, right) {
+  if (!left && !right) {
+    return true;
+  }
+
+  if (typeof left !== 'string' || typeof right !== 'string') {
+    return false;
+  }
+
+  return namesEqual(left, right);
+}
+
+function buildSelectedDriverTrackerCatalogToken(track) {
+  if (!track?.trackName) {
+    return null;
+  }
+
+  return `${track.trackName}|${track.updatedUtc ?? ''}|${deriveDriverTrackerState(track)}`;
+}
+
 function findTrackByName(tracks, trackName) {
   if (!trackName) {
     return null;
@@ -2211,22 +2361,28 @@ function findTrackByName(tracks, trackName) {
 }
 
 function syncSelectedDriverTrackerTrack() {
+  const previousSelection = selectedDriverTrackerTrackName;
+
   if (findTrackByName(latestDriverTrackerCatalog, selectedDriverTrackerTrackName)) {
-    return;
+    return false;
   }
 
   const currentTrackName = latestCurrentTrackGeometry?.trackName ?? null;
   if (currentTrackName && findTrackByName(latestDriverTrackerCatalog, currentTrackName)) {
     selectedDriverTrackerTrackName = currentTrackName;
-    return;
-  }
-
-  if (currentTrackName && latestDriverTrackerCatalog.length === 0) {
+  } else if (currentTrackName && latestDriverTrackerCatalog.length === 0) {
     selectedDriverTrackerTrackName = currentTrackName;
-    return;
+  } else {
+    selectedDriverTrackerTrackName = latestDriverTrackerCatalog[0]?.trackName ?? null;
   }
 
-  selectedDriverTrackerTrackName = latestDriverTrackerCatalog[0]?.trackName ?? null;
+  const selectionChanged = !sameTrackName(previousSelection, selectedDriverTrackerTrackName);
+  if (selectionChanged) {
+    latestSelectedTrackGeometry = null;
+    selectedDriverTrackerCatalogToken = null;
+  }
+
+  return selectionChanged;
 }
 
 function selectDriverTrackerTrack(trackName) {
@@ -2236,18 +2392,23 @@ function selectDriverTrackerTrack(trackName) {
 
   selectedDriverTrackerTrackName = trackName;
   latestSelectedTrackGeometry = null;
+  selectedDriverTrackerCatalogToken = null;
   renderDriverTrackerTracks(latestDriverTrackerCatalog);
   renderDriverTrackerGeometryPanel({ isLoading: true });
-  loadSelectedDriverTrackerGeometry().catch(showError);
+  const selectedCatalog = findTrackByName(latestDriverTrackerCatalog, trackName);
+  loadSelectedDriverTrackerGeometry({
+    expectedCatalogToken: buildSelectedDriverTrackerCatalogToken(selectedCatalog),
+  }).catch(showError);
 }
 
-async function loadSelectedDriverTrackerGeometry({ renderAfterLoad = true } = {}) {
+async function loadSelectedDriverTrackerGeometry({ renderAfterLoad = true, expectedCatalogToken = null } = {}) {
   const trackName = selectedDriverTrackerTrackName;
   const sequence = ++selectedTrackGeometrySequence;
   selectedTrackGeometryAbortController?.abort();
   selectedTrackGeometryAbortController = null;
   if (!trackName) {
     latestSelectedTrackGeometry = null;
+    selectedDriverTrackerCatalogToken = null;
     if (renderAfterLoad) {
       renderDriverTrackerGeometryPanel();
     }
@@ -2256,7 +2417,22 @@ async function loadSelectedDriverTrackerGeometry({ renderAfterLoad = true } = {}
 
   const abortController = new AbortController();
   selectedTrackGeometryAbortController = abortController;
-  const geometry = await fetchSelectedTrackGeometrySafe(trackName, abortController.signal);
+  let geometry;
+  try {
+    geometry = await fetchSelectedTrackGeometrySafe(trackName, abortController.signal);
+  } catch (error) {
+    if (selectedTrackGeometryAbortController === abortController) {
+      selectedTrackGeometryAbortController = null;
+    }
+    throw error;
+  }
+
+  if (abortController.signal.aborted) {
+    if (selectedTrackGeometryAbortController === abortController) {
+      selectedTrackGeometryAbortController = null;
+    }
+    return;
+  }
 
   if (sequence !== selectedTrackGeometrySequence || !namesEqual(trackName, selectedDriverTrackerTrackName)) {
     return;
@@ -2264,6 +2440,8 @@ async function loadSelectedDriverTrackerGeometry({ renderAfterLoad = true } = {}
 
   selectedTrackGeometryAbortController = null;
   latestSelectedTrackGeometry = geometry;
+  selectedDriverTrackerCatalogToken = expectedCatalogToken
+    ?? buildSelectedDriverTrackerCatalogToken(findTrackByName(latestDriverTrackerCatalog, selectedDriverTrackerTrackName));
   if (renderAfterLoad) {
     renderDriverTrackerGeometryPanel();
   }
@@ -2299,6 +2477,7 @@ function renderDriverTrackerGeometryPanel({ isLoading = false } = {}) {
     driverTrackerSelectionHintElement.textContent = t('driverTracker.noSelection');
     renderStatusFacts(driverTrackerGeometryFactsElement, []);
     driverTrackerOutlinePolylineElement.setAttribute('points', '');
+    driverTrackerOutlineMessageElement.hidden = false;
     driverTrackerOutlineMessageElement.textContent = t('driverTracker.noSelection');
     return;
   }
@@ -2338,17 +2517,21 @@ function renderDriverTrackerGeometryPanel({ isLoading = false } = {}) {
       .map(point => `${(Math.min(1, Math.max(0, Number(point.x ?? 0))) * 84 + 8).toFixed(2)},${(Math.min(1, Math.max(0, Number(point.y ?? 0))) * 84 + 8).toFixed(2)}`)
       .join(' ');
     driverTrackerOutlinePolylineElement.setAttribute('points', outlinePoints);
-    driverTrackerOutlineMessageElement.textContent = t('driverTracker.outlineReady');
+    driverTrackerOutlineMessageElement.hidden = true;
+    driverTrackerOutlineMessageElement.textContent = '';
     return;
   }
 
   driverTrackerOutlinePolylineElement.setAttribute('points', '');
-  driverTrackerOutlineMessageElement.textContent = selectedGeometry?.statusDetail || t('driverTracker.outlineUnavailable');
+  driverTrackerOutlineMessageElement.hidden = false;
+  driverTrackerOutlineMessageElement.textContent = isLoading
+    ? t('driverTracker.outlineLoading')
+    : (selectedGeometry?.statusDetail || t('driverTracker.outlineUnavailable'));
 }
 
-async function fetchCurrentTrackGeometrySafe() {
+async function fetchCurrentTrackGeometrySafe(signal) {
   try {
-    return await fetchJson('/api/track-geometry/current');
+    return await fetchJson('/api/track-geometry/current', { signal });
   } catch {
     return null;
   }
@@ -2361,8 +2544,30 @@ async function fetchSelectedTrackGeometrySafe(trackName, signal) {
     if (error instanceof DOMException && error.name === 'AbortError') {
       return null;
     }
-    return null;
+    throw error;
   }
+}
+
+async function deleteDriverTrackerOutline(trackName) {
+  if (!trackName) {
+    return;
+  }
+
+  if (!window.confirm(t('driverTracker.confirmDeleteOutline', { track: trackName }))) {
+    return;
+  }
+
+  await deleteJson(`/api/admin/driver-tracker/geometry?trackName=${encodeURIComponent(trackName)}`);
+  if (namesEqual(trackName, selectedDriverTrackerTrackName)) {
+    latestSelectedTrackGeometry = null;
+    selectedDriverTrackerCatalogToken = null;
+  }
+
+  setStatus(t('status.driverTrackerOutlineDeleted', { track: trackName }));
+  await refreshDriverTrackerTracksAfterCurrentLoad({
+    includeCurrentTrackGeometry: false,
+    forceSelectedGeometryRefresh: true,
+  });
 }
 
 async function startDriverTrackerRecording(trackName, resetExistingGeometry) {
@@ -2370,7 +2575,12 @@ async function startDriverTrackerRecording(trackName, resetExistingGeometry) {
     return;
   }
 
+  if (resetExistingGeometry && !window.confirm(t('driverTracker.confirmStartOver', { track: trackName }))) {
+    return;
+  }
+
   selectedDriverTrackerTrackName = trackName;
+  selectedDriverTrackerCatalogToken = null;
   const targetCompletedLaps = Number(driverTrackerGeometryRecordingLapsElement.value || 1);
   await postJson('/api/admin/driver-tracker/recordings', {
     trackName,
@@ -2378,7 +2588,10 @@ async function startDriverTrackerRecording(trackName, resetExistingGeometry) {
     resetExistingGeometry,
   });
   setStatus(t('status.driverTrackerRecordingStarted'));
-  await loadDriverTrackerTracks();
+  await refreshDriverTrackerTracksAfterCurrentLoad({
+    includeCurrentTrackGeometry: false,
+    forceSelectedGeometryRefresh: true,
+  });
 }
 
 async function runRetentionCleanup() {
@@ -2522,8 +2735,71 @@ function stopStatusPolling() {
   statusPollingTimer = 0;
 }
 
+function shouldPollDriverTrackerTracks() {
+  return !dashboardPanel.hidden
+    && document.visibilityState === 'visible'
+    && document.getElementById('trackerTab')?.classList.contains('active');
+}
+
+function startDriverTrackerPolling() {
+  if (isDriverTrackerPolling || !shouldPollDriverTrackerTracks()) {
+    return;
+  }
+
+  isDriverTrackerPolling = true;
+  pollDriverTrackerTracksOnce();
+  driverTrackerPollingTimer = window.setInterval(() => {
+    pollDriverTrackerTracksOnce();
+  }, 1000);
+}
+
+function abortDriverTrackerTracksLoad() {
+  if (!driverTrackerTracksAbortController) {
+    return;
+  }
+
+  driverTrackerTracksAbortController.abort();
+  driverTrackerTracksAbortController = null;
+  driverTrackerTracksLoadSequence += 1;
+}
+
+function stopDriverTrackerPolling({ abortInFlight = true } = {}) {
+  if (!isDriverTrackerPolling && driverTrackerPollingTimer === 0) {
+    if (abortInFlight) {
+      abortDriverTrackerTracksLoad();
+    }
+    return;
+  }
+
+  isDriverTrackerPolling = false;
+  window.clearInterval(driverTrackerPollingTimer);
+  driverTrackerPollingTimer = 0;
+  if (abortInFlight) {
+    abortDriverTrackerTracksLoad();
+  }
+}
+
+function pollDriverTrackerTracksOnce() {
+  if (!shouldPollDriverTrackerTracks()) {
+    stopDriverTrackerPolling();
+    return;
+  }
+
+  loadDriverTrackerTracks({ includeCurrentTrackGeometry: false }).catch(showError);
+}
+
+function handleDocumentVisibilityChange() {
+  if (document.visibilityState !== 'visible') {
+    stopDriverTrackerPolling();
+    return;
+  }
+
+  startDriverTrackerPolling();
+}
+
 function handleTabChange(tabId) {
   if (tabId === 'statusTab') {
+    stopDriverTrackerPolling();
     if (statusDiagnosticDetailsElement.open) {
       stopStatusPolling();
       refreshOperationalStatus().catch(showError);
@@ -2536,8 +2812,15 @@ function handleTabChange(tabId) {
   stopStatusPolling();
 
   if (tabId === 'trackerTab') {
-    loadDriverTrackerTracks().catch(showError);
+    loadDriverTrackerTracks({
+      includeCurrentTrackGeometry: true,
+      forceSelectedGeometryRefresh: true,
+    }).catch(showError);
+    startDriverTrackerPolling();
+    return;
   }
+
+  stopDriverTrackerPolling();
 }
 
 async function fetchLiveSessionSnapshotForStatus() {
@@ -2719,6 +3002,7 @@ function formatCandidate(candidate) {
 
 function showSetup() {
   stopStatusPolling();
+  stopDriverTrackerPolling();
   setupPanel.hidden = false;
   loginPanel.hidden = true;
   dashboardPanel.hidden = true;
@@ -2728,6 +3012,7 @@ function showSetup() {
 
 function showLogin() {
   stopStatusPolling();
+  stopDriverTrackerPolling();
   setupPanel.hidden = true;
   loginPanel.hidden = false;
   dashboardPanel.hidden = true;
@@ -2736,6 +3021,7 @@ function showLogin() {
 }
 
 function showDashboard(session) {
+  stopDriverTrackerPolling();
   setupPanel.hidden = true;
   loginPanel.hidden = true;
   dashboardPanel.hidden = false;
@@ -2869,6 +3155,10 @@ function appendActionsCell(row, actions) {
     button.className = action.danger ? 'tableButton dangerButton' : 'tableButton';
     button.type = 'button';
     button.textContent = action.label;
+    if (action.title) {
+      button.title = action.title;
+    }
+    button.setAttribute('aria-label', action.ariaLabel ?? action.label);
     button.addEventListener('click', action.onClick);
     wrapper.appendChild(button);
   }

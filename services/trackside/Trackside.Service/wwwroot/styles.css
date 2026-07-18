@@ -885,6 +885,7 @@ tbody tr:last-child td {
 }
 
 .trackerValidationNote,
+.driverTrackerActionHelp,
 .advancedDiagnosticNote,
 .driverTrackerOutlineMessage {
   line-height: 1.45;
