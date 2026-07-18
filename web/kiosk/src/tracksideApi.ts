@@ -14,7 +14,7 @@ export interface ClientConfiguration {
   recommendedReconnectSeconds: number;
   /** Default display mode a kiosk screen should open with. */
   defaultDisplayMode: KioskDisplayMode;
-  /** Browser-side driver tracker refresh rate in Hertz. */
+  /** Configured compact Tracker publish rate in Hertz. */
   driverTrackerClientRefreshHz: number;
 }
 
@@ -192,6 +192,34 @@ export interface TrackGeometryPoint {
   progressPercent: number;
 }
 
+/** Compact high-rate Tracker update projected independently from full live-session snapshots. */
+export interface TrackerPositionUpdate {
+  /** Monotonic process-local update sequence. */
+  sequence: number;
+  /** UTC timestamp when the backend projected this update. */
+  timestampUtc: string;
+  /** Position source, such as scoring or telemetry. */
+  source: string;
+  /** Track associated with these positions. */
+  trackName: string;
+  /** Current coarse session phase. */
+  phase: SessionPhase;
+  /** Current elapsed session time. */
+  currentSessionSeconds?: number | null;
+  /** Scheduled session duration, when known. */
+  scheduledDurationSeconds?: number | null;
+  /** Compact driver world positions. */
+  vehicles: TrackerPositionVehicle[];
+}
+
+/** One driver's compact world position. */
+export interface TrackerPositionVehicle {
+  driverId: string;
+  posX: number;
+  posY?: number | null;
+  posZ: number;
+}
+
 /** Active monthly track period returned by the backend. */
 export interface MonthlyTrackResponse {
   /** True when a monthly track has been set. */
@@ -282,6 +310,8 @@ export interface LastFinishedSessionRow {
 export interface LiveSessionConnection {
   /** Stops receiving live-session updates. */
   stop(): Promise<void>;
+  /** Enables compact Tracker updates only while Tracker content is visible. */
+  setTrackerUpdatesEnabled(enabled: boolean): Promise<void>;
 }
 
 /** Client shape needed to start a live-session feed. */
@@ -301,6 +331,7 @@ export interface LiveSessionFeedClient {
     hubPath: string,
     onSnapshot: (snapshot: LiveSessionSnapshot) => void,
     onTrackGeometry?: (geometry: TrackGeometryResponse) => void,
+    onTrackerPositions?: (update: TrackerPositionUpdate) => void,
   ): Promise<LiveSessionConnection>;
 }
 
@@ -310,6 +341,7 @@ export async function startLiveSessionFeed(
   onSnapshot: (snapshot: LiveSessionSnapshot) => void,
   onStatus: (status: string) => void,
   onTrackGeometry?: (geometry: TrackGeometryResponse) => void,
+  onTrackerPositions?: (update: TrackerPositionUpdate) => void,
 ): Promise<LiveSessionConnection> {
   const configuration = await client.getClientConfiguration();
   const current = await client.getCurrentSession(configuration.currentSessionPath);
@@ -328,10 +360,13 @@ export async function startLiveSessionFeed(
     return await client.connectLiveSession(configuration.liveSessionHubPath, pushedSnapshot => {
       onSnapshot(pushedSnapshot);
       onStatus('Connected through SignalR live updates');
-    }, onTrackGeometry);
+    }, onTrackGeometry, onTrackerPositions);
   } catch (error) {
     onStatus(`Connected through REST recovery endpoint; SignalR unavailable: ${error instanceof Error ? error.message : String(error)}`);
-    return { stop: async () => undefined };
+    return {
+      stop: async () => undefined,
+      setTrackerUpdatesEnabled: async () => undefined,
+    };
   }
 }
 
@@ -380,6 +415,7 @@ export class TracksideApiClient implements LiveSessionFeedClient {
     hubPath: string,
     onSnapshot: (snapshot: LiveSessionSnapshot) => void,
     onTrackGeometry?: (geometry: TrackGeometryResponse) => void,
+    onTrackerPositions?: (update: TrackerPositionUpdate) => void,
   ): Promise<LiveSessionConnection> {
     const connection = new signalR.HubConnectionBuilder()
       .withUrl(this.toUrl(hubPath))
@@ -390,9 +426,28 @@ export class TracksideApiClient implements LiveSessionFeedClient {
     if (onTrackGeometry) {
       connection.on('TrackGeometryUpdated', onTrackGeometry);
     }
+    if (onTrackerPositions) {
+      connection.on('TrackerPositionsUpdated', onTrackerPositions);
+    }
+
+    let trackerUpdatesEnabled = false;
+    const setTrackerUpdatesEnabled = async (enabled: boolean) => {
+      trackerUpdatesEnabled = enabled;
+      if (connection.state === signalR.HubConnectionState.Connected) {
+        await connection.invoke('SetTrackerUpdatesEnabled', enabled);
+      }
+    };
+    connection.onreconnected(() => {
+      if (trackerUpdatesEnabled) {
+        void setTrackerUpdatesEnabled(true).catch(() => {});
+      }
+    });
 
     await connection.start();
-    return connection;
+    return {
+      stop: () => connection.stop(),
+      setTrackerUpdatesEnabled,
+    };
   }
 
   private async getJson<T>(path: string): Promise<T> {

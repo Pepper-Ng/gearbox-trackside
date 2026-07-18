@@ -1,19 +1,24 @@
 import { describe, expect, it, vi } from 'vitest';
-import { LiveSessionFeedClient, LiveSessionSnapshot, TrackGeometryResponse, startLiveSessionFeed } from './tracksideApi';
+import { LiveSessionFeedClient, LiveSessionSnapshot, TrackGeometryResponse, TrackerPositionUpdate, startLiveSessionFeed } from './tracksideApi';
 
 describe('startLiveSessionFeed', () => {
   it('loads the current REST snapshot before connecting live updates', async () => {
     const calls: string[] = [];
     const pushedSnapshots: Array<(snapshot: LiveSessionSnapshot) => void> = [];
     const pushedGeometry: Array<(geometry: TrackGeometryResponse) => void> = [];
+    const pushedTrackerPositions: Array<(update: TrackerPositionUpdate) => void> = [];
     const receivedSnapshots: LiveSessionSnapshot[] = [];
     const receivedGeometry: TrackGeometryResponse[] = [];
+    const receivedTrackerPositions: TrackerPositionUpdate[] = [];
     const statuses: string[] = [];
     const currentSnapshot = makeSnapshot(1);
     const liveSnapshot = makeSnapshot(2);
     const initialGeometry = makeGeometry(false);
     const liveGeometry = makeGeometry(true);
-    const connection = { stop: vi.fn(async () => undefined) };
+    const connection = {
+      stop: vi.fn(async () => undefined),
+      setTrackerUpdatesEnabled: vi.fn(async () => undefined),
+    };
     const client: LiveSessionFeedClient = {
       async getClientConfiguration() {
         calls.push('configuration');
@@ -46,11 +51,14 @@ describe('startLiveSessionFeed', () => {
         calls.push('geometry:/api/track-geometry/current');
         return initialGeometry;
       },
-      async connectLiveSession(path, onSnapshot, onTrackGeometry) {
+      async connectLiveSession(path, onSnapshot, onTrackGeometry, onTrackerPositions) {
         calls.push(`hub:${path}`);
         pushedSnapshots.push(onSnapshot);
         if (onTrackGeometry) {
           pushedGeometry.push(onTrackGeometry);
+        }
+        if (onTrackerPositions) {
+          pushedTrackerPositions.push(onTrackerPositions);
         }
         return connection;
       },
@@ -61,14 +69,17 @@ describe('startLiveSessionFeed', () => {
       snapshot => receivedSnapshots.push(snapshot),
       status => statuses.push(status),
       geometry => receivedGeometry.push(geometry),
+      update => receivedTrackerPositions.push(update),
     );
     pushedSnapshots[0](liveSnapshot);
     pushedGeometry[0](liveGeometry);
+    pushedTrackerPositions[0](makeTrackerPositionUpdate());
 
     expect(handle).toBe(connection);
     expect(calls).toEqual(['configuration', 'current:/api/live-session/current', 'geometry:/api/track-geometry/current', 'hub:/hubs/live-session']);
     expect(receivedSnapshots.map(snapshot => snapshot.updateSequence)).toEqual([1, 2]);
     expect(receivedGeometry.map(geometry => geometry.isAvailable)).toEqual([false, true]);
+    expect(receivedTrackerPositions.map(update => update.sequence)).toEqual([3]);
     expect(statuses).toEqual(['Connected through REST recovery endpoint', 'Connected through SignalR live updates']);
   });
 
@@ -88,6 +99,7 @@ describe('startLiveSessionFeed', () => {
     );
 
     await expect(handle.stop()).resolves.toBeUndefined();
+    await expect(handle.setTrackerUpdatesEnabled(true)).resolves.toBeUndefined();
     expect(receivedSnapshots.map(snapshot => snapshot.updateSequence)).toEqual([1]);
     expect(statuses).toEqual([
       'Connected through REST recovery endpoint',
@@ -122,7 +134,10 @@ function makeFeedClient(overrides: Partial<LiveSessionFeedClient> = {}): LiveSes
       return makeGeometry(false);
     },
     async connectLiveSession() {
-      return { stop: vi.fn(async () => undefined) };
+      return {
+        stop: vi.fn(async () => undefined),
+        setTrackerUpdatesEnabled: vi.fn(async () => undefined),
+      };
     },
     ...overrides,
   };
@@ -152,5 +167,18 @@ function makeSnapshot(updateSequence: number): LiveSessionSnapshot {
       overallFlag: 'GREEN',
     },
     drivers: [],
+  };
+}
+
+function makeTrackerPositionUpdate(): TrackerPositionUpdate {
+  return {
+    sequence: 3,
+    timestampUtc: '2026-06-24T12:00:00.050+00:00',
+    source: 'telemetry',
+    trackName: 'Loch Drummond - Short',
+    phase: 'GreenFlag',
+    currentSessionSeconds: 45.05,
+    scheduledDurationSeconds: 1200,
+    vehicles: [{ driverId: '7', posX: 13.25, posY: 0.5, posZ: -7.25 }],
   };
 }

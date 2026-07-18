@@ -1,9 +1,9 @@
 import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { formatGap, formatLapTime, formatNumber } from '../format';
-import { BestLapBoardResponse, BestLapRow, BestLapWindow, ClientConfiguration, DriverSnapshot, KioskDisplayMode, LastFinishedSessionResponse, LastFinishedSessionRow, LiveSessionConnection, LiveSessionInfo, LiveSessionSnapshot, SectorSnapshot, startLiveSessionFeed, TrackGeometryResponse, TracksideApiClient } from '../tracksideApi';
+import { BestLapBoardResponse, BestLapRow, BestLapWindow, DriverSnapshot, KioskDisplayMode, LastFinishedSessionResponse, LastFinishedSessionRow, LiveSessionConnection, LiveSessionInfo, LiveSessionSnapshot, SectorSnapshot, startLiveSessionFeed, TrackGeometryResponse, TrackerPositionUpdate, TracksideApiClient } from '../tracksideApi';
 import { getConnectionIndicators, getDriverStatus, getRaceLapProgress, getRacePositionDelta, type ConnectionIndicators, type DriverStatus } from './liveBoardLogic';
 import { buildSectorStripeStates, createEmptySectorStripeCache, defaultSectorStripeStates, type SectorStripeCache, type SectorStripeState } from './sectorStripeLogic';
-import { buildDriverMarkers, buildMapMetrics, clampRefreshHz, resolveTrackerBounds, toSvgPoint, TrackerPage, type DriverMarker, useStableDriverColors } from './TrackerPage';
+import { buildDriverMarkers, buildMapMetrics, toSvgPoint, TrackerPage, type DriverMarker, useStableDriverColors, useStableTrackerBounds } from './TrackerPage';
 import { stableDriverColor } from './driverColors';
 
 type ViewMode = BestLapWindow | 'last' | 'live' | 'tracker' | 'combined';
@@ -23,6 +23,33 @@ export function getViewFromPath(path: string): ViewMode | null {
   return supportedPaths[normalized] ?? null;
 }
 
+export function applyTrackerPositionUpdate(
+  snapshot: LiveSessionSnapshot | null,
+  update: TrackerPositionUpdate | null,
+): LiveSessionSnapshot | null {
+  if (!snapshot || !update || snapshot.session.trackName.localeCompare(update.trackName, undefined, { sensitivity: 'accent' }) !== 0) {
+    return snapshot;
+  }
+
+  const positionsByDriverId = new Map(update.vehicles.map(vehicle => [vehicle.driverId, vehicle]));
+  return {
+    ...snapshot,
+    timestampUtc: update.timestampUtc,
+    session: {
+      ...snapshot.session,
+      phase: update.phase,
+      currentSessionSeconds: update.currentSessionSeconds ?? snapshot.session.currentSessionSeconds,
+      scheduledDurationSeconds: update.scheduledDurationSeconds ?? snapshot.session.scheduledDurationSeconds,
+    },
+    drivers: snapshot.drivers.map(driver => {
+      const position = positionsByDriverId.get(driver.driverId);
+      return position
+        ? { ...driver, posX: position.posX, posY: position.posY, posZ: position.posZ }
+        : driver;
+    }),
+  };
+}
+
 /** Main kiosk application shell. */
 export function App() {
   const client = useMemo(() => new TracksideApiClient(), []);
@@ -30,10 +57,14 @@ export function App() {
   const [trackGeometry, setTrackGeometry] = useState<TrackGeometryResponse | null>(null);
   const [board, setBoard] = useState<BestLapBoardResponse | null>(null);
   const [lastSession, setLastSession] = useState<LastFinishedSessionResponse | null>(null);
-  const [clientConfiguration, setClientConfiguration] = useState<ClientConfiguration | null>(null);
   const [view, setView] = useState<ViewMode>(() => getViewFromPath(window.location.pathname) ?? 'monthly');
+  const [trackerPositionUpdate, setTrackerPositionUpdate] = useState<TrackerPositionUpdate | null>(null);
   const [status, setStatus] = useState('Loading configuration...');
   const [boardStatus, setBoardStatus] = useState('Loading best laps...');
+  const liveConnectionRef = useRef<LiveSessionConnection | null>(null);
+  const currentViewRef = useRef(view);
+  const latestTrackerPositionRef = useRef<TrackerPositionUpdate | null>(null);
+  const trackerAnimationFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
     const currentView = getViewFromPath(window.location.pathname);
@@ -41,7 +72,6 @@ export function App() {
     client.getClientConfiguration()
       .then(configuration => {
         if (!cancelled) {
-          setClientConfiguration(configuration);
           if (!currentView) {
             setView(toViewMode(configuration.defaultDisplayMode));
           }
@@ -76,10 +106,28 @@ export function App() {
           setTrackGeometry(geometry);
         }
       },
+      update => {
+        if (cancelled) {
+          return;
+        }
+
+        latestTrackerPositionRef.current = update;
+        if (trackerAnimationFrameRef.current == null) {
+          // Coalesce 60-120 Hz SignalR delivery to the browser's actual paint cadence.
+          trackerAnimationFrameRef.current = window.requestAnimationFrame(() => {
+            trackerAnimationFrameRef.current = null;
+            setTrackerPositionUpdate(latestTrackerPositionRef.current);
+          });
+        }
+      },
     ).then(nextConnection => {
       connection = nextConnection;
+      liveConnectionRef.current = nextConnection;
       if (cancelled) {
         void connection.stop();
+      } else {
+        const trackerEnabled = currentViewRef.current === 'tracker' || currentViewRef.current === 'combined';
+        void connection.setTrackerUpdatesEnabled(trackerEnabled).catch(() => {});
       }
     }).catch(error => {
       if (!cancelled) {
@@ -89,9 +137,24 @@ export function App() {
 
     return () => {
       cancelled = true;
+      liveConnectionRef.current = null;
+      if (trackerAnimationFrameRef.current != null) {
+        window.cancelAnimationFrame(trackerAnimationFrameRef.current);
+        trackerAnimationFrameRef.current = null;
+      }
       void connection?.stop();
     };
   }, [client]);
+
+  useEffect(() => {
+    currentViewRef.current = view;
+    const trackerEnabled = view === 'tracker' || view === 'combined';
+    void liveConnectionRef.current?.setTrackerUpdatesEnabled(trackerEnabled).catch(() => {});
+    if (!trackerEnabled) {
+      latestTrackerPositionRef.current = null;
+      setTrackerPositionUpdate(null);
+    }
+  }, [view]);
 
   useEffect(() => {
     if (view === 'live' || view === 'last' || view === 'tracker' || view === 'combined') {
@@ -156,6 +219,11 @@ export function App() {
     };
   }, [client, view]);
 
+  const trackerSnapshot = useMemo(
+    () => applyTrackerPositionUpdate(snapshot, trackerPositionUpdate),
+    [snapshot, trackerPositionUpdate],
+  );
+
   return (
     <main className={classNames('shell', view === 'combined' ? 'shellWide' : undefined)}>
       <ShellHeader status={view === 'live' || view === 'combined' ? status : view === 'tracker' ? '' : boardStatus} view={view} snapshot={snapshot} />
@@ -164,16 +232,14 @@ export function App() {
         ? <LiveBoard snapshot={snapshot} status={status} />
         : view === 'tracker'
           ? <TrackerPage
-              snapshot={snapshot}
+              snapshot={trackerSnapshot}
               geometry={trackGeometry}
-              clientRefreshHz={clientConfiguration?.driverTrackerClientRefreshHz}
             />
           : view === 'combined'
             ? <CombinedPage
-                snapshot={snapshot}
+                snapshot={trackerSnapshot}
                 geometry={trackGeometry}
                 status={status}
-                clientRefreshHz={clientConfiguration?.driverTrackerClientRefreshHz}
               />
             : view === 'last'
               ? <LastSessionBoard result={lastSession} />
@@ -197,7 +263,7 @@ function LiveBoard({ snapshot, status }: LiveBoardProps) {
       <section className="sessionStrip" aria-label="Session summary">
         <Metric label="Track" value={snapshot?.session.trackName} indicators={<CompactStatusDots indicators={connectionIndicators} />} />
         <Metric label="Session" value={formatSessionValue(snapshot)} />
-        <ClockMetric currentSeconds={snapshot?.session?.currentSessionSeconds} />
+        <ClockMetric session={snapshot?.session} />
       </section>
 
       <BoardPanel title="Live Board" meta={`${snapshot?.drivers.length ?? 0} drivers`} metaClassName="liveDriverCount" live>
@@ -213,38 +279,11 @@ interface CombinedPageProps {
   snapshot: LiveSessionSnapshot | null;
   geometry: TrackGeometryResponse | null;
   status: string;
-  clientRefreshHz: number | null | undefined;
 }
 
-function CombinedPage({ snapshot, geometry, status, clientRefreshHz }: CombinedPageProps) {
-  const [trackerSnapshot, setTrackerSnapshot] = useState<LiveSessionSnapshot | null>(snapshot);
-  const latestSnapshotRef = useRef<LiveSessionSnapshot | null>(snapshot);
-  const refreshHz = clampRefreshHz(clientRefreshHz);
-
-  useEffect(() => {
-    latestSnapshotRef.current = snapshot;
-  }, [snapshot]);
-
-  useEffect(() => {
-    let cancelled = false;
-    let timer = 0;
-
-    function scheduleTick() {
-      setTrackerSnapshot(latestSnapshotRef.current);
-      if (!cancelled) {
-        timer = window.setTimeout(scheduleTick, 1000 / refreshHz);
-      }
-    }
-
-    scheduleTick();
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [refreshHz]);
-
+function CombinedPage({ snapshot, geometry, status }: CombinedPageProps) {
   // Combined view shares the tracker fallback bounds so driver stripes and map markers stay colour-aligned before geometry is ready.
-  const trackerBounds = useMemo(() => resolveTrackerBounds(geometry?.bounds, trackerSnapshot?.drivers ?? []), [geometry?.bounds, trackerSnapshot?.drivers]);
+  const trackerBounds = useStableTrackerBounds(geometry?.bounds, snapshot?.drivers ?? [], snapshot?.session.trackName);
   const mapMetrics = useMemo(() => buildMapMetrics(trackerBounds), [trackerBounds]);
   const pathPoints = useMemo(
     () => (geometry?.points ?? [])
@@ -254,18 +293,18 @@ function CombinedPage({ snapshot, geometry, status, clientRefreshHz }: CombinedP
     [geometry?.points, mapMetrics],
   );
   const markers = useMemo(
-    () => buildDriverMarkers(trackerSnapshot?.drivers ?? [], trackerBounds, mapMetrics),
-    [trackerSnapshot?.drivers, trackerBounds, mapMetrics],
+    () => buildDriverMarkers(snapshot?.drivers ?? [], trackerBounds, mapMetrics),
+    [snapshot?.drivers, trackerBounds, mapMetrics],
   );
   const markerColors = useStableDriverColors(markers);
 
   const driverColorMap = useMemo(() => {
     const map = new Map<string, string>();
-    for (const driver of (trackerSnapshot?.drivers ?? [])) {
-      map.set(driver.driverId, markerColors.get(driver.driverId) ?? stableDriverColor(driver.driverId, driver.displayName || driver.rigName));
+    for (const driver of (snapshot?.drivers ?? [])) {
+      map.set(driver.driverId, markerColors.get(driver.driverId) ?? stableDriverColor(driver.driverId, driver.rigName));
     }
     return map;
-  }, [trackerSnapshot?.drivers, markerColors]);
+  }, [snapshot?.drivers, markerColors]);
 
   const connectionIndicators = getConnectionIndicators(status, snapshot);
 
@@ -274,7 +313,7 @@ function CombinedPage({ snapshot, geometry, status, clientRefreshHz }: CombinedP
       <section className="sessionStrip" aria-label="Session summary">
         <Metric label="Track" value={snapshot?.session.trackName} indicators={<CompactStatusDots indicators={connectionIndicators} />} />
         <Metric label="Session" value={formatSessionValue(snapshot)} />
-        <ClockMetric currentSeconds={snapshot?.session?.currentSessionSeconds} />
+        <ClockMetric session={snapshot?.session} />
       </section>
 
       <div className="combinedLayout">
@@ -292,7 +331,7 @@ function CombinedPage({ snapshot, geometry, status, clientRefreshHz }: CombinedP
             className="trackerMap combinedTrackerMap"
             viewBox={`0 0 ${mapMetrics.width} ${mapMetrics.height}`}
             role="img"
-            aria-label={trackerSnapshot?.session.trackName ?? 'Track map'}
+            aria-label={snapshot?.session.trackName ?? 'Track map'}
           >
             <rect className="trackerMapBackground" x="0" y="0" width={mapMetrics.width} height={mapMetrics.height} rx="18" />
             {geometry?.isAvailable && pathPoints ? <polyline className="trackGeometryLine" points={pathPoints} /> : null}
@@ -300,7 +339,7 @@ function CombinedPage({ snapshot, geometry, status, clientRefreshHz }: CombinedP
               <g
                 key={marker.driverId}
                 className="driverMarker"
-                style={{ '--marker-color': markerColors.get(marker.driverId) ?? stableDriverColor(marker.driverId, marker.label) } as React.CSSProperties}
+                style={{ '--marker-color': markerColors.get(marker.driverId) ?? stableDriverColor(marker.driverId, marker.rigName) } as React.CSSProperties}
                 transform={`translate(${marker.x} ${marker.y})`}
               >
                 <circle r="14" />
@@ -798,11 +837,12 @@ function Metric({ label, value, indicators, featured }: MetricProps) {
 }
 
 interface ClockMetricProps {
-  currentSeconds: number | null | undefined;
+  session: LiveSessionInfo | null | undefined;
 }
 
-function ClockMetric({ currentSeconds }: ClockMetricProps) {
-  const [clockAnchor, setClockAnchor] = useState({ seconds: 0, timestamp: Date.now() });
+function ClockMetric({ session }: ClockMetricProps) {
+  const currentSeconds = session?.currentSessionSeconds;
+  const [clockAnchor, setClockAnchor] = useState({ seconds: currentSeconds ?? 0, timestamp: Date.now() });
   const [tick, setTick] = useState(Date.now());
 
   useEffect(() => {
@@ -811,22 +851,38 @@ function ClockMetric({ currentSeconds }: ClockMetricProps) {
     }
 
     setClockAnchor({ seconds: currentSeconds, timestamp: Date.now() });
-  }, [currentSeconds]);
+  }, [currentSeconds, session?.phase]);
 
   useEffect(() => {
-    if (currentSeconds == null) {
+    if (currentSeconds == null || session?.phase !== 'GreenFlag') {
       return;
     }
 
-    const interval = window.setInterval(() => setTick(Date.now()), 50);
+    const interval = window.setInterval(() => setTick(Date.now()), 100);
     return () => window.clearInterval(interval);
-  }, [currentSeconds]);
+  }, [currentSeconds, session?.phase]);
 
   const interpolatedSeconds = currentSeconds != null
-    ? clockAnchor.seconds + Math.max(0, (tick - clockAnchor.timestamp) / 1000)
+    ? clockAnchor.seconds + (session?.phase === 'GreenFlag' ? Math.max(0, (tick - clockAnchor.timestamp) / 1000) : 0)
     : undefined;
+  const totalSeconds = session?.scheduledDurationSeconds;
+  const value = interpolatedSeconds == null
+    ? '-'
+    : totalSeconds != null && Number.isFinite(totalSeconds) && totalSeconds > 0
+      ? `${formatSessionDuration(interpolatedSeconds)} / ${formatSessionDuration(totalSeconds)}`
+      : formatSessionDuration(interpolatedSeconds);
 
-  return <Metric label="Clock" value={formatLapTime(interpolatedSeconds)} />;
+  return <Metric label="Session Time" value={value} />;
+}
+
+export function formatSessionDuration(seconds: number): string {
+  const totalSeconds = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const remainder = totalSeconds % 60;
+  return hours > 0
+    ? `${hours}:${minutes.toString().padStart(2, '0')}:${remainder.toString().padStart(2, '0')}`
+    : `${minutes}:${remainder.toString().padStart(2, '0')}`;
 }
 
 interface SlimMetricProps {

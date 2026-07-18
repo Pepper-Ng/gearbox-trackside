@@ -931,7 +931,8 @@ tbody tr:last-child td {
 }
 
 .driverMarker {
-  transition: transform 200ms linear;
+  /* Compact Tracker frames arrive at display cadence; retain only a tiny guard against uneven network delivery. */
+  transition: transform 45ms linear;
 }
 
 .driverMarker circle {

@@ -88,13 +88,13 @@ The `Trackside` section in `Trackside.Service/appsettings.json` controls:
 - `Source.SharedMemory.DedicatedServerProcessNames` - process-name hints used to probe PID-suffixed maps after Dedicated Server restarts.
 - `Source.SharedMemory.MultipleScoringMapPolicy` - defaults to `RequireExplicitSelection`, so multiple simultaneous PID-suffixed scoring maps are reported instead of silently chosen.
 - `Source.SharedMemory.Telemetry.Enabled` - disabled by default; enable it for live shared-memory telemetry capture once the rF2 plugin is publishing maps. Scoring remains the leaderboard and lap-validity source.
-- `LiveSession.PublishIntervalSeconds` - background SignalR publish cadence.
+- `LiveSession.PublishIntervalSeconds` - background SignalR publish cadence for full normalized snapshots. This does not limit compact Tracker positions.
 - `Persistence.Enabled` - enables the durable Phase 2 store.
 - `Persistence.DatabasePath` / `Persistence.DatabaseFileName` - optional database location override or file name under the resolved data directory.
 - `Persistence.CountSessionsByDefault` - default inclusion flag for newly persisted live-session summaries until staff changes a session in the admin Sessions tab.
 - `Persistence.Retention.*` - retention policy targets for detailed lap records, session summaries, long-lived track best records, monthly track periods, and future telemetry samples. A background cleanup worker and admin trigger enforce these windows while preserving derived track-best records by default.
 - `Kiosk.DefaultDisplayMode` - default kiosk view for newly opened screens: Monthly, Weekly, Daily, LastSession, or Live.
-- `DriverTracker.ClientRefreshHz` - browser-side refresh/redraw rate for `/tracker`, defaulting to 30 Hz. Admins can raise it up to 60 Hz when venue hardware is comfortable. Source freshness still depends on the active rFactor 2 scoring or telemetry source.
+- `DriverTracker.ClientRefreshHz` - end-to-end compact Tracker SignalR cadence, defaulting to 30 Hz and configurable up to 120 Hz. Tracker/Combined browsers opt into this stream and coalesce delivery to their display paint rate. With telemetry enabled it uses high-rate telemetry positions; with telemetry disabled it still uses scoring positions at `Source.SharedMemory.ScoringPollHz` instead of the slower full-snapshot cadence.
 - `DriverTracker.GeometryRecordingLaps` - default number of complete lap passes to average before generated track geometry is considered complete. In admin, **Improve Outline** keeps stored geometry and averages additional completed laps, **Start Over** clears it before a fresh recording, and **Delete Outline** removes stored/in-progress geometry without deleting sessions or laps. Catalog progress refreshes once per second only while the visible Tracker tab is active.
 - `Deployment.*` - install mode, service name, bundle version, install root, config/data/log/update paths, and manifest path. Detailed paths are surfaced through the authenticated admin status endpoint rather than public `/api/health`.
 - `Updates.*` - placeholder update status/channel/manifest fields for future dashboard-controlled updates.

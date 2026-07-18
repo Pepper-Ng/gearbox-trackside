@@ -4,16 +4,21 @@ export function trackerDriverColorByIndex(index: number): string {
   return trackerDriverPalette[Math.max(0, index) % trackerDriverPalette.length];
 }
 
-export function stableDriverColor(driverId: string, label?: string): string {
-  const numericId = Number.parseInt(driverId, 10);
-  if (Number.isFinite(numericId) && numericId > 0) {
-    return trackerDriverColorByIndex(numericId - 1);
+export function stableDriverColor(driverId: string, stableIdentity?: string): string {
+  const key = (stableIdentity || driverId || '').trim();
+  const ordinalMatch = /(\d+)$/u.exec(key);
+  if (ordinalMatch) {
+    const ordinal = Number.parseInt(ordinalMatch[1], 10);
+    if (ordinal > 0) {
+      // Venue rigs use identities such as Setup1/2/3, which must always begin red/orange/blue.
+      return trackerDriverColorByIndex(ordinal - 1);
+    }
   }
 
-  const key = `${driverId || ''}:${label || ''}`;
   let hash = 0;
-  for (let index = 0; index < key.length; index++) {
-    hash = ((hash << 5) - hash + key.charCodeAt(index)) | 0;
+  const normalizedKey = key.toUpperCase();
+  for (let index = 0; index < normalizedKey.length; index++) {
+    hash = ((hash << 5) - hash + normalizedKey.charCodeAt(index)) | 0;
   }
 
   return trackerDriverColorByIndex(Math.abs(hash));

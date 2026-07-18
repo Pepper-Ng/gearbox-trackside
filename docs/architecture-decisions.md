@@ -125,6 +125,8 @@ Required endpoints:
 
 The scoring collector may read more often internally, but browser publish cadence should be configurable and capped to the live board need, initially **1-10 Hz**. Telemetry collection at **50 Hz** must not push every raw sample to kiosk clients. Telemetry should be collected, buffered, persisted, and summarized separately so a slow browser cannot slow down data collection.
 
+The Tracker/Combined views use a narrower exception: scoring or telemetry is projected into compact driver-id/X/Y/Z frames, reduced to the configured Tracker cadence (maximum 120 Hz), and sent only to SignalR clients that opt into the Tracker group. Full leaderboard/session snapshots remain on the lower `LiveSession.PublishIntervalSeconds` cadence, and no raw telemetry payload is sent to browsers.
+
 SignalR reconnects must recover by fetching `/api/live-session/current` and then resubscribing. The UI should never depend on page refreshes for normal session transitions.
 
 ### Data-source abstraction decision

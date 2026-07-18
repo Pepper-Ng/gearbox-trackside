@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { type DriverSnapshot, type LiveSessionSnapshot, type SectorSnapshot } from '../tracksideApi';
-import { getFlagColor, getFlagDisplayText, getViewFromPath, isCheckeredFlag, shouldShowFlagSwatchText, toViewMode } from './App';
+import { applyTrackerPositionUpdate, formatSessionDuration, getFlagColor, getFlagDisplayText, getViewFromPath, isCheckeredFlag, shouldShowFlagSwatchText, toViewMode } from './App';
 import { stableDriverColor, trackerDriverColorByIndex } from './driverColors';
 import { getConnectionIndicators, getDriverStatus, getRaceLapProgress, getRacePositionDelta } from './liveBoardLogic';
 import { buildSectorStripeStates, createEmptySectorStripeCache, type SectorStripeState } from './sectorStripeLogic';
@@ -69,10 +69,31 @@ describe('tracker colors', () => {
   });
 
   it('keeps a driver color stable regardless of row order', () => {
-    const niko = stableDriverColor('7', 'Niko');
+    const setup1 = stableDriverColor('47', 'Setup1');
 
-    expect(stableDriverColor('7', 'Niko')).toBe(niko);
-    expect(stableDriverColor('8', 'Antonio')).not.toBe(niko);
+    expect(setup1).toBe('#ff202d');
+    expect(stableDriverColor('3', 'Setup1')).toBe(setup1);
+    expect(stableDriverColor('47', 'Setup2')).toBe('#ff8a00');
+    expect(stableDriverColor('47', 'Setup3')).toBe('#00b0ff');
+  });
+
+  it('merges compact positions without changing driver identity or rank', () => {
+    const snapshot = makeSnapshot({ sessionKind: 'Practice', drivers: [makeDriver({ driverId: '7', rigName: 'Setup1', posX: 1, posZ: 2 })] });
+
+    const merged = applyTrackerPositionUpdate(snapshot, {
+      sequence: 9,
+      timestampUtc: '2026-06-24T12:00:00.050+00:00',
+      source: 'telemetry',
+      trackName: 'Loch Drummond - Short',
+      phase: 'GreenFlag',
+      currentSessionSeconds: 45.05,
+      scheduledDurationSeconds: 1200,
+      vehicles: [{ driverId: '7', posX: 13.25, posY: 0.5, posZ: -7.25 }],
+    });
+
+    expect(merged?.drivers[0]).toMatchObject({ driverId: '7', rigName: 'Setup1', leaderboardRank: 1, posX: 13.25, posY: 0.5, posZ: -7.25 });
+    expect(merged?.session.currentSessionSeconds).toBe(45.05);
+    expect(merged?.session.scheduledDurationSeconds).toBe(1200);
   });
 
   it('can derive provisional tracker bounds from live driver positions before geometry is ready', () => {
@@ -84,6 +105,13 @@ describe('tracker colors', () => {
     expect(bounds).not.toBeNull();
     expect(bounds!.maxWorldX - bounds!.minWorldX).toBeGreaterThanOrEqual(80);
     expect(bounds!.maxWorldZ - bounds!.minWorldZ).toBeGreaterThanOrEqual(80);
+  });
+});
+
+describe('session time formatting', () => {
+  it('formats minute and hour session durations without lap-time milliseconds', () => {
+    expect(formatSessionDuration(65.9)).toBe('1:05');
+    expect(formatSessionDuration(3661.9)).toBe('1:01:01');
   });
 });
 

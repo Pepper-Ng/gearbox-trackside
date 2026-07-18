@@ -1,11 +1,10 @@
-import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, useMemo, useRef } from 'react';
 import { type DriverSnapshot, type LiveSessionSnapshot, type TrackGeometryBounds, type TrackGeometryResponse } from '../tracksideApi';
-import { stableDriverColor, trackerDriverColorByIndex } from './driverColors';
+import { stableDriverColor } from './driverColors';
 
 interface TrackerPageProps {
   snapshot: LiveSessionSnapshot | null;
   geometry: TrackGeometryResponse | null;
-  clientRefreshHz: number | null | undefined;
 }
 
 const mapWidth = 1000;
@@ -13,51 +12,24 @@ const minMapHeight = 360;
 const maxMapHeight = 1000;
 const mapPadding = 56;
 
-export function TrackerPage({ snapshot, geometry, clientRefreshHz }: TrackerPageProps) {
-  const [trackerSnapshot, setTrackerSnapshot] = useState<LiveSessionSnapshot | null>(snapshot);
-  const latestSnapshot = useRef<LiveSessionSnapshot | null>(snapshot);
-  const refreshHz = clampRefreshHz(clientRefreshHz);
-
-  useEffect(() => {
-    latestSnapshot.current = snapshot;
-  }, [snapshot]);
-
-  useEffect(() => {
-    let cancelled = false;
-    let timer = 0;
-
-    function tick() {
-      // The backend snapshot cadence can be slower than marker animation; reuse the latest snapshot at the UI refresh rate.
-      setTrackerSnapshot(latestSnapshot.current);
-      if (!cancelled) {
-        timer = window.setTimeout(tick, 1000 / refreshHz);
-      }
-    }
-
-    tick();
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [refreshHz]);
-
-  const trackerBounds = useMemo(() => resolveTrackerBounds(geometry?.bounds, trackerSnapshot?.drivers ?? []), [geometry?.bounds, trackerSnapshot?.drivers]);
+export function TrackerPage({ snapshot, geometry }: TrackerPageProps) {
+  const trackerBounds = useStableTrackerBounds(geometry?.bounds, snapshot?.drivers ?? [], snapshot?.session.trackName);
   const mapMetrics = useMemo(() => buildMapMetrics(trackerBounds), [trackerBounds]);
   // Geometry points are already normalized by the backend, so the browser only adapts them to the current SVG viewport.
   const pathPoints = useMemo(() => (geometry?.points ?? [])
     .map(point => toSvgPoint(point.x, point.y, mapMetrics))
     .map(point => `${point.x},${point.y}`)
     .join(' '), [geometry?.points, mapMetrics]);
-  const markers = useMemo(() => buildDriverMarkers(trackerSnapshot?.drivers ?? [], trackerBounds, mapMetrics), [trackerSnapshot?.drivers, trackerBounds, mapMetrics]);
+  const markers = useMemo(() => buildDriverMarkers(snapshot?.drivers ?? [], trackerBounds, mapMetrics), [snapshot?.drivers, trackerBounds, mapMetrics]);
   const markerColors = useStableDriverColors(markers);
 
   return (
     <section className="trackerPage" aria-label="Driver tracker">
-      <svg className="trackerMap" viewBox={`0 0 ${mapMetrics.width} ${mapMetrics.height}`} role="img" aria-label={trackerSnapshot?.session.trackName ?? 'Track map'}>
+      <svg className="trackerMap" viewBox={`0 0 ${mapMetrics.width} ${mapMetrics.height}`} role="img" aria-label={snapshot?.session.trackName ?? 'Track map'}>
         <rect className="trackerMapBackground" x="0" y="0" width={mapMetrics.width} height={mapMetrics.height} rx="18" />
         {geometry?.isAvailable && pathPoints ? <polyline className="trackGeometryLine" points={pathPoints} /> : null}
         {markers.map(marker => (
-          <g key={marker.driverId} className="driverMarker" style={{ '--marker-color': markerColors.get(marker.driverId) ?? stableDriverColor(marker.driverId, marker.label) } as CSSProperties} transform={`translate(${marker.x} ${marker.y})`}>
+          <g key={marker.driverId} className="driverMarker" style={{ '--marker-color': markerColors.get(marker.driverId) ?? stableDriverColor(marker.driverId, marker.rigName) } as CSSProperties} transform={`translate(${marker.x} ${marker.y})`}>
             <circle r="14" />
             <text y="5">{marker.rank}</text>
             <title>{marker.label}</title>
@@ -67,7 +39,7 @@ export function TrackerPage({ snapshot, geometry, clientRefreshHz }: TrackerPage
 
       <div className="trackerRoster" aria-label="Driver positions">
         {markers.map(marker => (
-          <div key={marker.driverId} className="trackerRosterItem" style={{ '--marker-color': markerColors.get(marker.driverId) ?? stableDriverColor(marker.driverId, marker.label) } as CSSProperties}>
+          <div key={marker.driverId} className="trackerRosterItem" style={{ '--marker-color': markerColors.get(marker.driverId) ?? stableDriverColor(marker.driverId, marker.rigName) } as CSSProperties}>
             <span>{marker.rank}</span>
             <strong>{marker.label}</strong>
             <small>{marker.rigName}</small>
@@ -93,28 +65,10 @@ export interface DriverMarker {
 }
 
 export function useStableDriverColors(markers: DriverMarker[]): Map<string, string> {
-  const assignments = useRef(new Map<string, string>());
-  const nextIndex = useRef(0);
-  const markerKey = markers.map(marker => marker.driverId).join('|');
-
-  return useMemo(() => {
-    // Keep colours stable while a driver is visible, but prune old sessions so a kiosk can run all day.
-    const visibleDriverIds = new Set(markers.map(marker => marker.driverId));
-    for (const driverId of assignments.current.keys()) {
-      if (!visibleDriverIds.has(driverId)) {
-        assignments.current.delete(driverId);
-      }
-    }
-
-    for (const marker of markers) {
-      if (!assignments.current.has(marker.driverId)) {
-        assignments.current.set(marker.driverId, trackerDriverColorByIndex(nextIndex.current));
-        nextIndex.current += 1;
-      }
-    }
-
-    return new Map(assignments.current);
-  }, [markerKey, markers]);
+  return useMemo(
+    () => new Map(markers.map(marker => [marker.driverId, stableDriverColor(marker.driverId, marker.rigName)])),
+    [markers],
+  );
 }
 
 export function buildMapMetrics(bounds: TrackGeometryBounds | null | undefined): MapMetrics {
@@ -184,6 +138,42 @@ export function resolveTrackerBounds(bounds: TrackGeometryBounds | null | undefi
   });
 }
 
+export function useStableTrackerBounds(
+  geometryBounds: TrackGeometryBounds | null | undefined,
+  drivers: DriverSnapshot[],
+  trackName: string | null | undefined,
+): TrackGeometryBounds | null {
+  const provisional = useRef<{ trackName: string; bounds: TrackGeometryBounds } | null>(null);
+  return useMemo(() => {
+    const normalizedTrackName = trackName?.trim() ?? '';
+    if (geometryBounds) {
+      provisional.current = { trackName: normalizedTrackName, bounds: geometryBounds };
+      return geometryBounds;
+    }
+
+    const nextBounds = resolveTrackerBounds(null, drivers);
+    if (!nextBounds) {
+      return provisional.current?.trackName === normalizedTrackName ? provisional.current.bounds : null;
+    }
+
+    const previous = provisional.current;
+    const stableBounds = previous?.trackName === normalizedTrackName
+      ? unionBounds(previous.bounds, nextBounds)
+      : nextBounds;
+    provisional.current = { trackName: normalizedTrackName, bounds: stableBounds };
+    return stableBounds;
+  }, [geometryBounds, drivers, trackName]);
+}
+
+function unionBounds(left: TrackGeometryBounds, right: TrackGeometryBounds): TrackGeometryBounds {
+  return {
+    minWorldX: Math.min(left.minWorldX, right.minWorldX),
+    maxWorldX: Math.max(left.maxWorldX, right.maxWorldX),
+    minWorldZ: Math.min(left.minWorldZ, right.minWorldZ),
+    maxWorldZ: Math.max(left.maxWorldZ, right.maxWorldZ),
+  };
+}
+
 function expandBounds(bounds: TrackGeometryBounds): TrackGeometryBounds {
   // A single car, or a tight group leaving the pits, would otherwise collapse the SVG scale and make markers jump.
   const minimumSpan = 80;
@@ -204,15 +194,6 @@ export function toSvgPoint(normalizedX: number, normalizedY: number, metrics: Ma
     x: mapPadding + (Math.min(1, Math.max(0, normalizedX)) * (metrics.width - (mapPadding * 2))),
     y: mapPadding + (Math.min(1, Math.max(0, normalizedY)) * (metrics.height - (mapPadding * 2))),
   };
-}
-
-export function clampRefreshHz(value: number | null | undefined): number {
-  if (!isFiniteNumber(value)) {
-    // The server exposes this as an operator setting; 30 Hz is the venue-safe browser fallback.
-    return 30;
-  }
-
-  return Math.min(60, Math.max(1, value));
 }
 
 function isFiniteNumber(value: number | null | undefined): value is number {
