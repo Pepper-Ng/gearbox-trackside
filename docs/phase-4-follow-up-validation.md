@@ -11,13 +11,15 @@ Implementation commits:
 - `a45b7b3` — Safe stored/in-progress outline deletion and endpoint tests.
 - `a7ab8e2` — Active-only Tracker polling, action guidance, and delete UI.
 - `6c24602` — Independent multi-result tabs with integrated close controls.
+- `51c2fa0` — Semantic track-evidence gating and permanent catalog-row deletion.
+- `e8229d4` — Live Sessions polling, Tracker detail wrapping, and aligned result-tab rows.
 
 ## Automated validation
 
 The following checks ran without restoring or installing packages:
 
 - `dotnet test services/trackside/Trackside.slnx --no-restore`
-  - Result: 107 passed, 0 failed, 0 skipped.
+  - Result: 115 passed, 0 failed, 0 skipped.
 - `npm --prefix web/kiosk test`
   - Result: 20 passed, 0 failed.
 - `npm --prefix web/kiosk run build`
@@ -48,6 +50,8 @@ The later Advanced/Status consolidation was checked again at 1366×768, 1024×76
 
 The final Tracker and Sessions changes were exercised with mocked API test data in the real admin JavaScript. Tracker catalog values changed once per second while Tracker was active; 32 catalog refreshes produced only one current-geometry/source probe. Delete Outline reset recording, samples, candidate coverage, row state, and preview detail without deleting sessions. Two simultaneous result tabs preserved independent Manage Results state, switched to the correct cached detail, exposed exactly one selected ARIA tab, and restored focus to the neighboring tab after close. Five-tab layout checks at 1920, 1366, and 1024 used a single horizontally scrolling result rail without page-level overflow.
 
+The follow-up placeholder/layout/live-session fixes were also browser-checked with synthetic API data. A live session that became active after the Sessions page loaded appeared without pressing Refresh Sessions, and polling stopped immediately after leaving the tab. At 1366px, a long Tracker detail wrapped inside a fixed 260px column while the 220px action column stayed inside the table frame. At 1024px, overview and result-tab rows had a measured 0px vertical gap; active and inactive result tabs shared the same top/bottom alignment against the workspace canvas.
+
 ## Localization validation
 
 The browser executed the admin localization code and switched from English to Dutch. The affected Dutch labels rendered as:
@@ -70,7 +74,9 @@ English rendering was checked before switching languages, including `Selected Tr
 - Tracker settings and actions are consolidated, and unavailable, recording, partial, and complete states remain distinct.
 - Selecting any catalog track loads its stored geometry through the authenticated, catalog-validated admin endpoint; the preview is no longer limited to the current live track.
 - Improve Outline retains existing geometry and averages more completed laps; Start Over clears geometry before fresh recording. Delete Outline removes stored/in-progress geometry without touching sessions or laps. Catalog polling runs only while the visible Tracker tab is active and does not repeatedly probe the current source.
+- Track catalog entries are created only after active GreenFlag scoring provides finite lap distance and at least one valid on-track driver/lap context. Placeholder display names therefore cannot create geometry rows. Deletion removes the persisted file and in-memory catalog row, so legacy placeholders stay gone unless fresh semantic track evidence is later observed.
 - Sessions supports multiple coherent closable result tabs. Each tab preserves its own driver selection, Compare Drivers visibility, and Manage Results state. The close icon is part of the tab surface, keyboard navigation and focus restoration follow tab semantics, and overflow remains inside a single result rail.
+- The Sessions workspace polls its lightweight live snapshot while authenticated, visible, and active. Live cards update immediately; persisted summaries reconcile only on transitions or during a short bounded wait for Open Results, without repeatedly refreshing open result-tab details.
 - Older Results exposes direct deletion only when the result is neither active nor inside the protected three-hour recent window. The API independently enforces the same safeguard and confirmation remains in the browser flow.
 
 ## Limitation
