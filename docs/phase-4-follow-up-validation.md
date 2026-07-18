@@ -13,15 +13,17 @@ Implementation commits:
 - `6c24602` — Independent multi-result tabs with integrated close controls.
 - `51c2fa0` — Semantic track-evidence gating and permanent catalog-row deletion.
 - `e8229d4` — Live Sessions polling, Tracker detail wrapping, and aligned result-tab rows.
+- `b9d784d` — Compact high-rate scoring/telemetry Tracker SignalR stream.
+- `8c73823` — Animation-frame Tracker rendering, deterministic rig colors, and session time.
 
 ## Automated validation
 
 The following checks ran without restoring or installing packages:
 
 - `dotnet test services/trackside/Trackside.slnx --no-restore`
-  - Result: 115 passed, 0 failed, 0 skipped.
+  - Result: 118 passed, 0 failed, 0 skipped.
 - `npm --prefix web/kiosk test`
-  - Result: 20 passed, 0 failed.
+  - Result: 22 passed, 0 failed.
 - `npm --prefix web/kiosk run build`
   - Result: passed.
 - `node --check services/trackside/Trackside.Service/wwwroot/configuration.js`
@@ -52,6 +54,8 @@ The final Tracker and Sessions changes were exercised with mocked API test data 
 
 The follow-up placeholder/layout/live-session fixes were also browser-checked with synthetic API data. A live session that became active after the Sessions page loaded appeared without pressing Refresh Sessions, and polling stopped immediately after leaving the tab. At 1366px, a long Tracker detail wrapped inside a fixed 260px column while the 220px action column stayed inside the table frame. At 1024px, overview and result-tab rows had a measured 0px vertical gap; active and inactive result tabs shared the same top/bottom alignment against the workspace canvas.
 
+The severe one-second Tracker jump was traced to the full `SessionUpdated` publisher cadence: the old browser refresh loop only rendered the same stale snapshot repeatedly. Tracker/Combined clients now opt into compact driver-id/X/Y/Z frames projected directly from scoring or telemetry, rate-limited to the configured 1–120 Hz and coalesced to animation frames in the browser. Scoring frames provide the fast fallback when telemetry is disabled; telemetry positions take over when available. Unit coverage verifies both projections and track mismatch rejection.
+
 ## Localization validation
 
 The browser executed the admin localization code and switched from English to Dutch. The affected Dutch labels rendered as:
@@ -77,6 +81,8 @@ English rendering was checked before switching languages, including `Selected Tr
 - Track catalog entries are created only after active GreenFlag scoring provides finite lap distance and at least one valid on-track driver/lap context. Placeholder display names therefore cannot create geometry rows. Deletion removes the persisted file and in-memory catalog row, so legacy placeholders stay gone unless fresh semantic track evidence is later observed.
 - Sessions supports multiple coherent closable result tabs. Each tab preserves its own driver selection, Compare Drivers visibility, and Manage Results state. The close icon is part of the tab surface, keyboard navigation and focus restoration follow tab semantics, and overflow remains inside a single result rail.
 - The Sessions workspace polls its lightweight live snapshot while authenticated, visible, and active. Live cards update immediately; persisted summaries reconcile only on transitions or during a short bounded wait for Open Results, without repeatedly refreshing open result-tab details.
+- Driver colors are derived only from stable rig identity, so Setup1/Setup2/Setup3 are always red/orange/blue regardless of rank, aliases, settings reloads, or session transitions. Provisional Tracker bounds only expand for a track instead of recentering around moving cars, and the former 200ms marker lag is reduced to a small network-jitter guard.
+- The Clock metric now shows interpolated rFactor session elapsed time and scheduled total (`current / total` when available), rather than appearing to start from browser connection time.
 - Older Results exposes direct deletion only when the result is neither active nor inside the protected three-hour recent window. The API independently enforces the same safeguard and confirmation remains in the browser flow.
 
 ## Limitation
