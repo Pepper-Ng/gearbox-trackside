@@ -4,23 +4,30 @@ Date: 2026-07-18
 
 Implementation commits:
 
-- `7156f33` — Status, Advanced diagnostics, and dedicated Tracker administration.
-- `264c0e4` — Sessions workspace polish and protected historical-result deletion.
-- `24d1cc8` — Selected-track geometry lookup, preview, localization, and endpoint tests.
-- `1fa6e88` — Advanced source consolidation and pinned Status diagnostics.
+- `1d738d0` — Status, Advanced diagnostics, and dedicated Tracker administration.
+- `2c4c783` — Sessions workspace polish and protected historical-result deletion.
+- `974b76d` — Selected-track geometry lookup, preview, localization, and endpoint tests.
+- `dda352f` — Advanced source consolidation and pinned Status diagnostics.
+- `a45b7b3` — Safe stored/in-progress outline deletion and endpoint tests.
+- `a7ab8e2` — Active-only Tracker polling, action guidance, and delete UI.
+- `6c24602` — Independent multi-result tabs with integrated close controls.
 
 ## Automated validation
 
 The following checks ran without restoring or installing packages:
 
 - `dotnet test services/trackside/Trackside.slnx --no-restore`
-  - Result: 96 passed, 0 failed, 0 skipped.
+  - Result: 107 passed, 0 failed, 0 skipped.
+- `npm --prefix web/kiosk test`
+  - Result: 20 passed, 0 failed.
+- `npm --prefix web/kiosk run build`
+  - Result: passed.
 - `node --check services/trackside/Trackside.Service/wwwroot/configuration.js`
   - Result: passed.
 - `git diff --check`
   - Result: passed.
 
-The selected-track endpoint tests cover missing names, unknown catalog entries, known catalog geometry, and authorization metadata. Existing tests continue to cover geometry state and active/recent session deletion protection.
+The selected-track endpoint tests cover missing names, unknown catalog entries, known catalog geometry, delete responses, and authorization metadata. Recorder tests verify deletion removes persisted geometry, resets recording/candidate state, and publishes an unavailable frame. Existing tests continue to cover geometry state and active/recent session deletion protection.
 
 ## Browser viewport validation
 
@@ -38,6 +45,8 @@ The following viewport sizes were exercised:
 At 1024px the Tracker outline panel, state facts, progress values, and table remained readable. The Sessions result tab group, six summary metrics, participant actions, and light correction input remained within the workspace. After the final Source-tab consolidation, the reduced admin navigation fit on one row at this width.
 
 The later Advanced/Status consolidation was checked again at 1366×768, 1024×768, and 600×800. The paired source checkboxes and polling-rate fields remained side by side at the venue-oriented widths and stacked at the existing 620px narrow-layout breakpoint. No page-level horizontal overflow occurred. Raw status appeared only in the collapsible Status diagnostic, not in Advanced.
+
+The final Tracker and Sessions changes were exercised with mocked API test data in the real admin JavaScript. Tracker catalog values changed once per second while Tracker was active; 32 catalog refreshes produced only one current-geometry/source probe. Delete Outline reset recording, samples, candidate coverage, row state, and preview detail without deleting sessions. Two simultaneous result tabs preserved independent Manage Results state, switched to the correct cached detail, exposed exactly one selected ARIA tab, and restored focus to the neighboring tab after close. Five-tab layout checks at 1920, 1366, and 1024 used a single horizontally scrolling result rail without page-level overflow.
 
 ## Localization validation
 
@@ -60,7 +69,8 @@ English rendering was checked before switching languages, including `Selected Tr
 - The redundant alias JSON editor is absent while existing aliases continue to round-trip safely.
 - Tracker settings and actions are consolidated, and unavailable, recording, partial, and complete states remain distinct.
 - Selecting any catalog track loads its stored geometry through the authenticated, catalog-validated admin endpoint; the preview is no longer limited to the current live track.
-- Sessions uses one coherent closable result tab, concise staff copy, explicit Edit actions in management mode, light controls, and a compact summary.
+- Improve Outline retains existing geometry and averages more completed laps; Start Over clears geometry before fresh recording. Delete Outline removes stored/in-progress geometry without touching sessions or laps. Catalog polling runs only while the visible Tracker tab is active and does not repeatedly probe the current source.
+- Sessions supports multiple coherent closable result tabs. Each tab preserves its own driver selection, Compare Drivers visibility, and Manage Results state. The close icon is part of the tab surface, keyboard navigation and focus restoration follow tab semantics, and overflow remains inside a single result rail.
 - Older Results exposes direct deletion only when the result is neither active nor inside the protected three-hour recent window. The API independently enforces the same safeguard and confirmation remains in the browser flow.
 
 ## Limitation
