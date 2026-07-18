@@ -1,7 +1,7 @@
 # Phase 4 rFactor 2 Integration and Venue Validation Record
 
-**Record date:** 2026-07-18  
-**Validation status:** Complete for the agreed Phase 4 live-integration and venue-readiness scope  
+**Record date:** 2026-07-18
+**Validation status:** Complete for the agreed Phase 4 live-integration and venue-readiness scope
 **Evidence owner:** Operator-reported venue run, supported by the existing local implementation and automated tests
 
 This record documents the actual venue findings and the decisions made about what was and was not tested. It is intentionally not a claim that venue data can be exported or retained: the venue's data-integrity and security rules prohibited extracting real-world samples.
@@ -32,10 +32,10 @@ The Phase 4 close-out UI refinements are listed in [phase-4-follow-up-todo.md](.
 | Trackside run mode | `Trackside.Service --console` | Verified; Windows Service installation and reboot recovery were not part of this sign-off |
 | rFactor 2 Dedicated Server build | **Not recorded** | The exact executable/Steam build number was not captured and must not be inferred from this record |
 | rFactor 2 client build | **Not recorded** | The exact client build number was not captured; the local and venue setups were observed to behave equivalently |
-| Shared-memory plugin | rF2 Shared Memory Map Plugin **3.7.15.1**, x64 | The vendored and upstream-referenced DLL identity is documented in [vendor/README.md](../vendor/README.md) and [rfactor2-dedicated-crash-runbook.md](./rfactor2-dedicated-crash-runbook.md) |
+| Shared-memory plugin | rF2 Shared Memory Map Plugin **3.7.15.1**, x64 | The vendored and upstream-referenced DLL identity is documented in [vendor/README.md](../vendor/README.md) |
 | Server content | F1 DLC cars/tracks and the venue's representative server content | Exact event, car, and track package names were not retained |
 | Client content | The five licensed venue client installations with the corresponding F1 DLC content | Exact package/profile inventory was not retained |
-| Server profile | Active profile path/name not recorded | The runbook requires the active `+profile` value to be captured during a future evidence run |
+| Server profile | Active profile path/name not recorded | Capture the active `+profile` value during a future validation run |
 | Client profiles | Fixed rig identities such as `Setup1`, `Setup2`, and the other setup names | Exact profile paths were not retained; driver-ID/profile association was verified at the Trackside workflow level |
 
 The missing build/profile metadata is a documentation gap, not evidence of a runtime incompatibility. If exact build provenance becomes operationally important, capture it during the next local maintenance window without reopening the venue validation.
