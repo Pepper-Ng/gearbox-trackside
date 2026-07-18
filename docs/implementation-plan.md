@@ -19,7 +19,7 @@ Trackside provides:
 * Per-driver telemetry web reports after the UI foundation and local rFactor 2 validation.
 * Later PDF/printable telemetry reports.
 
-Current planning status: Phase 0A PoC is complete, the telemetry/source direction is decided, ADR-0001 has accepted .NET / ASP.NET Core for the production host, Phase 0B produced the service/tray/rig-agent/kiosk scaffold, Phase 0C added the packaged runtime skeleton, Phase 1 delivered the live board, and Phase 2 delivered staff controls plus historical boards. The reordered roadmap now moves to Phase 3 UI foundation before local rFactor 2 integration validation, telemetry/report implementation, and venue validation.
+Current planning status: Phase 0A PoC is complete, the telemetry/source direction is decided, ADR-0001 has accepted .NET / ASP.NET Core for the production host, Phase 0B produced the service/tray/rig-agent/kiosk scaffold, Phase 0C added the packaged runtime skeleton, Phase 1 delivered the live board, Phase 2 delivered staff controls plus historical boards, Phase 3 delivered the UI foundation, and Phase 4 local rFactor 2 integration plus the agreed venue-readiness validation is complete for the live scoring scope. The Phase 4 evidence, limitations, and readiness decision live in `docs/phase-4-validation.md`; remaining operator UI work is listed in `docs/phase-4-follow-up-todo.md` before Phase 5 continues.
 
 Confirmed venue facts:
 
@@ -492,21 +492,23 @@ Exit criteria:
 
 ### Phase 4 - Local rFactor 2 integration validation
 
-Direction: validate the shared-memory/scoring source against a local rFactor 2 Dedicated Server and client setup before venue access. The shared-memory plugin is widely used in the rFactor 2 ecosystem, and Trackside's source adapter boundaries are designed so field/offset/source quirks can be fixed in the data-source module without rewriting persistence, admin, kiosk, or report logic.
+Status: complete for the agreed live-integration and venue-readiness scope. The local Dedicated Server setup was verified to behave the same as the venue setup, and the venue run confirmed console-hosted service operation, scoring/live timing for five simultaneous setups, PID autodiscovery after Dedicated Server restart, Trackside restart recovery, browser/SignalR reconnect, track changes, and driver-ID/profile association. The formal evidence record is [docs/phase-4-validation.md](phase-4-validation.md). Known operator UI follow-ups are listed in [docs/phase-4-follow-up-todo.md](phase-4-follow-up-todo.md) and are close-out work before Phase 5, not a live-data blocker.
+
+Direction: validate the shared-memory/scoring source against a local rFactor 2 Dedicated Server and client setup before venue access. That validation and the agreed live-scoring venue check are complete. The shared-memory plugin is widely used in the rFactor 2 ecosystem, and Trackside's source adapter boundaries keep field/offset/source quirks isolated from persistence, admin, kiosk, and report logic.
 
 Human prerequisites:
 
-* Provide or run a local Windows environment with rFactor 2 Dedicated Server, one rFactor 2 client, the shared-memory map plugin, and representative content.
-* Provide captured logs, screenshots, memory-map snapshots, or remote access if the agent cannot run the local environment directly.
-* Confirm plugin version and rFactor 2 build used for local testing.
+* Provide or run a local Windows environment with rFactor 2 Dedicated Server, one rFactor 2 client, the shared-memory map plugin, and representative content. - Done.
+* Provide captured logs, screenshots, memory-map snapshots, or remote access if the agent cannot run the local environment directly. - Venue raw samples were not available under the venue's data-integrity/security rules; the local environment is approved for subsequent analysis.
+* Confirm plugin version and rFactor 2 build used for local testing. - Plugin version `3.7.15.1` is recorded; the exact rFactor 2 build was not captured and remains an evidence metadata gap.
 
 Agent implementation/support tasks:
 
-* Prepare a local rFactor 2 validation checklist covering server start, client join, session transitions, laps, valid-lap flags, track/vehicle names, driver ids, shared-memory map discovery, service restart, and kiosk reconnect.
-* Validate that scoring/driver ids stay stable for a rig within a session, with the current assumption that they do unless local testing proves otherwise.
-* Capture a small set of local shared-memory/scoring snapshots for regression fixtures where possible.
+* Prepare a local rFactor 2 validation checklist covering server start, client join, session transitions, laps, valid-lap flags, track/vehicle names, driver ids, shared-memory map discovery, service restart, and kiosk reconnect. - Covered by the validation record; a full scripted session matrix was intentionally not repeated as one exercise.
+* Validate that scoring/driver ids stay stable for a rig within a session, with the current assumption that they do unless local testing proves otherwise. - Done.
+* Capture a small set of local shared-memory/scoring snapshots for regression fixtures where possible. - Deferred because venue samples could not be extracted; useful hardening, not a Phase 4 blocker.
 * Harden `Trackside.Infrastructure/Rf2` parser/source code only when local validation reveals a concrete mismatch; keep all fixes behind `ILiveSessionSource`, parser, or resolver boundaries.
-* Confirm that Phase 2 persistence and correction workflows behave correctly with locally captured real scoring data.
+* Confirm that Phase 2 persistence and correction workflows behave correctly with locally captured real scoring data. - Not separately evidenced with a retained venue database or raw scoring artifact; local store/correction tests remain the reproducible path because venue extraction was prohibited.
 
 Dependencies:
 
@@ -516,14 +518,14 @@ Dependencies:
 
 Validation:
 
-* Local live board updates from real rFactor 2 scoring data.
-* Session changes, track changes, lap validity, and completed-lap persistence behave as expected.
-* Service restart and browser reconnect recover without data corruption.
-* Any source/parser fixes are covered by fixture or parser tests.
+* Local live board updates from real rFactor 2 scoring data. - Done.
+* Session changes, track changes, lap validity, and completed-lap persistence behave as expected. - Track changes and live scoring behavior were verified; the full practice/qualifying/race matrix and retained raw lap fixture were not produced.
+* Service restart and browser reconnect recover without data corruption. - Done, including Dedicated Server restart/new-PID autodiscovery and Trackside restart while rFactor 2 remains running.
+* Any source/parser fixes are covered by fixture or parser tests. - Existing tests pass; real-payload regression coverage remains optional hardening.
 
 Exit criteria:
 
-* Written local validation notes identify the tested rFactor 2/plugin versions, fields confirmed, any gaps found, and whether the data-source module remains sufficient for venue testing.
+* Written validation notes identify the plugin identity, environment/content/profile evidence available, fields confirmed, gaps, and whether the data-source module remains sufficient for venue testing. - Done in [docs/phase-4-validation.md](phase-4-validation.md); exact rFactor 2 build, exact run PID/namespace, and exact profile/content inventory were not retained.
 
 ### Phase 5 - Telemetry collection and report MVP
 
@@ -564,6 +566,8 @@ Exit criteria:
 * A local or fixture-backed user can complete a session, select a driver/session, and view a basic browser telemetry report.
 
 ### Phase 6 - Venue validation
+
+Status: the live scoring/data-source and venue-equivalence portion was covered early by the Phase 4 run and is recorded in [docs/phase-4-validation.md](phase-4-validation.md). This phase remains for any separately approved deployment, telemetry/report, screen-readability, permissions, plugin-coexistence, canary, or rollout checks; it is not required to reopen the already-verified scoring, restart, autodiscovery, reconnect, track-change, or five-setup paths.
 
 Direction: treat venue validation as environment acceptance, not as the first proof that the product works. By this phase, the app should already have presentable UI, local rFactor 2 validation, staff controls, historical boards, and basic telemetry/report flows. The venue trip should identify venue-specific installation, topology, permission, display, and workflow issues.
 
