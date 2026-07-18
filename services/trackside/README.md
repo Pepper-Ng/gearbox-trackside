@@ -1,6 +1,6 @@
 # services/trackside
 
-Phase 0B production scaffold for Trackside.
+Production Trackside service and live-validation baseline.
 
 This solution is intentionally small but shaped like the final application: one Windows-oriented host process owns local HTTP hosting, source abstraction, SignalR push plumbing, tray integration, and static kiosk hosting.
 
@@ -8,7 +8,7 @@ This solution is intentionally small but shaped like the final application: one 
 
 - `Trackside.Domain` - pure live-session domain records.
 - `Trackside.Application` - source contracts, application options, JSON settings, and shared live-session state.
-- `Trackside.Infrastructure` - fixture adapter and future rFactor 2/shared-memory/SQLite implementations.
+- `Trackside.Infrastructure` - fixture, rFactor 2/shared-memory, and SQLite adapters.
 - `Trackside.Service` - executable ASP.NET Core service/web runtime targeting `.NET 10` and `net10.0-windows`.
 - `Trackside.Tray` - WinForms tray companion that opens service-hosted dashboards/status pages.
 - `Trackside.RigAgent` - idle worker scaffold for future rig-side telemetry/setup/spectator support.
