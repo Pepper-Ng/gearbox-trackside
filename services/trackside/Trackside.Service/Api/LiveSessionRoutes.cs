@@ -76,6 +76,11 @@ public static class LiveSessionRoutes
     public const string AdminDriverTrackerTracksPath = "/api/admin/driver-tracker/tracks";
 
     /// <summary>
+    /// Admin endpoint for generated geometry belonging to a selected catalog track.
+    /// </summary>
+    public const string AdminDriverTrackerGeometryPath = "/api/admin/driver-tracker/geometry";
+
+    /// <summary>
     /// Admin endpoint for starting generated-geometry recording passes.
     /// </summary>
     public const string AdminDriverTrackerRecordingsPath = "/api/admin/driver-tracker/recordings";
