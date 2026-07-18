@@ -7,6 +7,7 @@ Implementation commits:
 - `7156f33` — Status, Advanced diagnostics, and dedicated Tracker administration.
 - `264c0e4` — Sessions workspace polish and protected historical-result deletion.
 - `24d1cc8` — Selected-track geometry lookup, preview, localization, and endpoint tests.
+- `1fa6e88` — Advanced source consolidation and pinned Status diagnostics.
 
 ## Automated validation
 
@@ -34,7 +35,9 @@ The following viewport sizes were exercised:
 | Tracker | No page-level horizontal overflow; table fits | No page-level horizontal overflow; table fits | No page-level horizontal overflow; wide diagnostics scroll inside the table frame |
 | Sessions | No page-level horizontal overflow; compact summary fits | No page-level horizontal overflow; compact summary fits | No page-level horizontal overflow; compact summary and light correction form fit |
 
-At 1024px the admin navigation wrapped onto an additional row without overlapping the active surface. The Tracker outline panel, state facts, progress values, and table remained readable. The Sessions result tab group, six summary metrics, participant actions, and light correction input remained within the workspace.
+At 1024px the Tracker outline panel, state facts, progress values, and table remained readable. The Sessions result tab group, six summary metrics, participant actions, and light correction input remained within the workspace. After the final Source-tab consolidation, the reduced admin navigation fit on one row at this width.
+
+The later Advanced/Status consolidation was checked again at 1366×768, 1024×768, and 600×800. The paired source checkboxes and polling-rate fields remained side by side at the venue-oriented widths and stacked at the existing 620px narrow-layout breakpoint. No page-level horizontal overflow occurred. Raw status appeared only in the collapsible Status diagnostic, not in Advanced.
 
 ## Localization validation
 
@@ -52,8 +55,8 @@ English rendering was checked before switching languages, including `Selected Tr
 
 ## Functional completion checks
 
-- Status presents live service, source, persistence/results, and Tracker state for venue staff.
-- Advanced retains raw status JSON, source/persistence/Tracker diagnostics, and the protected read-only fixture path.
+- Status presents live service, source, persistence/results, and Tracker state for venue staff. Raw status JSON is available in a subordinate collapsible diagnostic; automatic refresh pauses while that payload is open so it can be inspected or copied reliably.
+- Advanced contains the live-source configuration, shared-memory discovery, and protected read-only fixture path. Source selection, checkbox behavior, and polling rates are visually grouped, while the removed Source-tab preference migrates to Advanced for existing browsers.
 - The redundant alias JSON editor is absent while existing aliases continue to round-trip safely.
 - Tracker settings and actions are consolidated, and unavailable, recording, partial, and complete states remain distinct.
 - Selecting any catalog track loads its stored geometry through the authenticated, catalog-validated admin endpoint; the preview is no longer limited to the current live track.
