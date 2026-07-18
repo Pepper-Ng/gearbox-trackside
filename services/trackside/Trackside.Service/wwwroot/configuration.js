@@ -42,6 +42,7 @@ const selectedSessionTitleElement = document.querySelector('#selectedSessionTitl
 const selectedSessionSummaryElement = document.querySelector('#selectedSessionSummary');
 const selectedSessionMetricsElement = document.querySelector('#selectedSessionMetrics');
 const selectedSessionTabButtonElement = document.querySelector('#selectedSessionTabButton');
+const selectedSessionTabGroupElement = document.querySelector('#selectedSessionTabGroup');
 const selectedSessionTabLabelElement = document.querySelector('#selectedSessionTabLabel');
 const closeSelectedSessionButton = document.querySelector('#closeSelectedSessionButton');
 const sessionParticipantRowsElement = document.querySelector('#sessionParticipantRows');
@@ -118,6 +119,8 @@ let selectedParticipantId = null;
 let isManageResultsMode = false;
 let isCompareVisible = false;
 let activeSessionWorkspaceTab = 'recent';
+let selectedSessionOriginTab = 'recent';
+let latestSessionWorkspace = null;
 let isPopulatingDriverTrackerSettings = false;
 let driverTrackerSaveTimer = 0;
 let driverTrackerSaveSequence = 0;
@@ -129,6 +132,9 @@ let latestAdminStatus = null;
 let statusPollingTimer = 0;
 let isStatusPolling = false;
 let isStatusRefreshBusy = false;
+
+const recentSessionWindowMs = 3 * 60 * 60 * 1000;
+const activeSessionFreshWindowMs = 15 * 60 * 1000;
 
 const languageStorageKey = 'trackside.admin.language';
 const tabStorageKey = 'trackside.admin.tab';
@@ -286,13 +292,13 @@ const translations = {
     'profiles.notes': 'Notes',
     'profiles.create': 'Create Profile',
     'sessions.title': 'Session Workspace',
-    'sessions.description': 'This workspace helps staff inspect recent results, compare drivers, and only rarely manage stored results.',
+    'sessions.description': 'Review live, recent, and archived results, then open any session for driver details and follow-up.',
     'sessions.liveTitle': 'In Progress',
     'sessions.liveDescription': 'Active sessions stay visible here without taking over the results workspace.',
     'sessions.recentTitle': 'Recently Completed',
     'sessions.recentDescription': 'Up to 4 completed sessions from the last 3 hours stay ready for staff and customer follow-up.',
     'sessions.olderTitle': 'Older Results',
-    'sessions.olderDescription': 'Earlier results stay grouped below so archive browsing does not crowd the latest sessions.',
+    'sessions.olderDescription': 'Browse archived sessions grouped by day and open or remove older stored results.',
     'sessions.boards': 'Boards',
     'sessions.track': 'Track',
     'sessions.kind': 'Session',
@@ -313,6 +319,8 @@ const translations = {
     'sessions.detailDescription': 'Select a session to reveal detailed information without disrupting the list.',
     'sessions.emptyDetail': 'Select a session from the workspace to inspect driver results and open follow-up actions.',
     'sessions.closeResults': 'Close Results',
+    'sessions.loadedSummary': '{recent} recent and {older} older stored sessions loaded.',
+    'sessions.viewing': 'Viewing stored session from {lastSeen}.',
     'sessions.includedMessage': 'Session included in historical boards.',
     'sessions.excludedMessage': 'Session excluded from historical boards.',
     'sessions.correction': 'Correction',
@@ -327,7 +335,8 @@ const translations = {
     'sessions.lastLap': 'Last Lap',
     'sessions.laps': 'Laps',
     'sessions.position': 'Result',
-    'sessions.inspectDriver': 'Inspect',
+    'sessions.editDriver': 'Edit',
+    'sessions.inspectDriver': 'View',
     'sessions.hideDriver': 'Hide',
     'sessions.counted': 'Counted',
     'sessions.observed': 'Observed',
@@ -348,8 +357,11 @@ const translations = {
     'sessions.boardStatus': 'Leaderboards',
     'sessions.lastUpdated': 'Updated',
     'sessions.compareDelta': 'Delta',
-    'sessions.readOnly': 'Normal workspace mode keeps result management hidden until explicitly requested.',
+    'sessions.readOnly': 'Open driver results, compare drivers, or switch on result management for corrections.',
     'sessions.manageHint': 'Manage Results is active. Corrections and destructive actions are now visible for this selected session.',
+    'sessions.deleteBlockedRecent': 'This stored result was updated in the last 3 hours and cannot be deleted yet.',
+    'sessions.deleteBlockedActive': 'This stored result matches an active live session and cannot be deleted.',
+    'sessions.deleteProtectedHint': 'Delete is only available for older sessions outside the recent and active windows.',
     'status.adminCreated': 'Admin user created.',
     'status.passwordChanged': 'Admin password changed.',
     'monthlyBests.empty': 'No counted timed laps yet.',
@@ -411,6 +423,8 @@ const translations = {
     'sessions.noParticipants': 'No participants persisted for this session.',
     'participants.noCompletedLaps': 'No completed laps persisted for this participant.',
     'sessions.deleted': 'Stored session deleted.',
+    'sessions.participantCorrectionSaved': 'Driver correction saved.',
+    'sessions.lapCorrectionSaved': 'Lap correction saved.',
     'sessions.emptyDeleted': 'Deleted {count} empty stored sessions.',
     'sessions.confirmDelete': 'Delete this stored session from history?',
     'sessions.confirmDeleteEmpty': 'Delete stored sessions that have no participants, no completed laps, or no known track?',
@@ -568,13 +582,13 @@ const translations = {
     'profiles.notes': 'Notities',
     'profiles.create': 'Profiel aanmaken',
     'sessions.title': 'Sessiewerkruimte',
-    'sessions.description': 'Deze werkruimte helpt personeel recente resultaten te bekijken, bestuurders te vergelijken en alleen zelden opgeslagen resultaten te beheren.',
+    'sessions.description': 'Bekijk live, recente en gearchiveerde resultaten en open daarna elke sessie voor rijderdetails en opvolging.',
     'sessions.liveTitle': 'Bezig',
     'sessions.liveDescription': 'Actieve sessies blijven hier zichtbaar zonder de resultatenwerkruimte over te nemen.',
     'sessions.recentTitle': 'Recent voltooid',
     'sessions.recentDescription': 'Tot 4 voltooide sessies uit de laatste 3 uur blijven direct beschikbaar voor personeel en klanten.',
     'sessions.olderTitle': 'Oudere resultaten',
-    'sessions.olderDescription': 'Eerdere resultaten blijven hieronder gegroepeerd zodat archiefgebruik de nieuwste sessies niet verdringt.',
+    'sessions.olderDescription': 'Blader door gearchiveerde sessies per dag en open of verwijder oudere opgeslagen resultaten.',
     'sessions.boards': 'Klassementen',
     'sessions.track': 'Circuit',
     'sessions.kind': 'Sessie',
@@ -595,6 +609,8 @@ const translations = {
     'sessions.detailDescription': 'Selecteer een sessie om detailinformatie te tonen zonder de lijst te verstoren.',
     'sessions.emptyDetail': 'Selecteer een sessie uit de werkruimte om rijdersresultaten en vervolgstappen te bekijken.',
     'sessions.closeResults': 'Resultaten sluiten',
+    'sessions.loadedSummary': '{recent} recente en {older} oudere opgeslagen sessies geladen.',
+    'sessions.viewing': 'Opgeslagen sessie van {lastSeen} wordt bekeken.',
     'sessions.includedMessage': 'Sessie opgenomen in historische klassementen.',
     'sessions.excludedMessage': 'Sessie uitgesloten van historische klassementen.',
     'sessions.correction': 'Correctie',
@@ -609,6 +625,7 @@ const translations = {
     'sessions.lastLap': 'Laatste ronde',
     'sessions.laps': 'Ronden',
     'sessions.position': 'Resultaat',
+    'sessions.editDriver': 'Bewerken',
     'sessions.inspectDriver': 'Bekijken',
     'sessions.hideDriver': 'Verbergen',
     'sessions.counted': 'Geteld',
@@ -630,8 +647,11 @@ const translations = {
     'sessions.boardStatus': 'Klassementen',
     'sessions.lastUpdated': 'Bijgewerkt',
     'sessions.compareDelta': 'Verschil',
-    'sessions.readOnly': 'Normale werkruimtemodus houdt resultatenbeheer verborgen totdat dit expliciet wordt geopend.',
+    'sessions.readOnly': 'Open rijdersresultaten, vergelijk rijders of schakel resultatenbeheer in voor correcties.',
     'sessions.manageHint': 'Resultatenbeheer is actief. Correcties en destructieve acties zijn nu zichtbaar voor deze geselecteerde sessie.',
+    'sessions.deleteBlockedRecent': 'Dit opgeslagen resultaat is in de laatste 3 uur bijgewerkt en kan nog niet worden verwijderd.',
+    'sessions.deleteBlockedActive': 'Dit opgeslagen resultaat hoort bij een actieve live sessie en kan niet worden verwijderd.',
+    'sessions.deleteProtectedHint': 'Verwijderen is alleen beschikbaar voor oudere sessies buiten de recente en actieve vensters.',
     'status.adminCreated': 'Beheerder aangemaakt.',
     'status.passwordChanged': 'Wachtwoord gewijzigd.',
     'monthlyBests.empty': 'Nog geen getelde tijdige ronden.',
@@ -693,6 +713,8 @@ const translations = {
     'sessions.noParticipants': 'Geen deelnemers opgeslagen voor deze sessie.',
     'participants.noCompletedLaps': 'Geen voltooide ronden opgeslagen voor deze deelnemer.',
     'sessions.deleted': 'Opgeslagen sessie verwijderd.',
+    'sessions.participantCorrectionSaved': 'Rijdercorrectie opgeslagen.',
+    'sessions.lapCorrectionSaved': 'Rondecorrectie opgeslagen.',
     'sessions.emptyDeleted': '{count} lege opgeslagen sessies verwijderd.',
     'sessions.confirmDelete': 'Deze opgeslagen sessie uit de historie verwijderen?',
     'sessions.confirmDeleteEmpty': 'Opgeslagen sessies zonder deelnemers, zonder voltooide ronden of zonder bekend circuit verwijderen?',
@@ -707,6 +729,10 @@ function translateMessage(template, params) {
 function t(key, params = {}) {
   const translation = translations[languageSelectElement.value]?.[key] ?? translations.en[key] ?? key;
   return Object.keys(params).length > 0 ? translateMessage(translation, params) : translation;
+}
+
+function hasTranslationKey(key) {
+  return key in (translations[languageSelectElement.value] ?? {}) || key in translations.en;
 }
 
 function setLanguage(language) {
@@ -872,8 +898,12 @@ async function loadSessions() {
     loadLiveSessionSnapshot(),
   ]);
   const workspace = buildSessionWorkspace(sessions, liveSession);
+  latestSessionWorkspace = workspace;
   renderLiveSessionSurface(workspace.liveSession, workspace.activeSessionSummary);
-  renderSessionCollection(recentSessionsSurfaceElement, workspace.recentSessions, t('sessions.noRecent'));
+  renderSessionCollection(recentSessionsSurfaceElement, workspace.recentSessions, t('sessions.noRecent'), {
+    sourceTab: 'recent',
+    includeDeleteAction: false,
+  });
   renderOlderSessionGroups(workspace.olderGroups);
 
   const selectableSessions = [...workspace.recentSessions, ...workspace.olderSessions];
@@ -881,6 +911,7 @@ async function loadSessions() {
     selectedSessionId = null;
     selectedSessionDetail = null;
     selectedParticipantId = null;
+    selectedSessionOriginTab = 'recent';
     isManageResultsMode = false;
     isCompareVisible = false;
     renderSelectedSessionWorkspace();
@@ -897,13 +928,19 @@ async function loadSessions() {
     renderSelectedSessionWorkspace();
   }
 
-  sessionsStatusElement.textContent = `${workspace.recentSessions.length} recent and ${workspace.olderSessions.length} older stored sessions loaded.`;
+  sessionsStatusElement.textContent = t('sessions.loadedSummary', {
+    recent: workspace.recentSessions.length,
+    older: workspace.olderSessions.length,
+  });
 }
 
-async function loadSessionDetail(sessionId, { activateTab = true, updateStatus = true } = {}) {
+async function loadSessionDetail(sessionId, { activateTab = true, updateStatus = true, sourceTab = null } = {}) {
   const session = await fetchJson(`/api/admin/sessions/${encodeURIComponent(sessionId)}`);
   selectedSessionId = session.sessionId;
   selectedSessionDetail = session;
+  if (sourceTab) {
+    selectedSessionOriginTab = normalizeSessionWorkspaceOverviewTab(sourceTab);
+  }
   if (!(session.participants ?? []).some(participant => participant.participantId === selectedParticipantId)) {
     selectedParticipantId = null;
   }
@@ -913,7 +950,7 @@ async function loadSessionDetail(sessionId, { activateTab = true, updateStatus =
   renderSelectedSessionWorkspace();
   highlightSelectedSessionSelection();
   if (updateStatus) {
-    setStatus(`Viewing stored session from ${formatDate(session.lastSeenUtc)}.`);
+    setStatus(t('sessions.viewing', { lastSeen: formatDate(session.lastSeenUtc) }));
   }
 }
 
@@ -925,14 +962,21 @@ async function setSessionCountForHistory(sessionId, countForHistory) {
   await loadLeaderboards();
 }
 
-async function deleteHistoricalSession(sessionId) {
+async function deleteHistoricalSession(sessionId, { returnTab = null } = {}) {
+  const sessionSummary = findWorkspaceSessionById(sessionId) ?? selectedSessionDetail;
+  const deletionProtectionKey = getSessionDeletionProtectionKey(sessionSummary, latestSessionWorkspace);
+  if (deletionProtectionKey) {
+    setStatus(t(deletionProtectionKey), true);
+    return;
+  }
+
   if (!window.confirm(t('sessions.confirmDelete'))) {
     return;
   }
 
   await deleteJson(`/api/admin/sessions/${encodeURIComponent(sessionId)}`);
   if (selectedSessionId === sessionId) {
-    selectedSessionId = null;
+    closeSelectedSession({ preferredTab: returnTab ?? 'recent' });
   }
 
   setStatus(t('sessions.deleted'));
@@ -963,7 +1007,7 @@ function renderSelectedSessionWorkspace() {
     sessionCompareSurfaceElement.hidden = true;
     selectedSessionMetricsElement.replaceChildren();
     if (activeSessionWorkspaceTab === 'results') {
-      activeSessionWorkspaceTab = 'recent';
+      activeSessionWorkspaceTab = resolveSessionOverviewReturnTab();
     }
     renderSessionWorkspaceNavigation();
     return;
@@ -996,7 +1040,8 @@ function renderSessionParticipants(participants) {
 
   for (const participant of participants) {
     const row = document.createElement('tr');
-    row.classList.toggle('selectedRow', participant.participantId === selectedParticipantId);
+    const isSelected = participant.participantId === selectedParticipantId;
+    row.classList.toggle('selectedRow', isSelected);
     appendCell(row, participant.rank);
     appendCell(row, participant.effectiveDisplayName || participant.displayName);
     appendCell(row, `P${participant.rank}`);
@@ -1004,7 +1049,9 @@ function renderSessionParticipants(participants) {
     appendCell(row, participant.completedLaps);
     appendActionsCell(row, [
       {
-        label: participant.participantId === selectedParticipantId ? t('sessions.hideDriver') : t('sessions.inspectDriver'),
+        label: isSelected
+          ? t('sessions.hideDriver')
+          : (isManageResultsMode ? t('sessions.editDriver') : t('sessions.view')),
         onClick: () => toggleParticipantDetail(participant.participantId),
       },
     ]);
@@ -1118,7 +1165,7 @@ async function saveParticipantCorrection(participantId, displayNameOverride, exc
   selectedSessionDetail = session;
   renderSelectedSessionWorkspace();
   await loadLeaderboards();
-  setStatus('Participant correction saved.');
+  setStatus(t('sessions.participantCorrectionSaved'));
 }
 
 async function saveLapCorrection(lapId, lapSecondsOverride, staffInvalidated, reason) {
@@ -1132,7 +1179,7 @@ async function saveLapCorrection(lapId, lapSecondsOverride, staffInvalidated, re
   selectedSessionDetail = session;
   renderSelectedSessionWorkspace();
   await loadLeaderboards();
-  setStatus('Lap correction saved.');
+  setStatus(t('sessions.lapCorrectionSaved'));
 }
 
 function parseLapSecondsInput(value) {
@@ -1169,17 +1216,28 @@ function toggleCompareDrivers() {
   renderSelectedSessionWorkspace();
 }
 
-function closeSelectedSession() {
+function closeSelectedSession({ preferredTab = null } = {}) {
   selectedSessionId = null;
   selectedSessionDetail = null;
   selectedParticipantId = null;
   isManageResultsMode = false;
   isCompareVisible = false;
   if (activeSessionWorkspaceTab === 'results') {
-    activeSessionWorkspaceTab = 'recent';
+    activeSessionWorkspaceTab = resolveSessionOverviewReturnTab(preferredTab);
   }
+  selectedSessionOriginTab = 'recent';
   renderSelectedSessionWorkspace();
   highlightSelectedSessionSelection();
+}
+
+function normalizeSessionWorkspaceOverviewTab(tabName) {
+  return tabName === 'live' || tabName === 'recent' || tabName === 'older'
+    ? tabName
+    : 'recent';
+}
+
+function resolveSessionOverviewReturnTab(preferredTab = null) {
+  return normalizeSessionWorkspaceOverviewTab(preferredTab ?? selectedSessionOriginTab ?? activeSessionWorkspaceTab);
 }
 
 function activateSessionWorkspaceTab(tabName) {
@@ -1195,15 +1253,14 @@ function renderSessionWorkspaceNavigation() {
   const hasResultsTab = Boolean(selectedSessionDetail);
   const activeTab = hasResultsTab || activeSessionWorkspaceTab !== 'results'
     ? activeSessionWorkspaceTab
-    : 'recent';
+    : resolveSessionOverviewReturnTab();
 
   setSessionWorkspaceTabState(sessionOverviewLiveTabButtonElement, activeTab === 'live');
   setSessionWorkspaceTabState(sessionOverviewRecentTabButtonElement, activeTab === 'recent');
   setSessionWorkspaceTabState(sessionOverviewOlderTabButtonElement, activeTab === 'older');
   setSessionWorkspaceTabState(selectedSessionTabButtonElement, activeTab === 'results');
 
-  selectedSessionTabButtonElement.hidden = !hasResultsTab;
-  closeSelectedSessionButton.hidden = !hasResultsTab;
+  selectedSessionTabGroupElement.hidden = !hasResultsTab;
 
   sessionOverviewLivePanelElement.hidden = activeTab !== 'live';
   sessionOverviewRecentPanelElement.hidden = activeTab !== 'recent';
@@ -1239,7 +1296,29 @@ function isLiveSessionActive(snapshot) {
     return false;
   }
 
-  return !['SessionOver', 'Garage', 'Unknown'].includes(snapshot.session.phase);
+  return isSessionPhaseActive(snapshot.session.phase);
+}
+
+function isSessionPhaseActive(phase) {
+  return !['SessionOver', 'Garage', 'Unknown'].includes(String(phase));
+}
+
+function isLiveSnapshotFresh(snapshot, nowMs) {
+  if (!isLiveSessionSnapshotUsable(snapshot)) {
+    return false;
+  }
+
+  const snapshotMs = new Date(snapshot.timestampUtc).getTime();
+  return Number.isFinite(snapshotMs) && Math.abs(snapshotMs - nowMs) <= activeSessionFreshWindowMs;
+}
+
+function isSessionMatchingLiveSnapshot(session, liveSession) {
+  if (!session || !isLiveSessionSnapshotUsable(liveSession)) {
+    return false;
+  }
+
+  return namesEqual(session.trackName ?? '', liveSession.session.trackName ?? '')
+    && String(session.sessionKind) === String(liveSession.session.kind);
 }
 
 function buildSessionWorkspace(sessions, liveSession) {
@@ -1250,7 +1329,7 @@ function buildSessionWorkspace(sessions, liveSession) {
     .filter(session => !isPlaceholderSession(session))
     .sort((left, right) => new Date(right.lastSeenUtc) - new Date(left.lastSeenUtc));
 
-  const recentCutoff = now - 3 * 60 * 60 * 1000;
+  const recentCutoff = now - recentSessionWindowMs;
   const recentSessions = remainingSessions
     .filter(session => new Date(session.lastSeenUtc).getTime() >= recentCutoff)
     .slice(0, 4);
@@ -1263,19 +1342,72 @@ function buildSessionWorkspace(sessions, liveSession) {
     recentSessions,
     olderSessions,
     olderGroups: groupOlderSessions(olderSessions),
+    nowEpochMs: now,
+    recentCutoffEpochMs: recentCutoff,
   };
 }
 
 function findActiveSessionSummary(sessions, liveSession, now) {
-  if (!isLiveSessionActive(liveSession)) {
+  if (!isLiveSnapshotFresh(liveSession, now) || !isSessionPhaseActive(liveSession?.session?.phase)) {
     return null;
   }
 
   return sessions
-    .filter(session => session.trackName === liveSession.session.trackName)
-    .filter(session => String(session.sessionKind) === String(liveSession.session.kind))
-    .filter(session => Math.abs(new Date(session.lastSeenUtc).getTime() - now) <= 15 * 60 * 1000)
+    .filter(session => isSessionMatchingLiveSnapshot(session, liveSession))
+    .filter(session => Math.abs(new Date(session.lastSeenUtc).getTime() - now) <= activeSessionFreshWindowMs)
     .sort((left, right) => new Date(right.lastSeenUtc) - new Date(left.lastSeenUtc))[0] ?? null;
+}
+
+function findWorkspaceSessionById(sessionId) {
+  if (!latestSessionWorkspace || !sessionId) {
+    return null;
+  }
+
+  const allSessions = [
+    ...(latestSessionWorkspace.recentSessions ?? []),
+    ...(latestSessionWorkspace.olderSessions ?? []),
+  ];
+
+  if (latestSessionWorkspace.activeSessionSummary) {
+    allSessions.push(latestSessionWorkspace.activeSessionSummary);
+  }
+
+  return allSessions.find(session => session.sessionId === sessionId) ?? null;
+}
+
+function getSessionDeletionProtectionKey(session, workspace = latestSessionWorkspace) {
+  if (!session || !workspace) {
+    return null;
+  }
+
+  const nowMs = workspace.nowEpochMs ?? Date.now();
+  const lastSeenMs = new Date(session.lastSeenUtc).getTime();
+  const isDetectedActiveSession = session.sessionId
+    && workspace.activeSessionSummary?.sessionId
+    && session.sessionId === workspace.activeSessionSummary.sessionId;
+
+  if (isDetectedActiveSession) {
+    return 'sessions.deleteBlockedActive';
+  }
+
+  const liveSession = workspace.liveSession;
+  if (Number.isFinite(lastSeenMs)
+    && Math.abs(lastSeenMs - nowMs) <= activeSessionFreshWindowMs
+    && isLiveSnapshotFresh(liveSession, nowMs)
+    && isSessionPhaseActive(liveSession?.session?.phase)
+    && isSessionMatchingLiveSnapshot(session, liveSession)) {
+    return 'sessions.deleteBlockedActive';
+  }
+
+  if (Number.isFinite(lastSeenMs) && lastSeenMs >= nowMs - recentSessionWindowMs) {
+    return 'sessions.deleteBlockedRecent';
+  }
+
+  return null;
+}
+
+function canDeleteSessionFromWorkspace(session, workspace = latestSessionWorkspace) {
+  return !getSessionDeletionProtectionKey(session, workspace);
 }
 
 function isPlaceholderSession(session) {
@@ -1319,7 +1451,7 @@ function renderLiveSessionSurface(liveSession, activeSessionSummary) {
   liveSessionSurfaceElement.appendChild(createLiveSessionCard(liveSession, activeSessionSummary));
 }
 
-function renderSessionCollection(container, sessions, emptyMessage) {
+function renderSessionCollection(container, sessions, emptyMessage, options = {}) {
   container.replaceChildren();
   if (sessions.length === 0) {
     container.appendChild(createEmptyWorkspaceNote(emptyMessage));
@@ -1327,7 +1459,7 @@ function renderSessionCollection(container, sessions, emptyMessage) {
   }
 
   for (const session of sessions) {
-    container.appendChild(createSessionCard(session));
+    container.appendChild(createSessionCard(session, options));
   }
 
   highlightSelectedSessionSelection();
@@ -1351,7 +1483,10 @@ function renderOlderSessionGroups(groups) {
 
     const cards = document.createElement('div');
     cards.className = 'sessionCardGrid';
-    group.sessions.forEach(session => cards.appendChild(createSessionCard(session)));
+    group.sessions.forEach(session => cards.appendChild(createSessionCard(session, {
+      sourceTab: 'older',
+      includeDeleteAction: true,
+    })));
     details.appendChild(cards);
     olderSessionsSurfaceElement.appendChild(details);
   }
@@ -1360,6 +1495,13 @@ function renderOlderSessionGroups(groups) {
 }
 
 function createLiveSessionCard(liveSession, activeSessionSummary) {
+  const actions = activeSessionSummary?.sessionId
+    ? [{
+      label: t('sessions.openResults'),
+      onClick: () => loadSessionDetail(activeSessionSummary.sessionId, { sourceTab: 'live' }).catch(showError),
+    }]
+    : [];
+
   return createSessionOverviewRow({
     sessionId: activeSessionSummary?.sessionId ?? null,
     trackName: liveSession.session.trackName,
@@ -1368,14 +1510,25 @@ function createLiveSessionCard(liveSession, activeSessionSummary) {
       { label: t('sessions.driverCount'), value: String(liveSession.session.vehicleCount ?? 0) },
       { label: t('sessions.lastUpdated'), value: formatDate(liveSession.timestampUtc) },
     ],
-    action: activeSessionSummary?.sessionId
-      ? { label: t('sessions.openResults'), onClick: () => loadSessionDetail(activeSessionSummary.sessionId).catch(showError) }
-      : null,
+    actions,
     extraClassName: 'liveSessionCard',
   });
 }
 
-function createSessionCard(session) {
+function createSessionCard(session, { sourceTab = 'recent', includeDeleteAction = false } = {}) {
+  const actions = [{
+    label: t('sessions.openResults'),
+    onClick: () => loadSessionDetail(session.sessionId, { sourceTab }).catch(showError),
+  }];
+
+  if (includeDeleteAction && canDeleteSessionFromWorkspace(session, latestSessionWorkspace)) {
+    actions.push({
+      label: t('sessions.delete'),
+      danger: true,
+      onClick: () => deleteHistoricalSession(session.sessionId, { returnTab: 'older' }).catch(showError),
+    });
+  }
+
   return createSessionOverviewRow({
     sessionId: session.sessionId,
     trackName: session.trackName,
@@ -1385,11 +1538,11 @@ function createSessionCard(session) {
       { label: t('sessions.bestLap'), value: formatSeconds(session.bestLapSeconds) },
       { label: t('sessions.lastUpdated'), value: formatDate(session.lastSeenUtc) },
     ],
-    action: { label: t('sessions.openResults'), onClick: () => loadSessionDetail(session.sessionId).catch(showError) },
+    actions,
   });
 }
 
-function createSessionOverviewRow({ sessionId, trackName, descriptor, facts, action, extraClassName = '' }) {
+function createSessionOverviewRow({ sessionId, trackName, descriptor, facts, actions = [], extraClassName = '' }) {
   const row = document.createElement('article');
   row.className = `sessionSummaryCard ${extraClassName}`.trim();
   if (sessionId) {
@@ -1412,15 +1565,18 @@ function createSessionOverviewRow({ sessionId, trackName, descriptor, facts, act
   metaRow.className = 'sessionSummaryRowMeta';
   facts.filter(fact => fact?.value).forEach((fact, index) => metaRow.appendChild(createSessionFact(fact.label, fact.value, index + 1)));
 
-  if (action) {
-    const actions = document.createElement('div');
-    actions.className = 'buttonRow';
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.textContent = action.label;
-    button.addEventListener('click', action.onClick);
-    actions.appendChild(button);
-    metaRow.appendChild(actions);
+  if (actions.length > 0) {
+    const actionRow = document.createElement('div');
+    actionRow.className = 'buttonRow';
+    for (const action of actions) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = action.danger ? 'dangerButton' : '';
+      button.textContent = action.label;
+      button.addEventListener('click', action.onClick);
+      actionRow.appendChild(button);
+    }
+    metaRow.appendChild(actionRow);
   }
 
   row.append(titleRow, metaRow);
@@ -1545,14 +1701,24 @@ function renderSessionManagePanel(session) {
   includeButton.addEventListener('click', () => setSessionCountForHistory(session.sessionId, !session.countForHistory).catch(showError));
   actions.appendChild(includeButton);
 
-  const deleteButton = document.createElement('button');
-  deleteButton.type = 'button';
-  deleteButton.className = 'dangerButton';
-  deleteButton.textContent = t('sessions.delete');
-  deleteButton.addEventListener('click', () => deleteHistoricalSession(session.sessionId).catch(showError));
-  actions.appendChild(deleteButton);
+  if (canDeleteSessionFromWorkspace(session, latestSessionWorkspace)) {
+    const deleteButton = document.createElement('button');
+    deleteButton.type = 'button';
+    deleteButton.className = 'dangerButton';
+    deleteButton.textContent = t('sessions.delete');
+    deleteButton.addEventListener('click', () => deleteHistoricalSession(session.sessionId, { returnTab: selectedSessionOriginTab }).catch(showError));
+    actions.appendChild(deleteButton);
+  }
 
   panel.appendChild(actions);
+
+  if (!canDeleteSessionFromWorkspace(session, latestSessionWorkspace)) {
+    const protection = document.createElement('p');
+    protection.className = 'wideField sessionDeleteProtection';
+    protection.textContent = t(getSessionDeletionProtectionKey(session, latestSessionWorkspace) ?? 'sessions.deleteProtectedHint');
+    panel.appendChild(protection);
+  }
+
   return panel;
 }
 
@@ -2574,7 +2740,11 @@ async function readJsonResponse(response) {
     let detail = `${response.status} ${response.statusText}`;
     try {
       const body = await response.json();
-      detail = body.error ?? detail;
+      if (typeof body?.errorCode === 'string' && hasTranslationKey(body.errorCode)) {
+        detail = t(body.errorCode);
+      } else {
+        detail = body.error ?? detail;
+      }
     } catch {
     }
     throw new Error(detail);

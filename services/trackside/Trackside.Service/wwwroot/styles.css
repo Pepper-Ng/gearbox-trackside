@@ -875,6 +875,7 @@ tbody tr:last-child td {
 }
 
 .sessionsWorkspaceShell {
+  color-scheme: light;
   --session-app-surface: #d9e1ea;
   --session-app-panel: #e9eef4;
   --session-app-panel-soft: #dde5ee;
@@ -935,6 +936,10 @@ tbody tr:last-child td {
   max-width: 72ch;
   line-height: 1.45;
   margin-top: 6px;
+}
+
+.sessionArchiveDescription {
+  max-width: 96ch;
 }
 
 .sessionCardGrid {
@@ -1005,6 +1010,12 @@ tbody tr:last-child td {
   gap: 12px;
 }
 
+#selectedSessionMetrics {
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(6, minmax(110px, 1fr));
+  gap: 8px;
+}
+
 .sessionSummaryCard .sessionMetrics {
   grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
   gap: 8px 10px;
@@ -1018,6 +1029,14 @@ tbody tr:last-child td {
   padding: 12px;
 }
 
+.sessionsWorkspaceShell .sessionMetricCard {
+  border: 1px solid #b5c4d4;
+  border-radius: 9px;
+  background: linear-gradient(180deg, rgba(245, 249, 253, .98), rgba(234, 241, 248, .98));
+  min-height: 0;
+  padding: 8px 10px;
+}
+
 .sessionMetricCard span {
   display: block;
   color: var(--gt-muted);
@@ -1027,6 +1046,12 @@ tbody tr:last-child td {
   text-transform: uppercase;
 }
 
+.sessionsWorkspaceShell .sessionMetricCard span {
+  color: var(--session-app-muted);
+  font-size: 10px;
+  letter-spacing: .08em;
+}
+
 .sessionMetricCard strong {
   display: block;
   margin-top: 10px;
@@ -1034,6 +1059,12 @@ tbody tr:last-child td {
   font-family: "Rajdhani", "Bahnschrift", "Segoe UI", sans-serif;
   font-size: 24px;
   line-height: 1.05;
+}
+
+.sessionsWorkspaceShell .sessionMetricCard strong {
+  color: var(--session-app-text);
+  font-size: 18px;
+  margin-top: 4px;
 }
 
 .sessionSummaryCard .sessionMetricCard {
@@ -1236,6 +1267,7 @@ tbody tr:last-child td {
 .sessionWorkspaceCanvas[hidden],
 .sessionWorkspaceOverviewPanel[hidden],
 .sessionWorkspaceTab[hidden],
+.sessionWorkspaceTabGroup[hidden],
 .sessionWorkspaceTabAction[hidden],
 .sessionWorkspaceUtilityRow[hidden] {
   display: none;
@@ -1247,12 +1279,18 @@ tbody tr:last-child td {
 
 .sessionWorkspaceTabs {
   display: flex;
-  align-items: end;
+  align-items: flex-end;
   flex-wrap: wrap;
   gap: 1px;
   border-bottom: 1px solid var(--session-app-border);
   background: linear-gradient(180deg, rgba(218, 226, 236, .96) 0, rgba(206, 216, 228, .98) 100%);
   padding: 10px 12px 0;
+}
+
+.sessionWorkspaceTabGroup {
+  display: inline-flex;
+  align-items: stretch;
+  margin-left: 16px;
 }
 
 .sessionWorkspaceTab,
@@ -1279,12 +1317,21 @@ tbody tr:last-child td {
 }
 
 .sessionWorkspaceTabTemporary {
-  margin-left: 16px;
   border-color: #8c9db2;
   background: linear-gradient(180deg, rgba(201, 214, 228, .98), rgba(188, 202, 219, .98));
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  min-width: 0;
+  max-width: min(48vw, 440px);
+  padding-right: 10px;
+}
+
+#selectedSessionTabLabel {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sessionWorkspaceTabTemporary.active {
@@ -1292,10 +1339,9 @@ tbody tr:last-child td {
   box-shadow: inset 0 2px 0 rgba(71, 116, 158, .24);
 }
 
-.sessionWorkspaceTabTemporary + .sessionWorkspaceTabClose {
-  margin-left: -1px;
+.sessionWorkspaceTabGroup .sessionWorkspaceTabClose {
   border-top-left-radius: 0;
-  border-left-color: transparent;
+  border-left: 0;
 }
 
 .sessionWorkspaceTabAction {
@@ -1354,6 +1400,43 @@ tbody tr:last-child td {
   border: 1px solid var(--session-app-border);
   border-radius: 8px;
   background: linear-gradient(180deg, rgba(231, 237, 244, .98), rgba(221, 229, 238, .98));
+}
+
+.sessionsWorkspaceShell .configurationPanel input,
+.sessionsWorkspaceShell .configurationPanel select,
+.sessionsWorkspaceShell .configurationPanel textarea,
+.sessionsWorkspaceShell .sessionSetupRow input,
+.sessionsWorkspaceShell .sessionSetupRow select,
+.sessionsWorkspaceShell .tableInput {
+  border-color: #96a8bc;
+  background: linear-gradient(180deg, rgba(247, 250, 253, .98), rgba(239, 245, 250, .98));
+  color: var(--session-app-text);
+}
+
+.sessionsWorkspaceShell .configurationPanel input::placeholder,
+.sessionsWorkspaceShell .configurationPanel textarea::placeholder,
+.sessionsWorkspaceShell .tableInput::placeholder {
+  color: #6f8094;
+}
+
+.sessionsWorkspaceShell .configurationPanel input:focus,
+.sessionsWorkspaceShell .configurationPanel select:focus,
+.sessionsWorkspaceShell .configurationPanel textarea:focus,
+.sessionsWorkspaceShell .sessionSetupRow input:focus,
+.sessionsWorkspaceShell .sessionSetupRow select:focus,
+.sessionsWorkspaceShell .tableInput:focus {
+  border-color: var(--session-app-accent);
+  box-shadow: 0 0 0 3px rgba(43, 110, 152, .16);
+}
+
+.sessionsWorkspaceShell .checkboxLabel {
+  border-color: #9aaabd;
+  background: linear-gradient(180deg, rgba(239, 245, 251, .96), rgba(230, 238, 247, .98));
+}
+
+.sessionsWorkspaceShell .checkboxLabel input,
+.sessionsWorkspaceShell .tableCheckbox {
+  accent-color: var(--session-app-accent);
 }
 
 .sessionWorkspaceEmptyState {
@@ -1432,6 +1515,11 @@ tbody tr:last-child td {
   margin-top: 0;
 }
 
+.sessionDeleteProtection {
+  margin: 0;
+  font-size: 12px;
+}
+
 .sessionWorkspaceEmpty {
   border: 1px dashed var(--session-app-border-strong);
   border-radius: 8px;
@@ -1496,6 +1584,10 @@ tbody tr:last-child td {
     grid-template-columns: 1fr;
   }
 
+  #selectedSessionMetrics {
+    grid-template-columns: repeat(3, minmax(110px, 1fr));
+  }
+
   .sessionDetailActions {
     justify-content: flex-start;
   }
@@ -1538,5 +1630,9 @@ tbody tr:last-child td {
 
   .statusFactsGrid {
     grid-template-columns: 1fr;
+  }
+
+  #selectedSessionMetrics {
+    grid-template-columns: repeat(2, minmax(110px, 1fr));
   }
 }
