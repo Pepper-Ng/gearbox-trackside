@@ -727,6 +727,143 @@ tbody tr:last-child td {
   white-space: pre-wrap;
 }
 
+.statusUpdatedAt {
+  color: var(--gt-soft);
+  font-size: 13px;
+  letter-spacing: .04em;
+}
+
+.statusCards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  gap: 14px;
+}
+
+.statusCard {
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 14px;
+  background: linear-gradient(165deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, .02));
+  padding: 14px;
+}
+
+.statusCard h3 {
+  margin-bottom: 10px;
+}
+
+.statusFacts {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.statusFacts > div {
+  border-top: 1px solid rgba(255, 255, 255, .08);
+  padding-top: 8px;
+}
+
+.statusFacts > div:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.statusFacts dt {
+  color: var(--gt-muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.statusFacts dd {
+  margin: 4px 0 0;
+  color: var(--gt-soft);
+  font-family: "Rajdhani", "Bahnschrift", "Segoe UI", sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.statusFactsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.statusFact {
+  min-height: 76px;
+  border: 1px solid rgba(255, 255, 255, .09);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .03);
+  padding: 10px 12px;
+}
+
+.statusFact span {
+  display: block;
+  color: var(--gt-muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+
+.statusFact strong {
+  display: block;
+  margin-top: 7px;
+  color: var(--gt-soft);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.28;
+}
+
+.trackerValidationNote,
+.advancedDiagnosticNote,
+.driverTrackerOutlineMessage {
+  line-height: 1.45;
+}
+
+.driverTrackerTracksTable tbody tr {
+  cursor: pointer;
+}
+
+.driverTrackerTracksTable tbody tr:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--gt-blue);
+  outline: 0;
+}
+
+.driverTrackerOutlinePanel {
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 14px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, .05), rgba(255, 255, 255, .015));
+  padding: 14px;
+}
+
+.driverTrackerOutline {
+  display: block;
+  width: min(100%, 560px);
+  aspect-ratio: 1 / 1;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 18% 14%, rgba(255, 32, 45, .14), transparent 32%),
+    radial-gradient(circle at 84% 88%, rgba(0, 176, 255, .14), transparent 40%),
+    rgba(7, 9, 13, .88);
+  padding: 6px;
+}
+
+.driverTrackerOutline polyline {
+  fill: none;
+  stroke: var(--gt-blue);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+  filter: drop-shadow(0 0 5px rgba(0, 176, 255, .45));
+}
+
+#fixturePathDiagnostic[readonly] {
+  color: var(--gt-soft);
+  background: rgba(8, 10, 14, .65);
+}
+
 .lapCorrectionTable {
   margin: 8px 0 12px;
 }
@@ -1362,6 +1499,10 @@ tbody tr:last-child td {
   .sessionDetailActions {
     justify-content: flex-start;
   }
+
+  .statusCards {
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  }
 }
 
 @media (max-width: 620px) {
@@ -1393,5 +1534,9 @@ tbody tr:last-child td {
   .buttonRow {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .statusFactsGrid {
+    grid-template-columns: 1fr;
   }
 }
