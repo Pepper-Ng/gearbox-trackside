@@ -402,8 +402,35 @@ public static class TracksideApiEndpoints
     private static async Task<IResult> DeleteHistoricalSessionAsync(
         string sessionId,
         ITracksideStore store,
+        LiveSessionState state,
+        TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
+        var session = await store.GetHistoricalSessionAsync(sessionId, cancellationToken);
+        if (session is null)
+        {
+            return Results.NotFound(new { error = "Session not found." });
+        }
+
+        var decision = HistoricalSessionDeletionPolicy.Evaluate(session, state.Current, timeProvider.GetUtcNow());
+        if (!decision.IsAllowed)
+        {
+            return decision.Reason switch
+            {
+                HistoricalSessionDeletionBlockReason.RecentWindow => Results.Conflict(new
+                {
+                    error = "Recent session results cannot be deleted within the last 3 hours.",
+                    errorCode = "sessions.deleteBlockedRecent",
+                }),
+                HistoricalSessionDeletionBlockReason.ActiveLiveSession => Results.Conflict(new
+                {
+                    error = "Session results matching an active live session cannot be deleted.",
+                    errorCode = "sessions.deleteBlockedActive",
+                }),
+                _ => Results.Conflict(new { error = "Session cannot be deleted right now." }),
+            };
+        }
+
         var deleted = await store.DeleteHistoricalSessionAsync(sessionId, cancellationToken);
         return deleted
             ? Results.NoContent()

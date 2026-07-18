@@ -193,16 +193,18 @@
       <section id="sessionsTab" class="adminTab sessionsWorkspaceShell" hidden aria-label="Sessions">
         <section class="configurationPanel">
           <h2 data-i18n="sessions.title">Session Workspace</h2>
-          <p id="sessionsStatus" class="wideField" data-i18n="sessions.description">This workspace helps staff inspect recent results, compare drivers, and only rarely manage stored results.</p>
+          <p id="sessionsStatus" class="wideField" data-i18n="sessions.description">Review live, recent, and archived results, then open any session for driver details and follow-up.</p>
           <section class="sessionWorkspaceDock wideField">
             <div class="sessionWorkspaceTabs" role="tablist" aria-label="Session results workspace">
               <button id="sessionOverviewLiveTabButton" class="sessionWorkspaceTab" type="button" role="tab" aria-selected="false" data-i18n="sessions.liveTitle">In Progress</button>
               <button id="sessionOverviewRecentTabButton" class="sessionWorkspaceTab active" type="button" role="tab" aria-selected="true" data-i18n="sessions.recentTitle">Recently Completed</button>
               <button id="sessionOverviewOlderTabButton" class="sessionWorkspaceTab" type="button" role="tab" aria-selected="false" data-i18n="sessions.olderTitle">Older Results</button>
-              <button id="selectedSessionTabButton" class="sessionWorkspaceTab sessionWorkspaceTabTemporary" type="button" role="tab" aria-selected="false" hidden>
-                <span id="selectedSessionTabLabel">Driver Results</span>
-              </button>
-              <button id="closeSelectedSessionButton" class="sessionWorkspaceTabAction sessionWorkspaceTabClose" type="button" hidden data-i18n-aria="sessions.closeResults" aria-label="Close Results">&times;</button>
+              <div id="selectedSessionTabGroup" class="sessionWorkspaceTabGroup" role="presentation" hidden>
+                <button id="selectedSessionTabButton" class="sessionWorkspaceTab sessionWorkspaceTabTemporary" type="button" role="tab" aria-selected="false">
+                  <span id="selectedSessionTabLabel">Driver Results</span>
+                </button>
+                <button id="closeSelectedSessionButton" class="sessionWorkspaceTabAction sessionWorkspaceTabClose" type="button" data-i18n-aria="sessions.closeResults" aria-label="Close Results">&times;</button>
+              </div>
             </div>
             <section id="sessionOverviewLivePanel" class="sessionWorkspaceCanvas sessionWorkspaceOverviewPanel" role="tabpanel" hidden>
               <section class="sessionWorkspaceSection" aria-label="In progress sessions">
@@ -231,7 +233,7 @@
                 <div class="sessionWorkspaceHeader">
                   <div>
                     <h3 data-i18n="sessions.olderTitle">Older Results</h3>
-                    <p data-i18n="sessions.olderDescription">Earlier results stay grouped below so archive browsing does not crowd the latest sessions.</p>
+                    <p class="sessionArchiveDescription" data-i18n="sessions.olderDescription">Browse archived sessions grouped by day and open or remove older stored results.</p>
                   </div>
                 </div>
                 <div id="olderSessionsSurface" class="sessionArchive"></div>
@@ -241,7 +243,7 @@
               <div class="sessionWorkspaceHeader sessionDetailHeader">
                 <div>
                   <h2 id="selectedSessionTitle" data-i18n="sessions.detailTitle">Driver Results</h2>
-                  <p id="selectedSessionSummary" class="wideField" data-i18n="sessions.detailDescription">Select a session to reveal detailed information without disrupting the list.</p>
+                  <p id="selectedSessionSummary" class="wideField" data-i18n="sessions.readOnly">Open driver results, compare drivers, or switch on result management for corrections.</p>
                 </div>
                 <div class="buttonRow sessionDetailActions">
                   <button id="compareDriversButton" type="button" data-i18n="sessions.compare">Compare Drivers</button>
