@@ -143,6 +143,15 @@ public sealed class ApiContractTests
     }
 
     /// <summary>
+    /// Keeps selected-track geometry lookup stable for the admin tracker preview.
+    /// </summary>
+    [Fact]
+    public void AdminDriverTrackerGeometryPathIsStable()
+    {
+        Assert.Equal("/api/admin/driver-tracker/geometry", LiveSessionRoutes.AdminDriverTrackerGeometryPath);
+    }
+
+    /// <summary>
     /// Keeps driver tracker recording endpoint stable for the admin dashboard.
     /// </summary>
     [Fact]

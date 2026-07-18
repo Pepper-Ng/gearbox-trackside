@@ -126,6 +126,9 @@ let driverTrackerSaveTimer = 0;
 let driverTrackerSaveSequence = 0;
 let selectedDriverTrackerTrackName = null;
 let latestCurrentTrackGeometry = null;
+let latestSelectedTrackGeometry = null;
+let selectedTrackGeometrySequence = 0;
+let selectedTrackGeometryAbortController = null;
 let latestDriverTrackerCatalog = [];
 let latestLiveStatusSnapshot = null;
 let latestAdminStatus = null;
@@ -228,10 +231,10 @@ const translations = {
     'driverTracker.detail': 'Detail',
     'driverTracker.actions': 'Actions',
     'driverTracker.phase4Note': 'Track-outline generation was not venue-validated in Phase 4. Treat this as operator tooling and confirm on-site behavior before race-night reliance.',
-    'driverTracker.currentGeometryTitle': 'Current Track Geometry',
-    'driverTracker.selectionHint': 'Select a track row to inspect geometry state and the current-track outline preview.',
-    'driverTracker.selectionCurrent': 'Selected track {track} is the current live track. Outline preview reflects current geometry.',
-    'driverTracker.selectionCatalogOnly': 'Selected track {track} is not current. Current geometry endpoint is reporting {current}.',
+    'driverTracker.currentGeometryTitle': 'Selected Track Geometry',
+    'driverTracker.selectionHint': 'Select a track row to inspect its geometry state and stored outline.',
+    'driverTracker.selectionLoaded': 'Selected track {track}. Its stored outline is shown when complete geometry is available.',
+    'driverTracker.selectionLoading': 'Loading geometry for {track}...',
     'driverTracker.noTracks': 'No tracks seen yet.',
     'driverTracker.unavailable': 'Unavailable',
     'driverTracker.recording': 'Recording',
@@ -241,11 +244,9 @@ const translations = {
     'driverTracker.state': 'State',
     'driverTracker.activeTrack': 'Track',
     'driverTracker.lapProgress': 'Lap progress',
-    'driverTracker.noCurrentTrack': 'No current track',
     'driverTracker.noSelection': 'Select a track row to inspect geometry state.',
-    'driverTracker.outlineReady': 'Showing stored outline for the current track.',
-    'driverTracker.outlineUnavailable': 'No stored outline is available for the current track yet.',
-    'driverTracker.outlineCurrentOnly': 'Outline preview is only available for the current track endpoint: {current}.',
+    'driverTracker.outlineReady': 'Showing the stored outline for the selected track.',
+    'driverTracker.outlineUnavailable': 'No complete stored outline is available for the selected track yet.',
     'driverTracker.improve': 'Improve',
     'driverTracker.restart': 'Restart',
     'monthlyTrack.title': 'Monthly Track',
@@ -505,7 +506,7 @@ const translations = {
     'kioskDisplay.live': 'Live',
     'kioskDisplay.tracker': 'Tracker',
     'driverTracker.title': 'Drivertracker',
-    'driverTracker.clientRefreshHz': 'Client refresh Hz',
+    'driverTracker.clientRefreshHz': 'Verversingssnelheid client (Hz)',
     'driverTracker.geometryRecordingLaps': 'Geometrieronden',
     'driverTracker.saveButton': 'Tracker opslaan',
     'driverTracker.refreshTracks': 'Banen vernieuwen',
@@ -513,15 +514,15 @@ const translations = {
     'driverTracker.status': 'Status',
     'driverTracker.coverage': 'Dekking',
     'driverTracker.laps': 'Ronden',
-    'driverTracker.samples': 'Samples',
+    'driverTracker.samples': 'Meetpunten',
     'driverTracker.updated': 'Bijgewerkt',
-    'driverTracker.detail': 'Detail',
+    'driverTracker.detail': 'Toelichting',
     'driverTracker.actions': 'Acties',
     'driverTracker.phase4Note': 'Generatie van baancontouren is in fase 4 niet op de locatie gevalideerd. Gebruik dit als operatorhulpmiddel en bevestig gedrag op locatie voordat je erop vertrouwt tijdens racedagen.',
-    'driverTracker.currentGeometryTitle': 'Huidige baangeometrie',
-    'driverTracker.selectionHint': 'Selecteer een baanrij om de geometriestatus en preview van de huidige baancontour te bekijken.',
-    'driverTracker.selectionCurrent': 'Geselecteerde baan {track} is de huidige live baan. De contourpreview toont de huidige geometrie.',
-    'driverTracker.selectionCatalogOnly': 'Geselecteerde baan {track} is niet huidig. Het current-geometry-endpoint meldt nu {current}.',
+    'driverTracker.currentGeometryTitle': 'Geometrie van geselecteerde baan',
+    'driverTracker.selectionHint': 'Selecteer een baanrij om de geometriestatus en opgeslagen baancontour te bekijken.',
+    'driverTracker.selectionLoaded': 'Baan {track} geselecteerd. De opgeslagen contour wordt getoond zodra volledige geometrie beschikbaar is.',
+    'driverTracker.selectionLoading': 'Geometrie voor {track} laden...',
     'driverTracker.noTracks': 'Nog geen banen gezien.',
     'driverTracker.unavailable': 'Niet beschikbaar',
     'driverTracker.recording': 'Opnemen',
@@ -531,11 +532,9 @@ const translations = {
     'driverTracker.state': 'Status',
     'driverTracker.activeTrack': 'Baan',
     'driverTracker.lapProgress': 'Rondevoortgang',
-    'driverTracker.noCurrentTrack': 'Geen huidige baan',
     'driverTracker.noSelection': 'Selecteer een baanrij om geometriestatus te bekijken.',
-    'driverTracker.outlineReady': 'Opgeslagen contour voor de huidige baan wordt getoond.',
-    'driverTracker.outlineUnavailable': 'Er is nog geen opgeslagen contour voor de huidige baan beschikbaar.',
-    'driverTracker.outlineCurrentOnly': 'Contourpreview is alleen beschikbaar voor de huidige baan van het endpoint: {current}.',
+    'driverTracker.outlineReady': 'De opgeslagen contour voor de geselecteerde baan wordt getoond.',
+    'driverTracker.outlineUnavailable': 'Voor de geselecteerde baan is nog geen volledige opgeslagen contour beschikbaar.',
     'driverTracker.improve': 'Verbeteren',
     'driverTracker.restart': 'Herstarten',
     'monthlyTrack.title': 'Maandelijkse baan',
@@ -1933,6 +1932,14 @@ async function loadDriverTrackerTracks() {
   latestDriverTrackerCatalog = catalog.tracks ?? [];
   latestCurrentTrackGeometry = currentGeometry;
   syncSelectedDriverTrackerTrack();
+  if (currentGeometry?.trackName && namesEqual(currentGeometry.trackName, selectedDriverTrackerTrackName)) {
+    selectedTrackGeometryAbortController?.abort();
+    selectedTrackGeometryAbortController = null;
+    selectedTrackGeometrySequence += 1;
+    latestSelectedTrackGeometry = currentGeometry;
+  } else {
+    await loadSelectedDriverTrackerGeometry({ renderAfterLoad: false });
+  }
   renderDriverTrackerTracks(latestDriverTrackerCatalog);
   renderDriverTrackerGeometryPanel();
   renderStatusDashboard();
@@ -2018,9 +2025,7 @@ function renderDriverTrackerTracks(tracks) {
       }
 
       event.preventDefault();
-      selectedDriverTrackerTrackName = trackName;
-      renderDriverTrackerTracks(latestDriverTrackerCatalog);
-      renderDriverTrackerGeometryPanel();
+      selectDriverTrackerTrack(trackName);
     });
     row.addEventListener('click', event => {
       if (event.target instanceof Element && event.target.closest('button')) {
@@ -2031,9 +2036,7 @@ function renderDriverTrackerTracks(tracks) {
         return;
       }
 
-      selectedDriverTrackerTrackName = trackName;
-      renderDriverTrackerTracks(latestDriverTrackerCatalog);
-      renderDriverTrackerGeometryPanel();
+      selectDriverTrackerTrack(trackName);
     });
 
     appendCell(row, track.trackName ?? '-');
@@ -2183,6 +2186,46 @@ function syncSelectedDriverTrackerTrack() {
   selectedDriverTrackerTrackName = latestDriverTrackerCatalog[0]?.trackName ?? null;
 }
 
+function selectDriverTrackerTrack(trackName) {
+  if (!trackName || namesEqual(trackName, selectedDriverTrackerTrackName)) {
+    return;
+  }
+
+  selectedDriverTrackerTrackName = trackName;
+  latestSelectedTrackGeometry = null;
+  renderDriverTrackerTracks(latestDriverTrackerCatalog);
+  renderDriverTrackerGeometryPanel({ isLoading: true });
+  loadSelectedDriverTrackerGeometry().catch(showError);
+}
+
+async function loadSelectedDriverTrackerGeometry({ renderAfterLoad = true } = {}) {
+  const trackName = selectedDriverTrackerTrackName;
+  const sequence = ++selectedTrackGeometrySequence;
+  selectedTrackGeometryAbortController?.abort();
+  selectedTrackGeometryAbortController = null;
+  if (!trackName) {
+    latestSelectedTrackGeometry = null;
+    if (renderAfterLoad) {
+      renderDriverTrackerGeometryPanel();
+    }
+    return;
+  }
+
+  const abortController = new AbortController();
+  selectedTrackGeometryAbortController = abortController;
+  const geometry = await fetchSelectedTrackGeometrySafe(trackName, abortController.signal);
+
+  if (sequence !== selectedTrackGeometrySequence || !namesEqual(trackName, selectedDriverTrackerTrackName)) {
+    return;
+  }
+
+  selectedTrackGeometryAbortController = null;
+  latestSelectedTrackGeometry = geometry;
+  if (renderAfterLoad) {
+    renderDriverTrackerGeometryPanel();
+  }
+}
+
 function bindDriverTrackerAutoSave() {
   const trackerInputs = [driverTrackerClientRefreshHzElement, driverTrackerGeometryRecordingLapsElement];
   trackerInputs.forEach(element => {
@@ -2204,12 +2247,10 @@ function scheduleDriverTrackerAutoSave(delayMilliseconds) {
   }, delayMilliseconds);
 }
 
-function renderDriverTrackerGeometryPanel() {
+function renderDriverTrackerGeometryPanel({ isLoading = false } = {}) {
   const selectedTrackName = selectedDriverTrackerTrackName;
   const selectedCatalog = findTrackByName(latestDriverTrackerCatalog, selectedTrackName);
-  const currentGeometry = latestCurrentTrackGeometry;
-  const currentTrackName = currentGeometry?.trackName ?? null;
-  const selectedIsCurrentTrack = Boolean(selectedTrackName && currentTrackName && namesEqual(selectedTrackName, currentTrackName));
+  const selectedGeometry = latestSelectedTrackGeometry;
 
   if (!selectedTrackName) {
     driverTrackerSelectionHintElement.textContent = t('driverTracker.noSelection');
@@ -2219,34 +2260,24 @@ function renderDriverTrackerGeometryPanel() {
     return;
   }
 
-  if (selectedIsCurrentTrack) {
-    driverTrackerSelectionHintElement.textContent = t('driverTracker.selectionCurrent', { track: selectedTrackName });
-  } else {
-    driverTrackerSelectionHintElement.textContent = t('driverTracker.selectionCatalogOnly', {
-      track: selectedTrackName,
-      current: currentTrackName ?? t('driverTracker.noCurrentTrack'),
-    });
-  }
+  driverTrackerSelectionHintElement.textContent = isLoading
+    ? t('driverTracker.selectionLoading', { track: selectedTrackName })
+    : t('driverTracker.selectionLoaded', { track: selectedTrackName });
 
-  const selectedState = deriveDriverTrackerStateForSelection(selectedCatalog, currentGeometry, selectedIsCurrentTrack);
-  const effectiveCoverage = selectedIsCurrentTrack && currentGeometry
-    ? `${Number(currentGeometry.coveragePercent ?? 0).toFixed(1)}%`
+  const selectedState = deriveDriverTrackerStateForSelection(selectedCatalog, selectedGeometry, true);
+  const hasDrawableGeometry = Boolean(selectedGeometry?.isAvailable);
+  const effectiveCoverage = hasDrawableGeometry
+    ? `${Number(selectedGeometry.coveragePercent ?? 0).toFixed(1)}%`
     : formatDriverTrackerCoverage(selectedCatalog);
   const lapProgress = selectedCatalog
     ? `${selectedCatalog.recordedLapCount ?? 0}/${selectedCatalog.targetCompletedLaps ?? 1}`
     : '-';
-  const sampleCount = selectedIsCurrentTrack && currentGeometry
-    ? String(currentGeometry.sampleCount ?? 0)
+  const sampleCount = hasDrawableGeometry
+    ? String(selectedGeometry.sampleCount ?? 0)
     : formatDriverTrackerSamples(selectedCatalog);
-  const updatedUtc = selectedIsCurrentTrack
-    ? (currentGeometry?.updatedUtc ?? selectedCatalog?.updatedUtc)
-    : selectedCatalog?.updatedUtc;
-  const detail = selectedIsCurrentTrack
-    ? (currentGeometry?.statusDetail ?? selectedCatalog?.statusDetail ?? '-')
-    : (selectedCatalog?.statusDetail ?? '-');
-  const source = selectedIsCurrentTrack
-    ? (currentGeometry?.source ?? selectedCatalog?.source ?? '-')
-    : (selectedCatalog?.source ?? '-');
+  const updatedUtc = selectedGeometry?.updatedUtc ?? selectedCatalog?.updatedUtc;
+  const detail = selectedGeometry?.statusDetail ?? selectedCatalog?.statusDetail ?? '-';
+  const source = selectedGeometry?.source ?? selectedCatalog?.source ?? '-';
 
   renderStatusFacts(driverTrackerGeometryFactsElement, [
     { label: t('driverTracker.activeTrack'), value: selectedTrackName },
@@ -2259,16 +2290,8 @@ function renderDriverTrackerGeometryPanel() {
     { label: t('driverTracker.detail'), value: detail },
   ]);
 
-  if (!selectedIsCurrentTrack) {
-    driverTrackerOutlinePolylineElement.setAttribute('points', '');
-    driverTrackerOutlineMessageElement.textContent = t('driverTracker.outlineCurrentOnly', {
-      current: currentTrackName ?? t('driverTracker.noCurrentTrack'),
-    });
-    return;
-  }
-
-  if (currentGeometry?.isAvailable && Array.isArray(currentGeometry.points) && currentGeometry.points.length > 1) {
-    const outlinePoints = currentGeometry.points
+  if (selectedGeometry?.isAvailable && Array.isArray(selectedGeometry.points) && selectedGeometry.points.length > 1) {
+    const outlinePoints = selectedGeometry.points
       .map(point => `${(Math.min(1, Math.max(0, Number(point.x ?? 0))) * 84 + 8).toFixed(2)},${(Math.min(1, Math.max(0, Number(point.y ?? 0))) * 84 + 8).toFixed(2)}`)
       .join(' ');
     driverTrackerOutlinePolylineElement.setAttribute('points', outlinePoints);
@@ -2277,13 +2300,24 @@ function renderDriverTrackerGeometryPanel() {
   }
 
   driverTrackerOutlinePolylineElement.setAttribute('points', '');
-  driverTrackerOutlineMessageElement.textContent = currentGeometry?.statusDetail || t('driverTracker.outlineUnavailable');
+  driverTrackerOutlineMessageElement.textContent = selectedGeometry?.statusDetail || t('driverTracker.outlineUnavailable');
 }
 
 async function fetchCurrentTrackGeometrySafe() {
   try {
     return await fetchJson('/api/track-geometry/current');
   } catch {
+    return null;
+  }
+}
+
+async function fetchSelectedTrackGeometrySafe(trackName, signal) {
+  try {
+    return await fetchJson(`/api/admin/driver-tracker/geometry?trackName=${encodeURIComponent(trackName)}`, { signal });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return null;
+    }
     return null;
   }
 }
@@ -2700,8 +2734,8 @@ function showTab(tabId, persist = true) {
   handleTabChange(target);
 }
 
-async function fetchJson(path) {
-  const response = await fetch(path, { cache: 'no-store', credentials: 'same-origin' });
+async function fetchJson(path, { signal } = {}) {
+  const response = await fetch(path, { cache: 'no-store', credentials: 'same-origin', signal });
   return readJsonResponse(response);
 }
 

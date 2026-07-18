@@ -155,6 +155,8 @@ public static class TracksideApiEndpoints
             .WithName("GetDriverTrackerTracks")
             .WithSummary("Returns seen tracks and generated-geometry recording status.");
 
+        endpoints.MapAdminDriverTrackerGeometry();
+
         endpoints.MapPost(LiveSessionRoutes.AdminDriverTrackerRecordingsPath, StartDriverTrackerRecordingAsync)
             .RequireAuthorization()
             .WithName("StartDriverTrackerRecording")
@@ -232,6 +234,20 @@ public static class TracksideApiEndpoints
         return endpoints;
     }
 
+    /// <summary>
+    /// Maps the authenticated selected-track geometry endpoint used by the admin preview.
+    /// </summary>
+    /// <param name="endpoints">Endpoint builder receiving the route.</param>
+    /// <returns>The mapped endpoint convention builder.</returns>
+    public static IEndpointConventionBuilder MapAdminDriverTrackerGeometry(this IEndpointRouteBuilder endpoints)
+    {
+        ArgumentNullException.ThrowIfNull(endpoints);
+        return endpoints.MapGet(LiveSessionRoutes.AdminDriverTrackerGeometryPath, GetDriverTrackerTrackGeometry)
+            .RequireAuthorization()
+            .WithName("GetDriverTrackerTrackGeometry")
+            .WithSummary("Returns generated geometry for a selected track in the admin catalog.");
+    }
+
     private static async Task<IResult> GetCurrentSessionAsync(
         ILiveSessionSource source,
         LiveSessionState state,
@@ -266,6 +282,28 @@ public static class TracksideApiEndpoints
 
         await liveDataPublisher.PublishAsync(new ScoringContextFrame { Snapshot = snapshot }, cancellationToken);
         return Results.Ok(trackGeometryRecorder.Get(snapshot.Session.TrackName));
+    }
+
+    /// <summary>
+    /// Returns generated geometry for a named track that is present in the admin catalog.
+    /// </summary>
+    /// <param name="trackName">Track name selected by the administrator.</param>
+    /// <param name="trackGeometryRecorder">Geometry recorder and persisted catalog.</param>
+    /// <returns>A bad request, not-found response, or the selected track geometry.</returns>
+    public static IResult GetDriverTrackerTrackGeometry(
+        string? trackName,
+        TrackGeometryRecorder trackGeometryRecorder)
+    {
+        if (string.IsNullOrWhiteSpace(trackName))
+        {
+            return Results.BadRequest(new { error = "Track name is required." });
+        }
+
+        var catalogTrack = trackGeometryRecorder.ListTracks().FirstOrDefault(track =>
+            string.Equals(track.TrackName, trackName.Trim(), StringComparison.OrdinalIgnoreCase));
+        return catalogTrack is null
+            ? Results.NotFound(new { error = "Track geometry was not found." })
+            : Results.Ok(trackGeometryRecorder.Get(catalogTrack.TrackName));
     }
 
     private static IResult GetClientConfiguration(IOptionsMonitor<TracksideOptions> options) => Results.Ok(new ClientConfigurationResponse
