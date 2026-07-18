@@ -12,7 +12,6 @@ const loginUsernameElement = document.querySelector('#loginUsername');
 const loginPasswordElement = document.querySelector('#loginPassword');
 const languageSelectElement = document.querySelector('#languageSelect');
 const sourceModeElement = document.querySelector('#sourceMode');
-const fixturePathElement = document.querySelector('#fixturePath');
 const scoringMapNameElement = document.querySelector('#scoringMapName');
 const processIdElement = document.querySelector('#processId');
 const autoDiscoverElement = document.querySelector('#autoDiscover');
@@ -21,7 +20,6 @@ const multipleMapPolicyElement = document.querySelector('#multipleMapPolicy');
 const scoringPollHzElement = document.querySelector('#scoringPollHz');
 const telemetryEnabledElement = document.querySelector('#telemetryEnabled');
 const telemetryPollHzElement = document.querySelector('#telemetryPollHz');
-const driverAliasesElement = document.querySelector('#driverAliases');
 const refreshElement = document.querySelector('#refreshDiscovery');
 const discoveryStatusElement = document.querySelector('#discoveryStatus');
 const candidateMapsElement = document.querySelector('#candidateMaps');
@@ -71,6 +69,10 @@ const driverTrackerGeometryRecordingLapsElement = document.querySelector('#drive
 const saveDriverTrackerSettingsButton = document.querySelector('#saveDriverTrackerSettings');
 const refreshDriverTrackerTracksButton = document.querySelector('#refreshDriverTrackerTracks');
 const driverTrackerTrackRowsElement = document.querySelector('#driverTrackerTrackRows');
+const driverTrackerSelectionHintElement = document.querySelector('#driverTrackerSelectionHint');
+const driverTrackerGeometryFactsElement = document.querySelector('#driverTrackerGeometryFacts');
+const driverTrackerOutlinePolylineElement = document.querySelector('#driverTrackerOutlinePolyline');
+const driverTrackerOutlineMessageElement = document.querySelector('#driverTrackerOutlineMessage');
 const setMonthlyTrackButton = document.querySelector('#setMonthlyTrack');
 const resetMonthlyTrackButton = document.querySelector('#resetMonthlyTrack');
 const monthlyBestLapsElement = document.querySelector('#monthlyBestLaps');
@@ -83,11 +85,29 @@ const createAdminButton = document.querySelector('#createAdminButton');
 const passwordUsernameElement = document.querySelector('#passwordUsername');
 const newPasswordElement = document.querySelector('#newPassword');
 const changePasswordButton = document.querySelector('#changePasswordButton');
+const statusUpdatedAtElement = document.querySelector('#statusUpdatedAt');
+const statusServiceStateElement = document.querySelector('#statusServiceState');
+const statusSourceModeElement = document.querySelector('#statusSourceMode');
+const statusSourceStateElement = document.querySelector('#statusSourceState');
+const statusCurrentTrackElement = document.querySelector('#statusCurrentTrack');
+const statusPersistenceStateElement = document.querySelector('#statusPersistenceState');
+const statusPersistenceProviderElement = document.querySelector('#statusPersistenceProvider');
+const statusPersistenceLocationElement = document.querySelector('#statusPersistenceLocation');
+const statusResultsStateElement = document.querySelector('#statusResultsState');
+const statusTrackerStateElement = document.querySelector('#statusTrackerState');
+const statusTrackerTrackElement = document.querySelector('#statusTrackerTrack');
+const statusTrackerCoverageElement = document.querySelector('#statusTrackerCoverage');
+const statusTrackerDetailElement = document.querySelector('#statusTrackerDetail');
+const advancedStatusSummaryElement = document.querySelector('#advancedStatusSummary');
+const fixturePathDiagnosticElement = document.querySelector('#fixturePathDiagnostic');
 const advancedStatusElement = document.querySelector('#advancedStatus');
 const refreshStatusButton = document.querySelector('#refreshStatus');
 let isPopulatingSourceForm = false;
 let autoSaveTimer = 0;
 let autoSaveSequence = 0;
+let hasLoadedSourceConfiguration = false;
+let sourceFixturePathValue = '';
+let sourceDriverAliases = {};
 let sessionSetupSaveTimer = 0;
 let sessionSetupSaveSequence = 0;
 let isRenderingSessionSetup = false;
@@ -98,6 +118,17 @@ let selectedParticipantId = null;
 let isManageResultsMode = false;
 let isCompareVisible = false;
 let activeSessionWorkspaceTab = 'recent';
+let isPopulatingDriverTrackerSettings = false;
+let driverTrackerSaveTimer = 0;
+let driverTrackerSaveSequence = 0;
+let selectedDriverTrackerTrackName = null;
+let latestCurrentTrackGeometry = null;
+let latestDriverTrackerCatalog = [];
+let latestLiveStatusSnapshot = null;
+let latestAdminStatus = null;
+let statusPollingTimer = 0;
+let isStatusPolling = false;
+let isStatusRefreshBusy = false;
 
 const languageStorageKey = 'trackside.admin.language';
 const tabStorageKey = 'trackside.admin.tab';
@@ -110,9 +141,11 @@ const translations = {
     'tabs.source': 'Source',
     'tabs.sessionSetup': 'Session Setup',
     'tabs.sessions': 'Sessions',
+    'tabs.tracker': 'Tracker',
     'tabs.leaderboards': 'Leaderboards',
     'tabs.admins': 'Admins',
     'tabs.status': 'Status',
+    'tabs.advanced': 'Advanced',
     'status.checkingSession': 'Checking admin session...',
     'status.adminLoginRequired': 'Admin login required.',
     'status.createFirstAdmin': 'Create the first admin account.',
@@ -126,6 +159,8 @@ const translations = {
     'status.profileCreated': 'Driver profile created.',
     'status.sessionIncluded': 'Session inclusion updated.',
     'status.kioskSaved': 'Kiosk display mode saved.',
+    'status.driverTrackerChanged': 'Driver tracker settings changed...',
+    'status.driverTrackerSaving': 'Saving driver tracker settings...',
     'status.driverTrackerSaved': 'Driver tracker settings saved.',
     'status.driverTrackerRecordingStarted': 'Geometry recording started.',
     'status.monthlyTrackStarted': 'Monthly track started with fresh stats.',
@@ -145,6 +180,8 @@ const translations = {
     'sourceConfig.title': 'Live Source',
     'sourceConfig.description': 'Choose the timing source, memory-map discovery behavior, and polling rates used by the live kiosk feed.',
     'source.mode': 'Source mode',
+    'source.fixture': 'Fixture',
+    'source.sharedMemory': 'Shared memory',
     'source.fixturePath': 'Fixture path',
     'source.scoringMapName': 'Exact scoring map',
     'source.processId': 'Dedicated server PID',
@@ -183,10 +220,25 @@ const translations = {
     'driverTracker.updated': 'Updated',
     'driverTracker.detail': 'Detail',
     'driverTracker.actions': 'Actions',
+    'driverTracker.phase4Note': 'Track-outline generation was not venue-validated in Phase 4. Treat this as operator tooling and confirm on-site behavior before race-night reliance.',
+    'driverTracker.currentGeometryTitle': 'Current Track Geometry',
+    'driverTracker.selectionHint': 'Select a track row to inspect geometry state and the current-track outline preview.',
+    'driverTracker.selectionCurrent': 'Selected track {track} is the current live track. Outline preview reflects current geometry.',
+    'driverTracker.selectionCatalogOnly': 'Selected track {track} is not current. Current geometry endpoint is reporting {current}.',
     'driverTracker.noTracks': 'No tracks seen yet.',
-    'driverTracker.ready': 'Ready',
+    'driverTracker.unavailable': 'Unavailable',
     'driverTracker.recording': 'Recording',
-    'driverTracker.seen': 'Seen',
+    'driverTracker.partial': 'Partial',
+    'driverTracker.complete': 'Complete',
+    'driverTracker.source': 'Source',
+    'driverTracker.state': 'State',
+    'driverTracker.activeTrack': 'Track',
+    'driverTracker.lapProgress': 'Lap progress',
+    'driverTracker.noCurrentTrack': 'No current track',
+    'driverTracker.noSelection': 'Select a track row to inspect geometry state.',
+    'driverTracker.outlineReady': 'Showing stored outline for the current track.',
+    'driverTracker.outlineUnavailable': 'No stored outline is available for the current track yet.',
+    'driverTracker.outlineCurrentOnly': 'Outline preview is only available for the current track endpoint: {current}.',
     'driverTracker.improve': 'Improve',
     'driverTracker.restart': 'Restart',
     'monthlyTrack.title': 'Monthly Track',
@@ -313,6 +365,45 @@ const translations = {
     'aria.sourceConfiguration': 'Source configuration',
     'aria.sharedMemoryDiscovery': 'Shared-memory discovery',
     'changePassword.title': 'Change Password',
+    'changePassword.username': 'Username',
+    'changePassword.newPassword': 'New password',
+    'changePassword.button': 'Change Password',
+    'statusPanel.title': 'Status',
+    'statusPanel.description': 'Live operational summary for venue staff. This view auto-refreshes while active.',
+    'statusPanel.lastUpdated': 'Last updated',
+    'statusPanel.notAvailable': 'n/a',
+    'statusPanel.liveCardTitle': 'Live Service',
+    'statusPanel.persistenceCardTitle': 'Persistence / Results',
+    'statusPanel.trackerCardTitle': 'Tracker',
+    'statusPanel.serviceState': 'Service state',
+    'statusPanel.sourceMode': 'Source mode',
+    'statusPanel.sourceState': 'Source state',
+    'statusPanel.currentTrack': 'Current track',
+    'statusPanel.persistenceState': 'Persistence',
+    'statusPanel.persistenceProvider': 'Provider',
+    'statusPanel.persistenceLocation': 'Location',
+    'statusPanel.resultsState': 'Results flow',
+    'statusPanel.trackerState': 'State',
+    'statusPanel.trackerTrack': 'Track',
+    'statusPanel.trackerCoverage': 'Coverage',
+    'statusPanel.trackerDetail': 'Detail',
+    'statusPanel.persistenceEnabled': 'Enabled',
+    'statusPanel.persistenceDisabled': 'Disabled',
+    'statusPanel.snapshotReady': 'Current session snapshot available',
+    'statusPanel.snapshotWaiting': 'Waiting for current session snapshot',
+    'statusPanel.noActiveSession': 'No active session',
+    'statusPanel.trackerMix': '{complete} complete, {partial} partial, {recording} recording.',
+    'advancedStatus.title': 'Advanced',
+    'advancedStatus.description': 'Troubleshooting details for source, persistence, and tracker behavior.',
+    'advancedStatus.sourceMode': 'Source mode',
+    'advancedStatus.sourceState': 'Source state',
+    'advancedStatus.persistence': 'Persistence',
+    'advancedStatus.tracker': 'Tracker',
+    'advancedStatus.fixturePathLabel': 'Fixture path diagnostic (read-only)',
+    'advancedStatus.fixturePathNote': 'Only relevant to fixture/demo/fallback operation. This field is diagnostic and not part of routine source editing.',
+    'advancedStatus.fixturePathUnset': 'No fixture path configured.',
+    'advancedStatus.rawTitle': 'Raw Status JSON',
+    'advancedStatus.noStatus': 'No status loaded.',
     'advancedStatus.refreshButton': 'Refresh Status',
     'sessions.empty': 'No persisted sessions yet.',
     'sessions.noParticipants': 'No participants persisted for this session.',
@@ -330,9 +421,11 @@ const translations = {
     'tabs.source': 'Bron',
     'tabs.sessionSetup': 'Sessie voorbereiden',
     'tabs.sessions': 'Sessies',
+    'tabs.tracker': 'Tracker',
     'tabs.leaderboards': 'Klassementen',
     'tabs.admins': 'Beheerders',
     'tabs.status': 'Status',
+    'tabs.advanced': 'Geavanceerd',
     'status.checkingSession': 'Beheersessie controleren...',
     'status.adminLoginRequired': 'Beheerlogin vereist.',
     'status.createFirstAdmin': 'Maak het eerste beheeraccount aan.',
@@ -346,6 +439,8 @@ const translations = {
     'status.profileCreated': 'Bestuurdersprofiel aangemaakt.',
     'status.sessionIncluded': 'Sessie-inclusie bijgewerkt.',
     'status.kioskSaved': 'Kiosk-weergavemodus opgeslagen.',
+    'status.driverTrackerChanged': 'Drivertracker-instellingen gewijzigd...',
+    'status.driverTrackerSaving': 'Drivertracker-instellingen opslaan...',
     'status.driverTrackerSaved': 'Drivertracker-instellingen opgeslagen.',
     'status.driverTrackerRecordingStarted': 'Geometrie-opname gestart.',
     'status.monthlyTrackStarted': 'Maandelijk klassement gestart met frisse statistieken.',
@@ -365,6 +460,8 @@ const translations = {
     'sourceConfig.title': 'Live bron',
     'sourceConfig.description': 'Kies de timingbron, memory-map ontdekking en polling-snelheden voor de live kioskfeed.',
     'source.mode': 'Bronmodus',
+    'source.fixture': 'Fixture',
+    'source.sharedMemory': 'Gedeeld geheugen',
     'source.fixturePath': 'Fixture-pad',
     'source.scoringMapName': 'Exacte scorekaart',
     'source.processId': 'PID van dedicated server',
@@ -403,10 +500,25 @@ const translations = {
     'driverTracker.updated': 'Bijgewerkt',
     'driverTracker.detail': 'Detail',
     'driverTracker.actions': 'Acties',
+    'driverTracker.phase4Note': 'Generatie van baancontouren is in fase 4 niet op de locatie gevalideerd. Gebruik dit als operatorhulpmiddel en bevestig gedrag op locatie voordat je erop vertrouwt tijdens racedagen.',
+    'driverTracker.currentGeometryTitle': 'Huidige baangeometrie',
+    'driverTracker.selectionHint': 'Selecteer een baanrij om de geometriestatus en preview van de huidige baancontour te bekijken.',
+    'driverTracker.selectionCurrent': 'Geselecteerde baan {track} is de huidige live baan. De contourpreview toont de huidige geometrie.',
+    'driverTracker.selectionCatalogOnly': 'Geselecteerde baan {track} is niet huidig. Het current-geometry-endpoint meldt nu {current}.',
     'driverTracker.noTracks': 'Nog geen banen gezien.',
-    'driverTracker.ready': 'Gereed',
+    'driverTracker.unavailable': 'Niet beschikbaar',
     'driverTracker.recording': 'Opnemen',
-    'driverTracker.seen': 'Gezien',
+    'driverTracker.partial': 'Gedeeltelijk',
+    'driverTracker.complete': 'Volledig',
+    'driverTracker.source': 'Bron',
+    'driverTracker.state': 'Status',
+    'driverTracker.activeTrack': 'Baan',
+    'driverTracker.lapProgress': 'Rondevoortgang',
+    'driverTracker.noCurrentTrack': 'Geen huidige baan',
+    'driverTracker.noSelection': 'Selecteer een baanrij om geometriestatus te bekijken.',
+    'driverTracker.outlineReady': 'Opgeslagen contour voor de huidige baan wordt getoond.',
+    'driverTracker.outlineUnavailable': 'Er is nog geen opgeslagen contour voor de huidige baan beschikbaar.',
+    'driverTracker.outlineCurrentOnly': 'Contourpreview is alleen beschikbaar voor de huidige baan van het endpoint: {current}.',
     'driverTracker.improve': 'Verbeteren',
     'driverTracker.restart': 'Herstarten',
     'monthlyTrack.title': 'Maandelijkse baan',
@@ -533,6 +645,45 @@ const translations = {
     'aria.sourceConfiguration': 'Bronconfiguratie',
     'aria.sharedMemoryDiscovery': 'Shared-memory ontdekking',
     'changePassword.title': 'Wachtwoord wijzigen',
+    'changePassword.username': 'Gebruikersnaam',
+    'changePassword.newPassword': 'Nieuw wachtwoord',
+    'changePassword.button': 'Wachtwoord wijzigen',
+    'statusPanel.title': 'Status',
+    'statusPanel.description': 'Live operationele samenvatting voor locatiepersoneel. Dit overzicht ververst automatisch terwijl het actief is.',
+    'statusPanel.lastUpdated': 'Laatst bijgewerkt',
+    'statusPanel.notAvailable': 'n.v.t.',
+    'statusPanel.liveCardTitle': 'Live service',
+    'statusPanel.persistenceCardTitle': 'Persistente opslag / resultaten',
+    'statusPanel.trackerCardTitle': 'Tracker',
+    'statusPanel.serviceState': 'Servicestatus',
+    'statusPanel.sourceMode': 'Bronmodus',
+    'statusPanel.sourceState': 'Bronstatus',
+    'statusPanel.currentTrack': 'Huidige baan',
+    'statusPanel.persistenceState': 'Persistente opslag',
+    'statusPanel.persistenceProvider': 'Provider',
+    'statusPanel.persistenceLocation': 'Locatie',
+    'statusPanel.resultsState': 'Resultaatstroom',
+    'statusPanel.trackerState': 'Status',
+    'statusPanel.trackerTrack': 'Baan',
+    'statusPanel.trackerCoverage': 'Dekking',
+    'statusPanel.trackerDetail': 'Detail',
+    'statusPanel.persistenceEnabled': 'Ingeschakeld',
+    'statusPanel.persistenceDisabled': 'Uitgeschakeld',
+    'statusPanel.snapshotReady': 'Huidige sessiesnapshot beschikbaar',
+    'statusPanel.snapshotWaiting': 'Wachten op huidige sessiesnapshot',
+    'statusPanel.noActiveSession': 'Geen actieve sessie',
+    'statusPanel.trackerMix': '{complete} volledig, {partial} gedeeltelijk, {recording} opname.',
+    'advancedStatus.title': 'Geavanceerd',
+    'advancedStatus.description': 'Probleemoplossingsdetails voor bron-, opslag- en tracker-gedrag.',
+    'advancedStatus.sourceMode': 'Bronmodus',
+    'advancedStatus.sourceState': 'Bronstatus',
+    'advancedStatus.persistence': 'Persistente opslag',
+    'advancedStatus.tracker': 'Tracker',
+    'advancedStatus.fixturePathLabel': 'Fixture-pad diagnostiek (alleen lezen)',
+    'advancedStatus.fixturePathNote': 'Alleen relevant voor fixture/demo/fallback-gebruik. Dit veld is diagnostisch en geen regulier bewerkveld voor broninstellingen.',
+    'advancedStatus.fixturePathUnset': 'Geen fixture-pad geconfigureerd.',
+    'advancedStatus.rawTitle': 'Ruwe status-JSON',
+    'advancedStatus.noStatus': 'Nog geen status geladen.',
     'advancedStatus.refreshButton': 'Status verversen',
     'sessions.empty': 'Nog geen opgeslagen sessies.',
     'sessions.noParticipants': 'Geen deelnemers opgeslagen voor deze sessie.',
@@ -574,6 +725,11 @@ function setLanguage(language) {
   sessionSetupRowsElement.querySelectorAll('.sessionSetupRow button').forEach(button => {
     button.textContent = t('setup.remove');
   });
+
+  renderStatusDashboard();
+  renderAdvancedDiagnostics();
+  renderDriverTrackerTracks(latestDriverTrackerCatalog);
+  renderDriverTrackerGeometryPanel();
 }
 
 setupButton.addEventListener('click', () => createFirstAdmin().catch(showError));
@@ -600,16 +756,20 @@ addSetupRowButton.addEventListener('click', () => {
 clearSessionSetupButton.addEventListener('click', () => clearSessionSetup().catch(showError));
 createProfileButton.addEventListener('click', () => createDriverProfile().catch(showError));
 saveKioskDisplayModeButton.addEventListener('click', () => saveKioskSettings().catch(showError));
-saveDriverTrackerSettingsButton.addEventListener('click', () => saveDriverTrackerSettings().catch(showError));
+saveDriverTrackerSettingsButton.addEventListener('click', () => {
+  window.clearTimeout(driverTrackerSaveTimer);
+  saveDriverTrackerSettings().catch(showError);
+});
 refreshDriverTrackerTracksButton.addEventListener('click', () => loadDriverTrackerTracks().catch(showError));
 setMonthlyTrackButton.addEventListener('click', () => setMonthlyTrack().catch(showError));
 resetMonthlyTrackButton.addEventListener('click', () => resetMonthlyTrack().catch(showError));
 runRetentionCleanupButton.addEventListener('click', () => runRetentionCleanup().catch(showError));
 createAdminButton.addEventListener('click', () => createAdmin().catch(showError));
 changePasswordButton.addEventListener('click', () => changePassword().catch(showError));
-refreshStatusButton.addEventListener('click', () => loadAdvancedStatus().catch(showError));
+refreshStatusButton.addEventListener('click', () => refreshOperationalStatus().catch(showError));
 renderSessionWorkspaceNavigation();
 bindSourceAutoSave();
+bindDriverTrackerAutoSave();
 loadLanguageChoice().catch(showError);
 
 document.querySelectorAll('[data-tab]').forEach(button => {
@@ -1585,13 +1745,28 @@ async function loadKioskSettings() {
 
 async function loadDriverTrackerSettings() {
   const settings = await fetchJson('/api/admin/driver-tracker');
-  driverTrackerClientRefreshHzElement.value = String(settings.clientRefreshHz ?? 30);
-  driverTrackerGeometryRecordingLapsElement.value = String(settings.geometryRecordingLaps ?? 1);
+  isPopulatingDriverTrackerSettings = true;
+  try {
+    driverTrackerClientRefreshHzElement.value = String(settings.clientRefreshHz ?? 30);
+    driverTrackerGeometryRecordingLapsElement.value = String(settings.geometryRecordingLaps ?? 1);
+  } finally {
+    isPopulatingDriverTrackerSettings = false;
+  }
 }
 
 async function loadDriverTrackerTracks() {
-  const catalog = await fetchJson('/api/admin/driver-tracker/tracks');
-  renderDriverTrackerTracks(catalog.tracks ?? []);
+  const [catalog, currentGeometry] = await Promise.all([
+    fetchJson('/api/admin/driver-tracker/tracks'),
+    fetchCurrentTrackGeometrySafe(),
+  ]);
+
+  latestDriverTrackerCatalog = catalog.tracks ?? [];
+  latestCurrentTrackGeometry = currentGeometry;
+  syncSelectedDriverTrackerTrack();
+  renderDriverTrackerTracks(latestDriverTrackerCatalog);
+  renderDriverTrackerGeometryPanel();
+  renderStatusDashboard();
+  renderAdvancedDiagnostics();
 }
 
 async function saveLocalizationChoice(language) {
@@ -1626,11 +1801,23 @@ async function saveKioskSettings() {
 }
 
 async function saveDriverTrackerSettings() {
+  const sequence = ++driverTrackerSaveSequence;
   const clientRefreshHz = Number(driverTrackerClientRefreshHzElement.value);
   const geometryRecordingLaps = Number(driverTrackerGeometryRecordingLapsElement.value);
+  setStatus(t('status.driverTrackerSaving'));
   const settings = await putJson('/api/admin/driver-tracker', { clientRefreshHz, geometryRecordingLaps });
-  driverTrackerClientRefreshHzElement.value = String(settings.clientRefreshHz ?? 30);
-  driverTrackerGeometryRecordingLapsElement.value = String(settings.geometryRecordingLaps ?? 1);
+  if (sequence !== driverTrackerSaveSequence) {
+    return;
+  }
+
+  isPopulatingDriverTrackerSettings = true;
+  try {
+    driverTrackerClientRefreshHzElement.value = String(settings.clientRefreshHz ?? 30);
+    driverTrackerGeometryRecordingLapsElement.value = String(settings.geometryRecordingLaps ?? 1);
+  } finally {
+    isPopulatingDriverTrackerSettings = false;
+  }
+
   setStatus(t('status.driverTrackerSaved'));
 }
 
@@ -1647,9 +1834,40 @@ function renderDriverTrackerTracks(tracks) {
   }
 
   for (const track of tracks) {
+    const trackName = track.trackName ?? '';
     const row = document.createElement('tr');
+    const isSelected = namesEqual(trackName, selectedDriverTrackerTrackName);
+    row.classList.toggle('selectedRow', isSelected);
+    row.tabIndex = trackName ? 0 : -1;
+    row.setAttribute('aria-selected', String(isSelected));
+    row.addEventListener('keydown', event => {
+      if ((event.target instanceof Element && event.target.closest('button'))
+        || !trackName
+        || (event.key !== 'Enter' && event.key !== ' ')) {
+        return;
+      }
+
+      event.preventDefault();
+      selectedDriverTrackerTrackName = trackName;
+      renderDriverTrackerTracks(latestDriverTrackerCatalog);
+      renderDriverTrackerGeometryPanel();
+    });
+    row.addEventListener('click', event => {
+      if (event.target instanceof Element && event.target.closest('button')) {
+        return;
+      }
+
+      if (!trackName) {
+        return;
+      }
+
+      selectedDriverTrackerTrackName = trackName;
+      renderDriverTrackerTracks(latestDriverTrackerCatalog);
+      renderDriverTrackerGeometryPanel();
+    });
+
     appendCell(row, track.trackName ?? '-');
-    appendCell(row, driverTrackerStatusText(track));
+    appendCell(row, driverTrackerStateLabel(deriveDriverTrackerState(track)));
     appendCell(row, formatDriverTrackerCoverage(track));
     appendCell(row, `${track.recordedLapCount ?? 0}/${track.targetCompletedLaps ?? 1}`);
     appendCell(row, formatDriverTrackerSamples(track));
@@ -1658,11 +1876,23 @@ function renderDriverTrackerTracks(tracks) {
     appendActionsCell(row, [
       {
         label: t('driverTracker.improve'),
-        onClick: () => startDriverTrackerRecording(track.trackName, false).catch(showError),
+        onClick: () => {
+          if (!trackName) {
+            return;
+          }
+
+          startDriverTrackerRecording(trackName, false).catch(showError);
+        },
       },
       {
         label: t('driverTracker.restart'),
-        onClick: () => startDriverTrackerRecording(track.trackName, true).catch(showError),
+        onClick: () => {
+          if (!trackName) {
+            return;
+          }
+
+          startDriverTrackerRecording(trackName, true).catch(showError);
+        },
       },
     ]);
     driverTrackerTrackRowsElement.appendChild(row);
@@ -1670,6 +1900,10 @@ function renderDriverTrackerTracks(tracks) {
 }
 
 function formatDriverTrackerCoverage(track) {
+  if (!track) {
+    return '-';
+  }
+
   const stored = `${Number(track.coveragePercent ?? 0).toFixed(1)}%`;
   const candidate = Number(track.candidateCoveragePercent ?? 0);
   return candidate > 0 && !track.hasGeometry
@@ -1678,6 +1912,10 @@ function formatDriverTrackerCoverage(track) {
 }
 
 function formatDriverTrackerSamples(track) {
+  if (!track) {
+    return '-';
+  }
+
   const stored = Number(track.sampleCount ?? 0);
   const candidate = Number(track.candidateSampleCount ?? 0);
   return candidate > 0
@@ -1685,19 +1923,207 @@ function formatDriverTrackerSamples(track) {
     : String(stored);
 }
 
-function driverTrackerStatusText(track) {
+function deriveDriverTrackerState(track) {
+  if (!track) {
+    return 'unavailable';
+  }
+
   if (track.isRecording) {
-    return t('driverTracker.recording');
+    return 'recording';
   }
 
   if (track.hasGeometry) {
-    return t('driverTracker.ready');
+    return 'complete';
   }
 
-  return t('driverTracker.seen');
+  const hasPartialProgress = Number(track.coveragePercent ?? 0) > 0
+    || Number(track.sampleCount ?? 0) > 0
+    || Number(track.candidateCoveragePercent ?? 0) > 0
+    || Number(track.candidateSampleCount ?? 0) > 0
+    || Number(track.recordedLapCount ?? 0) > 0;
+
+  return hasPartialProgress ? 'partial' : 'unavailable';
+}
+
+function deriveDriverTrackerStateForSelection(track, currentGeometry, selectedIsCurrentTrack) {
+  if (!selectedIsCurrentTrack) {
+    return deriveDriverTrackerState(track);
+  }
+
+  if (track?.isRecording) {
+    return 'recording';
+  }
+
+  if (currentGeometry?.isAvailable || track?.hasGeometry) {
+    return 'complete';
+  }
+
+  const hasPartialFromCurrent = Number(currentGeometry?.coveragePercent ?? 0) > 0
+    || Number(currentGeometry?.sampleCount ?? 0) > 0
+    || Boolean(currentGeometry?.isCompleteLap)
+    || Number(track?.candidateCoveragePercent ?? 0) > 0
+    || Number(track?.candidateSampleCount ?? 0) > 0;
+
+  return hasPartialFromCurrent ? 'partial' : 'unavailable';
+}
+
+function driverTrackerStateLabel(state) {
+  switch (state) {
+    case 'recording':
+      return t('driverTracker.recording');
+    case 'complete':
+      return t('driverTracker.complete');
+    case 'partial':
+      return t('driverTracker.partial');
+    default:
+      return t('driverTracker.unavailable');
+  }
+}
+
+function namesEqual(left, right) {
+  return typeof left === 'string'
+    && typeof right === 'string'
+    && left.localeCompare(right, undefined, { sensitivity: 'accent' }) === 0;
+}
+
+function findTrackByName(tracks, trackName) {
+  if (!trackName) {
+    return null;
+  }
+
+  return tracks.find(track => namesEqual(track.trackName ?? '', trackName)) ?? null;
+}
+
+function syncSelectedDriverTrackerTrack() {
+  if (findTrackByName(latestDriverTrackerCatalog, selectedDriverTrackerTrackName)) {
+    return;
+  }
+
+  const currentTrackName = latestCurrentTrackGeometry?.trackName ?? null;
+  if (currentTrackName && findTrackByName(latestDriverTrackerCatalog, currentTrackName)) {
+    selectedDriverTrackerTrackName = currentTrackName;
+    return;
+  }
+
+  if (currentTrackName && latestDriverTrackerCatalog.length === 0) {
+    selectedDriverTrackerTrackName = currentTrackName;
+    return;
+  }
+
+  selectedDriverTrackerTrackName = latestDriverTrackerCatalog[0]?.trackName ?? null;
+}
+
+function bindDriverTrackerAutoSave() {
+  const trackerInputs = [driverTrackerClientRefreshHzElement, driverTrackerGeometryRecordingLapsElement];
+  trackerInputs.forEach(element => {
+    element.addEventListener('input', () => scheduleDriverTrackerAutoSave(700));
+    element.addEventListener('change', () => scheduleDriverTrackerAutoSave(0));
+    element.addEventListener('blur', () => scheduleDriverTrackerAutoSave(0));
+  });
+}
+
+function scheduleDriverTrackerAutoSave(delayMilliseconds) {
+  if (isPopulatingDriverTrackerSettings) {
+    return;
+  }
+
+  window.clearTimeout(driverTrackerSaveTimer);
+  setStatus(delayMilliseconds === 0 ? t('status.driverTrackerSaving') : t('status.driverTrackerChanged'));
+  driverTrackerSaveTimer = window.setTimeout(() => {
+    saveDriverTrackerSettings().catch(showError);
+  }, delayMilliseconds);
+}
+
+function renderDriverTrackerGeometryPanel() {
+  const selectedTrackName = selectedDriverTrackerTrackName;
+  const selectedCatalog = findTrackByName(latestDriverTrackerCatalog, selectedTrackName);
+  const currentGeometry = latestCurrentTrackGeometry;
+  const currentTrackName = currentGeometry?.trackName ?? null;
+  const selectedIsCurrentTrack = Boolean(selectedTrackName && currentTrackName && namesEqual(selectedTrackName, currentTrackName));
+
+  if (!selectedTrackName) {
+    driverTrackerSelectionHintElement.textContent = t('driverTracker.noSelection');
+    renderStatusFacts(driverTrackerGeometryFactsElement, []);
+    driverTrackerOutlinePolylineElement.setAttribute('points', '');
+    driverTrackerOutlineMessageElement.textContent = t('driverTracker.noSelection');
+    return;
+  }
+
+  if (selectedIsCurrentTrack) {
+    driverTrackerSelectionHintElement.textContent = t('driverTracker.selectionCurrent', { track: selectedTrackName });
+  } else {
+    driverTrackerSelectionHintElement.textContent = t('driverTracker.selectionCatalogOnly', {
+      track: selectedTrackName,
+      current: currentTrackName ?? t('driverTracker.noCurrentTrack'),
+    });
+  }
+
+  const selectedState = deriveDriverTrackerStateForSelection(selectedCatalog, currentGeometry, selectedIsCurrentTrack);
+  const effectiveCoverage = selectedIsCurrentTrack && currentGeometry
+    ? `${Number(currentGeometry.coveragePercent ?? 0).toFixed(1)}%`
+    : formatDriverTrackerCoverage(selectedCatalog);
+  const lapProgress = selectedCatalog
+    ? `${selectedCatalog.recordedLapCount ?? 0}/${selectedCatalog.targetCompletedLaps ?? 1}`
+    : '-';
+  const sampleCount = selectedIsCurrentTrack && currentGeometry
+    ? String(currentGeometry.sampleCount ?? 0)
+    : formatDriverTrackerSamples(selectedCatalog);
+  const updatedUtc = selectedIsCurrentTrack
+    ? (currentGeometry?.updatedUtc ?? selectedCatalog?.updatedUtc)
+    : selectedCatalog?.updatedUtc;
+  const detail = selectedIsCurrentTrack
+    ? (currentGeometry?.statusDetail ?? selectedCatalog?.statusDetail ?? '-')
+    : (selectedCatalog?.statusDetail ?? '-');
+  const source = selectedIsCurrentTrack
+    ? (currentGeometry?.source ?? selectedCatalog?.source ?? '-')
+    : (selectedCatalog?.source ?? '-');
+
+  renderStatusFacts(driverTrackerGeometryFactsElement, [
+    { label: t('driverTracker.activeTrack'), value: selectedTrackName },
+    { label: t('driverTracker.state'), value: driverTrackerStateLabel(selectedState) },
+    { label: t('driverTracker.coverage'), value: effectiveCoverage },
+    { label: t('driverTracker.lapProgress'), value: lapProgress },
+    { label: t('driverTracker.samples'), value: sampleCount },
+    { label: t('driverTracker.updated'), value: formatDate(updatedUtc) },
+    { label: t('driverTracker.source'), value: source },
+    { label: t('driverTracker.detail'), value: detail },
+  ]);
+
+  if (!selectedIsCurrentTrack) {
+    driverTrackerOutlinePolylineElement.setAttribute('points', '');
+    driverTrackerOutlineMessageElement.textContent = t('driverTracker.outlineCurrentOnly', {
+      current: currentTrackName ?? t('driverTracker.noCurrentTrack'),
+    });
+    return;
+  }
+
+  if (currentGeometry?.isAvailable && Array.isArray(currentGeometry.points) && currentGeometry.points.length > 1) {
+    const outlinePoints = currentGeometry.points
+      .map(point => `${(Math.min(1, Math.max(0, Number(point.x ?? 0))) * 84 + 8).toFixed(2)},${(Math.min(1, Math.max(0, Number(point.y ?? 0))) * 84 + 8).toFixed(2)}`)
+      .join(' ');
+    driverTrackerOutlinePolylineElement.setAttribute('points', outlinePoints);
+    driverTrackerOutlineMessageElement.textContent = t('driverTracker.outlineReady');
+    return;
+  }
+
+  driverTrackerOutlinePolylineElement.setAttribute('points', '');
+  driverTrackerOutlineMessageElement.textContent = currentGeometry?.statusDetail || t('driverTracker.outlineUnavailable');
+}
+
+async function fetchCurrentTrackGeometrySafe() {
+  try {
+    return await fetchJson('/api/track-geometry/current');
+  } catch {
+    return null;
+  }
 }
 
 async function startDriverTrackerRecording(trackName, resetExistingGeometry) {
+  if (!trackName) {
+    return;
+  }
+
+  selectedDriverTrackerTrackName = trackName;
   const targetCompletedLaps = Number(driverTrackerGeometryRecordingLapsElement.value || 1);
   await postJson('/api/admin/driver-tracker/recordings', {
     trackName,
@@ -1794,15 +2220,205 @@ async function changePassword() {
 }
 
 async function loadAdvancedStatus() {
-  const status = await fetchJson('/api/admin/status');
-  advancedStatusElement.textContent = JSON.stringify(status, null, 2);
+  await refreshOperationalStatus();
+}
+
+async function refreshOperationalStatus() {
+  if (isStatusRefreshBusy) {
+    return;
+  }
+
+  isStatusRefreshBusy = true;
+  try {
+    latestAdminStatus = await fetchJson('/api/admin/status');
+    latestLiveStatusSnapshot = await fetchLiveSessionSnapshotForStatus();
+
+    try {
+      const trackerCatalog = await fetchJson('/api/admin/driver-tracker/tracks');
+      latestDriverTrackerCatalog = trackerCatalog.tracks ?? [];
+    } catch {
+      // Keep the last known catalog when this optional status-side fetch fails.
+    }
+
+    advancedStatusElement.textContent = JSON.stringify(latestAdminStatus, null, 2);
+    syncSelectedDriverTrackerTrack();
+    const trackerTabActive = document.getElementById('trackerTab')?.classList.contains('active');
+    if (trackerTabActive) {
+      renderDriverTrackerTracks(latestDriverTrackerCatalog);
+      renderDriverTrackerGeometryPanel();
+    }
+    renderStatusDashboard();
+    renderAdvancedDiagnostics();
+  } finally {
+    isStatusRefreshBusy = false;
+  }
+}
+
+function startStatusPolling() {
+  if (isStatusPolling) {
+    return;
+  }
+
+  isStatusPolling = true;
+  refreshOperationalStatus().catch(showError);
+  statusPollingTimer = window.setInterval(() => {
+    refreshOperationalStatus().catch(showError);
+  }, 1000);
+}
+
+function stopStatusPolling() {
+  if (!isStatusPolling) {
+    return;
+  }
+
+  isStatusPolling = false;
+  window.clearInterval(statusPollingTimer);
+  statusPollingTimer = 0;
+}
+
+function handleTabChange(tabId) {
+  if (tabId === 'statusTab') {
+    startStatusPolling();
+    return;
+  }
+
+  stopStatusPolling();
+
+  if (tabId === 'advancedTab') {
+    refreshOperationalStatus().catch(showError);
+    return;
+  }
+
+  if (tabId === 'trackerTab') {
+    loadDriverTrackerTracks().catch(showError);
+  }
+}
+
+async function fetchLiveSessionSnapshotForStatus() {
+  try {
+    return await fetchJson('/api/live-session/current');
+  } catch {
+    return null;
+  }
+}
+
+function renderStatusDashboard() {
+  const health = latestAdminStatus?.health;
+  const persistence = latestAdminStatus?.persistence;
+  const trackerSummary = buildTrackerOperationalSummary();
+  const trackName = latestLiveStatusSnapshot?.session?.trackName ?? health?.currentTrackName;
+  const trackPhase = latestLiveStatusSnapshot?.session?.phase;
+  const sourceState = latestLiveStatusSnapshot?.status ?? health?.currentSourceStatus ?? t('statusPanel.notAvailable');
+  const persistenceState = persistence
+    ? (persistence.isEnabled ? t('statusPanel.persistenceEnabled') : t('statusPanel.persistenceDisabled'))
+    : t('statusPanel.notAvailable');
+
+  statusUpdatedAtElement.textContent = `${t('statusPanel.lastUpdated')}: ${formatDate(health?.timestampUtc)}`;
+  statusServiceStateElement.textContent = health?.serviceState ?? t('statusPanel.notAvailable');
+  statusSourceModeElement.textContent = health?.sourceMode ?? t('statusPanel.notAvailable');
+  statusSourceStateElement.textContent = sourceState;
+  statusCurrentTrackElement.textContent = trackName
+    ? (trackPhase ? `${trackName} (${trackPhase})` : trackName)
+    : t('statusPanel.noActiveSession');
+  statusPersistenceStateElement.textContent = persistenceState;
+  statusPersistenceProviderElement.textContent = persistence?.provider ?? t('statusPanel.notAvailable');
+  statusPersistenceLocationElement.textContent = persistence?.displayLocation ?? t('statusPanel.notAvailable');
+  statusResultsStateElement.textContent = health?.currentSessionAvailable
+    ? t('statusPanel.snapshotReady')
+    : t('statusPanel.snapshotWaiting');
+  statusTrackerStateElement.textContent = driverTrackerStateLabel(trackerSummary.state);
+  statusTrackerTrackElement.textContent = trackerSummary.trackName;
+  statusTrackerCoverageElement.textContent = trackerSummary.coverage;
+  statusTrackerDetailElement.textContent = trackerSummary.detail;
+}
+
+function buildTrackerOperationalSummary() {
+  const tracks = latestDriverTrackerCatalog ?? [];
+  if (tracks.length === 0) {
+    return {
+      state: 'unavailable',
+      trackName: t('statusPanel.noActiveSession'),
+      coverage: '-',
+      detail: t('driverTracker.noTracks'),
+    };
+  }
+
+  const counts = { unavailable: 0, recording: 0, partial: 0, complete: 0 };
+  tracks.forEach(track => {
+    counts[deriveDriverTrackerState(track)] += 1;
+  });
+
+  const overallState = counts.recording > 0
+    ? 'recording'
+    : counts.partial > 0
+      ? 'partial'
+      : counts.complete > 0
+        ? 'complete'
+        : 'unavailable';
+
+  const liveTrackName = latestLiveStatusSnapshot?.session?.trackName ?? latestAdminStatus?.health?.currentTrackName;
+  const focusedTrack = findTrackByName(tracks, liveTrackName)
+    ?? tracks.find(track => deriveDriverTrackerState(track) === overallState)
+    ?? tracks[0];
+  const summaryDetail = t('statusPanel.trackerMix', {
+    complete: counts.complete,
+    partial: counts.partial,
+    recording: counts.recording,
+  });
+  const detail = focusedTrack?.statusDetail
+    ? `${focusedTrack.statusDetail} ${summaryDetail}`
+    : summaryDetail;
+
+  return {
+    state: overallState,
+    trackName: focusedTrack?.trackName ?? t('statusPanel.noActiveSession'),
+    coverage: formatDriverTrackerCoverage(focusedTrack),
+    detail,
+  };
+}
+
+function renderAdvancedDiagnostics() {
+  const health = latestAdminStatus?.health;
+  const persistence = latestAdminStatus?.persistence;
+  const trackerSummary = buildTrackerOperationalSummary();
+  const sourceState = latestLiveStatusSnapshot?.status ?? health?.currentSourceStatus ?? t('statusPanel.notAvailable');
+  const persistenceText = persistence
+    ? `${persistence.isEnabled ? t('statusPanel.persistenceEnabled') : t('statusPanel.persistenceDisabled')} (${persistence.provider ?? t('statusPanel.notAvailable')})`
+    : t('statusPanel.notAvailable');
+
+  renderStatusFacts(advancedStatusSummaryElement, [
+    { label: t('advancedStatus.sourceMode'), value: health?.sourceMode ?? t('statusPanel.notAvailable') },
+    { label: t('advancedStatus.sourceState'), value: sourceState },
+    { label: t('advancedStatus.persistence'), value: persistenceText },
+    { label: t('advancedStatus.tracker'), value: `${driverTrackerStateLabel(trackerSummary.state)} - ${trackerSummary.detail}` },
+  ]);
+
+  fixturePathDiagnosticElement.value = sourceFixturePathValue || t('advancedStatus.fixturePathUnset');
+  if (!latestAdminStatus) {
+    advancedStatusElement.textContent = t('advancedStatus.noStatus');
+  }
+}
+
+function renderStatusFacts(container, facts) {
+  container.replaceChildren();
+  for (const fact of facts) {
+    const item = document.createElement('div');
+    item.className = 'statusFact';
+    const label = document.createElement('span');
+    label.textContent = fact.label;
+    const value = document.createElement('strong');
+    value.textContent = fact.value ?? '-';
+    item.append(label, value);
+    container.appendChild(item);
+  }
 }
 
 function populateForm(configuration) {
   isPopulatingSourceForm = true;
   const sharedMemory = configuration.sharedMemory ?? {};
   sourceModeElement.value = configuration.mode ?? 'Fixture';
-  fixturePathElement.value = configuration.fixturePath ?? '';
+  sourceFixturePathValue = configuration.fixturePath ?? '';
+  sourceDriverAliases = configuration.driverAliases ?? {};
   scoringMapNameElement.value = sharedMemory.scoringMapName ?? '';
   processIdElement.value = sharedMemory.processId ?? '';
   autoDiscoverElement.checked = sharedMemory.autoDiscover ?? true;
@@ -1811,17 +2427,17 @@ function populateForm(configuration) {
   scoringPollHzElement.value = sharedMemory.scoringPollHz ?? 10;
   telemetryEnabledElement.checked = sharedMemory.telemetry?.enabled ?? false;
   telemetryPollHzElement.value = sharedMemory.telemetry?.pollHz ?? 100;
-  driverAliasesElement.value = JSON.stringify(configuration.driverAliases ?? {}, null, 2);
+  fixturePathDiagnosticElement.value = sourceFixturePathValue || t('advancedStatus.fixturePathUnset');
+  hasLoadedSourceConfiguration = true;
   isPopulatingSourceForm = false;
 }
 
 function readSourceConfigurationForm() {
-  const aliases = JSON.parse(driverAliasesElement.value || '{}');
   const processId = processIdElement.value ? Number.parseInt(processIdElement.value, 10) : null;
   return {
     mode: sourceModeElement.value,
-    fixturePath: fixturePathElement.value.trim(),
-    driverAliases: aliases,
+    fixturePath: sourceFixturePathValue,
+    driverAliases: sourceDriverAliases,
     sharedMemory: {
       scoringMapName: nullIfEmpty(scoringMapNameElement.value),
       processId: Number.isFinite(processId) ? processId : null,
@@ -1871,6 +2487,7 @@ function formatCandidate(candidate) {
 }
 
 function showSetup() {
+  stopStatusPolling();
   setupPanel.hidden = false;
   loginPanel.hidden = true;
   dashboardPanel.hidden = true;
@@ -1879,6 +2496,7 @@ function showSetup() {
 }
 
 function showLogin() {
+  stopStatusPolling();
   setupPanel.hidden = true;
   loginPanel.hidden = false;
   dashboardPanel.hidden = true;
@@ -1908,6 +2526,8 @@ function showTab(tabId, persist = true) {
     tab.hidden = tab.id !== target;
     tab.classList.toggle('active', tab.id === target);
   });
+
+  handleTabChange(target);
 }
 
 async function fetchJson(path) {
@@ -2050,7 +2670,7 @@ function showError(error) {
 
 function bindSourceAutoSave() {
   const immediateElements = [sourceModeElement, autoDiscoverElement, multipleMapPolicyElement, telemetryEnabledElement];
-  const debouncedElements = [fixturePathElement, scoringMapNameElement, processIdElement, processNamesElement, scoringPollHzElement, telemetryPollHzElement, driverAliasesElement];
+  const debouncedElements = [scoringMapNameElement, processIdElement, processNamesElement, scoringPollHzElement, telemetryPollHzElement];
 
   immediateElements.forEach(element => {
     element.addEventListener('change', () => scheduleSourceAutoSave(0));
@@ -2063,7 +2683,7 @@ function bindSourceAutoSave() {
 }
 
 function scheduleSourceAutoSave(delayMilliseconds) {
-  if (isPopulatingSourceForm) {
+  if (isPopulatingSourceForm || !hasLoadedSourceConfiguration) {
     return;
   }
 
