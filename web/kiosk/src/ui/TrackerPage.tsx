@@ -59,6 +59,7 @@ export interface DriverMarker {
   driverId: string;
   rigName: string;
   label: string;
+  color: string;
   rank: number;
   x: number;
   y: number;
@@ -66,7 +67,7 @@ export interface DriverMarker {
 
 export function useStableDriverColors(markers: DriverMarker[]): Map<string, string> {
   return useMemo(
-    () => new Map(markers.map(marker => [marker.driverId, stableDriverColor(marker.driverId, marker.rigName)])),
+    () => new Map(markers.map(marker => [marker.driverId, marker.color || stableDriverColor(marker.driverId, marker.rigName)])),
     [markers],
   );
 }
@@ -109,6 +110,7 @@ export function buildDriverMarkers(drivers: DriverSnapshot[], bounds: TrackGeome
         driverId: driver.driverId,
         rigName: driver.rigName,
         label: driver.displayName || driver.rigName,
+        color: driver.trackerColor || stableDriverColor(driver.driverId, driver.displayName || driver.rigName),
         rank: driver.leaderboardRank || driver.position || index + 1,
         x: point.x,
         y: point.y,

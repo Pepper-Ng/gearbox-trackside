@@ -91,6 +91,8 @@ export interface DriverSnapshot {
   rigName: string;
   /** Staff-facing display name. */
   displayName: string;
+  /** Durable Tracker colour assigned by the server in participant join order. */
+  trackerColor?: string;
   /** Source-reported vehicle name. */
   vehicleName: string;
   /** Current scored position. */

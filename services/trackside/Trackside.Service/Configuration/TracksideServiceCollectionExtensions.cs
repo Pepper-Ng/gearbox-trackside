@@ -78,6 +78,7 @@ public static class TracksideServiceCollectionExtensions
         services.AddSingleton<TracksideWritableConfigurationStore>();
         services.AddSingleton<AdminUserStore>();
         services.AddSingleton<ILiveDataPublisher, LiveDataPublisher>();
+        services.AddSingleton<LiveSessionDriverColorAssigner>();
         services.AddSingleton<TrackGeometryRecorder>();
         services.AddSingleton<TrackerPositionSignalRPublisher>();
         services.AddSingleton<ILiveDataConsumer<ScoringContextFrame>>(serviceProvider => serviceProvider.GetRequiredService<TrackGeometryRecorder>());

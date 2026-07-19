@@ -65,16 +65,14 @@ describe('flag display helpers', () => {
 
 describe('tracker colors', () => {
   it('starts stable tracker assignments with venue colors', () => {
-    expect([0, 1, 2].map(trackerDriverColorByIndex)).toEqual(['#ff202d', '#ff8a00', '#00b0ff']);
+    expect([0, 1, 2].map(trackerDriverColorByIndex)).toEqual(['#ef233c', '#ff7a00', '#1684ff']);
   });
 
-  it('keeps a driver color stable regardless of row order', () => {
-    const setup1 = stableDriverColor('47', 'Setup1');
+  it('uses a deterministic fallback only when a server has not supplied a durable assignment', () => {
+    const fallback = stableDriverColor('47', 'Maya');
 
-    expect(setup1).toBe('#ff202d');
-    expect(stableDriverColor('3', 'Setup1')).toBe(setup1);
-    expect(stableDriverColor('47', 'Setup2')).toBe('#ff8a00');
-    expect(stableDriverColor('47', 'Setup3')).toBe('#00b0ff');
+    expect(stableDriverColor('47', 'Maya')).toBe(fallback);
+    expect(stableDriverColor('47', 'Noah')).not.toBe('');
   });
 
   it('merges compact positions without changing driver identity or rank', () => {

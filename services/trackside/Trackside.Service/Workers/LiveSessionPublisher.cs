@@ -9,6 +9,7 @@ using Trackside.Application.LiveSession;
 using Trackside.Application.Persistence;
 using Trackside.Domain.LiveSession;
 using Trackside.Service.Hubs;
+using Trackside.Service.LiveData;
 
 namespace Trackside.Service.Workers;
 
@@ -24,6 +25,7 @@ public sealed class LiveSessionPublisher : BackgroundService
     private readonly IOptionsMonitor<TracksideLiveSessionOptions> _options;
     private readonly IOptionsMonitor<TracksidePersistenceOptions> _persistenceOptions;
     private readonly ILiveDataPublisher _liveDataPublisher;
+    private readonly LiveSessionDriverColorAssigner _driverColorAssigner;
     private readonly ILogger<LiveSessionPublisher> _logger;
     private string? _lastPersistedSnapshotFingerprint;
 
@@ -37,6 +39,7 @@ public sealed class LiveSessionPublisher : BackgroundService
     /// <param name="options">Live application options used for publish cadence.</param>
     /// <param name="persistenceOptions">Persistence options used for default session inclusion.</param>
     /// <param name="liveDataPublisher">Publisher for projected live data consumed by optional modules.</param>
+    /// <param name="driverColorAssigner">Session-stable Tracker colour assigner.</param>
     /// <param name="logger">Logger for source failures and lifecycle events.</param>
     public LiveSessionPublisher(
         ILiveSessionSource source,
@@ -46,6 +49,7 @@ public sealed class LiveSessionPublisher : BackgroundService
         IOptionsMonitor<TracksideLiveSessionOptions> options,
         IOptionsMonitor<TracksidePersistenceOptions> persistenceOptions,
         ILiveDataPublisher liveDataPublisher,
+        LiveSessionDriverColorAssigner driverColorAssigner,
         ILogger<LiveSessionPublisher> logger)
     {
         _source = source;
@@ -55,6 +59,7 @@ public sealed class LiveSessionPublisher : BackgroundService
         _options = options;
         _persistenceOptions = persistenceOptions;
         _liveDataPublisher = liveDataPublisher;
+        _driverColorAssigner = driverColorAssigner;
         _logger = logger;
     }
 
@@ -67,7 +72,9 @@ public sealed class LiveSessionPublisher : BackgroundService
         {
             try
             {
-                var snapshot = await _source.GetCurrentAsync(stoppingToken);
+                var snapshot = await _driverColorAssigner.ApplyAsync(
+                    await _source.GetCurrentAsync(stoppingToken),
+                    stoppingToken);
                 _state.Update(snapshot);
                 await _liveDataPublisher.PublishAsync(new ScoringContextFrame { Snapshot = snapshot }, stoppingToken);
                 await PersistSnapshotAsync(snapshot, stoppingToken);

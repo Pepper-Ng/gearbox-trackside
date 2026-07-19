@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { formatGap, formatLapTime, formatNumber } from '../format';
 import { BestLapBoardResponse, BestLapRow, BestLapWindow, DriverSnapshot, KioskDisplayMode, LastFinishedSessionResponse, LastFinishedSessionRow, LiveSessionConnection, LiveSessionInfo, LiveSessionSnapshot, SectorSnapshot, startLiveSessionFeed, TrackGeometryResponse, TrackerPositionUpdate, TracksideApiClient } from '../tracksideApi';
 import { getConnectionIndicators, getDriverStatus, getRaceLapProgress, getRacePositionDelta, type ConnectionIndicators, type DriverStatus } from './liveBoardLogic';
@@ -237,7 +237,8 @@ export function App() {
             />
           : view === 'combined'
             ? <CombinedPage
-                snapshot={trackerSnapshot}
+              snapshot={snapshot}
+              trackerSnapshot={trackerSnapshot}
                 geometry={trackGeometry}
                 status={status}
               />
@@ -276,36 +277,15 @@ function LiveBoard({ snapshot, status }: LiveBoardProps) {
 }
 
 interface CombinedPageProps {
+  /** Full one-second snapshot used by timing-board content. */
   snapshot: LiveSessionSnapshot | null;
+  /** Compact high-rate snapshot used exclusively by the tracker map. */
+  trackerSnapshot: LiveSessionSnapshot | null;
   geometry: TrackGeometryResponse | null;
   status: string;
 }
 
-function CombinedPage({ snapshot, geometry, status }: CombinedPageProps) {
-  // Combined view shares the tracker fallback bounds so driver stripes and map markers stay colour-aligned before geometry is ready.
-  const trackerBounds = useStableTrackerBounds(geometry?.bounds, snapshot?.drivers ?? [], snapshot?.session.trackName);
-  const mapMetrics = useMemo(() => buildMapMetrics(trackerBounds), [trackerBounds]);
-  const pathPoints = useMemo(
-    () => (geometry?.points ?? [])
-      .map(point => toSvgPoint(point.x, point.y, mapMetrics))
-      .map(point => `${point.x},${point.y}`)
-      .join(' '),
-    [geometry?.points, mapMetrics],
-  );
-  const markers = useMemo(
-    () => buildDriverMarkers(snapshot?.drivers ?? [], trackerBounds, mapMetrics),
-    [snapshot?.drivers, trackerBounds, mapMetrics],
-  );
-  const markerColors = useStableDriverColors(markers);
-
-  const driverColorMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const driver of (snapshot?.drivers ?? [])) {
-      map.set(driver.driverId, markerColors.get(driver.driverId) ?? stableDriverColor(driver.driverId, driver.rigName));
-    }
-    return map;
-  }, [snapshot?.drivers, markerColors]);
-
+function CombinedPage({ snapshot, trackerSnapshot, geometry, status }: CombinedPageProps) {
   const connectionIndicators = getConnectionIndicators(status, snapshot);
 
   return (
@@ -322,37 +302,76 @@ function CombinedPage({ snapshot, geometry, status }: CombinedPageProps) {
             className="tableFrame liveBoardFrame"
             style={{ '--flag-color': getFlagColor(snapshot?.session.overallFlag), '--flag-stripe-background': getFlagStripeBackground(snapshot?.session.overallFlag) } as React.CSSProperties}
           >
-            <LeaderboardTable snapshot={snapshot} hideRig driverColors={driverColorMap} />
+            <CombinedLeaderboard snapshot={snapshot} />
           </div>
         </BoardPanel>
 
         <BoardPanel title="Tracker" meta="">
-          <svg
-            className="trackerMap combinedTrackerMap"
-            viewBox={`0 0 ${mapMetrics.width} ${mapMetrics.height}`}
-            role="img"
-            aria-label={snapshot?.session.trackName ?? 'Track map'}
-          >
-            <rect className="trackerMapBackground" x="0" y="0" width={mapMetrics.width} height={mapMetrics.height} rx="18" />
-            {geometry?.isAvailable && pathPoints ? <polyline className="trackGeometryLine" points={pathPoints} /> : null}
-            {markers.map(marker => (
-              <g
-                key={marker.driverId}
-                className="driverMarker"
-                style={{ '--marker-color': markerColors.get(marker.driverId) ?? stableDriverColor(marker.driverId, marker.rigName) } as React.CSSProperties}
-                transform={`translate(${marker.x} ${marker.y})`}
-              >
-                <circle r="14" />
-                <text y="5">{marker.rank}</text>
-                <title>{marker.label}</title>
-              </g>
-            ))}
-          </svg>
+          <CombinedTracker snapshot={trackerSnapshot} geometry={geometry} />
         </BoardPanel>
       </div>
     </>
   );
 }
+
+interface CombinedTrackerProps {
+  snapshot: LiveSessionSnapshot | null;
+  geometry: TrackGeometryResponse | null;
+}
+
+/** The only Combined child that rerenders for compact high-rate SignalR position frames. */
+function CombinedTracker({ snapshot, geometry }: CombinedTrackerProps) {
+  const trackerBounds = useStableTrackerBounds(geometry?.bounds, snapshot?.drivers ?? [], snapshot?.session.trackName);
+  const mapMetrics = useMemo(() => buildMapMetrics(trackerBounds), [trackerBounds]);
+  const pathPoints = useMemo(
+    () => (geometry?.points ?? [])
+      .map(point => toSvgPoint(point.x, point.y, mapMetrics))
+      .map(point => `${point.x},${point.y}`)
+      .join(' '),
+    [geometry?.points, mapMetrics],
+  );
+  const markers = useMemo(
+    () => buildDriverMarkers(snapshot?.drivers ?? [], trackerBounds, mapMetrics),
+    [snapshot?.drivers, trackerBounds, mapMetrics],
+  );
+  const markerColors = useStableDriverColors(markers);
+
+  return (
+    <svg
+      className="trackerMap combinedTrackerMap"
+      viewBox={`0 0 ${mapMetrics.width} ${mapMetrics.height}`}
+      role="img"
+      aria-label={snapshot?.session.trackName ?? 'Track map'}
+    >
+      <rect className="trackerMapBackground" x="0" y="0" width={mapMetrics.width} height={mapMetrics.height} rx="18" />
+      {geometry?.isAvailable && pathPoints ? <polyline className="trackGeometryLine" points={pathPoints} /> : null}
+      {markers.map(marker => (
+        <g
+          key={marker.driverId}
+          className="driverMarker"
+          style={{ '--marker-color': markerColors.get(marker.driverId) ?? stableDriverColor(marker.driverId, marker.rigName) } as React.CSSProperties}
+          transform={`translate(${marker.x} ${marker.y})`}
+        >
+          <circle r="14" />
+          <text y="5">{marker.rank}</text>
+          <title>{marker.label}</title>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+/** Keeps the timing table at full-snapshot cadence while the neighbouring map updates at display cadence. */
+const CombinedLeaderboard = memo(function CombinedLeaderboard({ snapshot }: Pick<CombinedPageProps, 'snapshot'>) {
+  const driverColors = useMemo(() => new Map(
+    (snapshot?.drivers ?? []).map(driver => [
+      driver.driverId,
+      driver.trackerColor || stableDriverColor(driver.driverId, driver.displayName || driver.rigName),
+    ]),
+  ), [snapshot?.drivers]);
+
+  return <LeaderboardTable snapshot={snapshot} hideRig driverColors={driverColors} />;
+});
 
 interface BestLapBoardProps {
   /** Current board response. */

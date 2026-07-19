@@ -41,6 +41,21 @@ public interface ITracksideStore
     Task<IReadOnlyDictionary<string, string>> GetDriverAliasesAsync(CancellationToken cancellationToken);
 
     /// <summary>
+    /// Returns the bounded, durable Tracker colour history keyed by normalized driver name.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Persisted name-to-colour assignments.</returns>
+    Task<IReadOnlyDictionary<string, string>> GetDriverColorHistoryAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Upserts final Tracker colour assignments for active drivers without removing departed drivers' history.
+    /// </summary>
+    /// <param name="assignments">Normalized name-to-colour assignments to retain.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Task that completes after the assignments are durable.</returns>
+    Task SaveDriverColorHistoryAsync(IReadOnlyDictionary<string, string> assignments, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Returns current prepared rig setup entries used for future sessions.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>

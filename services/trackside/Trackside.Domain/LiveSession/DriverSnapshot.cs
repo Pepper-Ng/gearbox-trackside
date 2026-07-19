@@ -26,6 +26,11 @@ public sealed record DriverSnapshot
     public string DisplayName { get; init; } = string.Empty;
 
     /// <summary>
+    /// Durable Tracker colour assigned in live-session join order.
+    /// </summary>
+    public string TrackerColor { get; init; } = string.Empty;
+
+    /// <summary>
     /// Vehicle name reported by the source or fixture.
     /// </summary>
     public string VehicleName { get; init; } = string.Empty;

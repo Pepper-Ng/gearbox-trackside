@@ -13,7 +13,7 @@ namespace Trackside.Infrastructure.Persistence;
 /// </summary>
 public sealed class SqliteTracksideStore : ITracksideStore
 {
-    private const int SchemaVersion = 2;
+    private const int SchemaVersion = 3;
     private const string LegacyAliasSeededKey = "legacy_alias_seeded";
     private const string PreparedSessionSetupConfiguredKey = "prepared_session_setup_configured";
     private static readonly TimeSpan SessionStartBucket = TimeSpan.FromMinutes(5);
@@ -120,6 +120,69 @@ public sealed class SqliteTracksideStore : ITracksideStore
         }
 
         return aliases;
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<string, string>> GetDriverColorHistoryAsync(CancellationToken cancellationToken)
+    {
+        if (!IsEnabled)
+        {
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        await InitializeAsync(cancellationToken);
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT driver_key, color_code
+            FROM driver_color_history
+            ORDER BY updated_utc DESC, driver_key;
+            """;
+
+        var history = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            history[reader.GetString(0)] = reader.GetString(1);
+        }
+
+        return history;
+    }
+
+    /// <inheritdoc />
+    public async Task SaveDriverColorHistoryAsync(IReadOnlyDictionary<string, string> assignments, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(assignments);
+        if (!IsEnabled || assignments.Count == 0)
+        {
+            return;
+        }
+
+        await InitializeAsync(cancellationToken);
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        using var transaction = connection.BeginTransaction();
+        var updatedUtc = FormatDateTime(_timeProvider.GetUtcNow());
+        foreach (var assignment in assignments
+            .Where(assignment => !string.IsNullOrWhiteSpace(assignment.Key) && !string.IsNullOrWhiteSpace(assignment.Value))
+            .OrderBy(assignment => assignment.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            await ExecuteAsync(
+                connection,
+                """
+                INSERT INTO driver_color_history (driver_key, color_code, updated_utc)
+                VALUES ($driverKey, $colorCode, $updatedUtc)
+                ON CONFLICT(driver_key) DO UPDATE SET
+                    color_code = excluded.color_code,
+                    updated_utc = excluded.updated_utc;
+                """,
+                cancellationToken,
+                transaction,
+                ("$driverKey", assignment.Key.Trim()),
+                ("$colorCode", assignment.Value.Trim()),
+                ("$updatedUtc", updatedUtc));
+        }
+
+        transaction.Commit();
     }
 
     /// <inheritdoc />
@@ -1053,6 +1116,12 @@ public sealed class SqliteTracksideStore : ITracksideStore
             await ApplyMigration2Async(connection, cancellationToken);
             await RecordMigrationAsync(connection, 2, cancellationToken);
         }
+
+        if (!appliedVersions.Contains(3))
+        {
+            await ApplyMigration3Async(connection, cancellationToken);
+            await RecordMigrationAsync(connection, 3, cancellationToken);
+        }
     }
 
     private static async Task<HashSet<int>> GetAppliedMigrationVersionsAsync(SqliteConnection connection, CancellationToken cancellationToken)
@@ -1122,6 +1191,18 @@ public sealed class SqliteTracksideStore : ITracksideStore
         await ExecuteAsync(connection, TrackBestRecordsSchemaSql, cancellationToken);
         await RefreshAllTrackBestRecordsAsync(connection, cancellationToken);
     }
+
+    private static Task ApplyMigration3Async(SqliteConnection connection, CancellationToken cancellationToken) => ExecuteAsync(
+        connection,
+        """
+        CREATE TABLE IF NOT EXISTS driver_color_history (
+            driver_key TEXT PRIMARY KEY NOT NULL,
+            color_code TEXT NOT NULL,
+            updated_utc TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS ix_driver_color_history_updated ON driver_color_history(updated_utc DESC);
+        """,
+        cancellationToken);
 
     private static async Task AddColumnIfMissingAsync(
         SqliteConnection connection,
@@ -1989,6 +2070,12 @@ public sealed class SqliteTracksideStore : ITracksideStore
             updated_utc TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS driver_color_history (
+            driver_key TEXT PRIMARY KEY NOT NULL,
+            color_code TEXT NOT NULL,
+            updated_utc TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS driver_profiles (
             driver_profile_id TEXT PRIMARY KEY NOT NULL,
             display_name TEXT NOT NULL,
@@ -2095,6 +2182,7 @@ public sealed class SqliteTracksideStore : ITracksideStore
         CREATE INDEX IF NOT EXISTS ix_sessions_history_window ON sessions(count_for_history, last_seen_utc, track_name, session_kind);
         CREATE INDEX IF NOT EXISTS ix_laps_timing ON laps(is_valid_timed_lap, lap_time_seconds, observed_utc);
         CREATE INDEX IF NOT EXISTS ix_monthly_track_periods_active ON monthly_track_periods(ended_utc, started_utc);
+        CREATE INDEX IF NOT EXISTS ix_driver_color_history_updated ON driver_color_history(updated_utc DESC);
         """;
 }
 

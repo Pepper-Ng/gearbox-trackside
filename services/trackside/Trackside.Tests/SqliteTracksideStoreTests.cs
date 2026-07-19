@@ -44,6 +44,33 @@ public sealed class SqliteTracksideStoreTests
     }
 
     /// <summary>
+    /// Tracker colour history survives store re-creation and keeps departed names for a future session.
+    /// </summary>
+    [Fact]
+    public async Task PersistsDriverColorHistoryAcrossReloads()
+    {
+        using var temporaryDirectory = new TemporaryDirectory();
+        ITracksideStore store = CreateStore(temporaryDirectory);
+
+        await store.SaveDriverColorHistoryAsync(
+            new Dictionary<string, string>
+            {
+                ["MAYA"] = "#ef233c",
+                ["NOAH"] = "#ff7a00",
+            },
+            CancellationToken.None);
+        await store.SaveDriverColorHistoryAsync(
+            new Dictionary<string, string> { ["MAYA"] = "#1684ff" },
+            CancellationToken.None);
+
+        var reloadedStore = CreateStore(temporaryDirectory);
+        var history = await reloadedStore.GetDriverColorHistoryAsync(CancellationToken.None);
+
+        Assert.Equal("#1684ff", history["MAYA"]);
+        Assert.Equal("#ff7a00", history["NOAH"]);
+    }
+
+    /// <summary>
     /// Live snapshots are persisted into historical-board tables and queried through the store contract.
     /// </summary>
     [Fact]
