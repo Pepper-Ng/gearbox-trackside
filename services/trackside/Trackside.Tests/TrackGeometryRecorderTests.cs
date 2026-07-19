@@ -79,6 +79,16 @@ public sealed class TrackGeometryRecorderTests
             Assert.Equal(geometry.Points[0].X, geometry.Points[^1].X, precision: 8);
             Assert.Equal(geometry.Points[0].Y, geometry.Points[^1].Y, precision: 8);
 
+            var catalogEntry = Assert.Single(cache.ListTracks());
+            Assert.NotEmpty(catalogEntry.PreviewPoints);
+            Assert.Equal(catalogEntry.PreviewPoints[0].X, catalogEntry.PreviewPoints[^1].X, precision: 8);
+            Assert.Equal(catalogEntry.PreviewPoints[0].Y, catalogEntry.PreviewPoints[^1].Y, precision: 8);
+            Assert.All(catalogEntry.PreviewPoints, point =>
+            {
+                Assert.InRange(point.X, 0.0, 1.0);
+                Assert.InRange(point.Y, 0.0, 1.0);
+            });
+
             var reloaded = CreateCache(tempRoot).Get("Loch Drummond - Short");
             Assert.True(reloaded.IsAvailable);
             Assert.True(reloaded.SampleCount >= 90);

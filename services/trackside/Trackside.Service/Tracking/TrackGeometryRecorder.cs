@@ -397,8 +397,46 @@ public sealed class TrackGeometryRecorder : ILiveDataConsumer<ScoringContextFram
         CandidateCoveragePercent = state.CandidateCoveragePercent,
         TargetCompletedLaps = state.TargetCompletedLaps,
         RecordedLapCount = state.RecordedLapCount,
+        PreviewPoints = BuildCatalogPreview(state),
         StatusDetail = state.StatusDetail,
     };
+
+    private static IReadOnlyList<TrackGeometryPreviewPoint> BuildCatalogPreview(TrackGeometryState state)
+    {
+        // The catalog gets a compact normalized outline, avoiding an additional geometry request for every visible row.
+        var samples = state.Samples.Values
+            .OrderBy(sample => sample.ProgressFraction)
+            .ToList();
+        if (samples.Count < 2)
+        {
+            return [];
+        }
+
+        var preview = state.IsCompleteLap ? SmoothCircular(Resample(samples)) : samples;
+        if (preview.Count == 0)
+        {
+            return [];
+        }
+
+        if (state.IsCompleteLap)
+        {
+            preview = preview.Concat([preview[0]]).ToList();
+        }
+
+        var minWorldX = preview.Min(sample => sample.WorldX);
+        var maxWorldX = preview.Max(sample => sample.WorldX);
+        var minWorldZ = preview.Min(sample => sample.WorldZ);
+        var maxWorldZ = preview.Max(sample => sample.WorldZ);
+        var worldWidth = maxWorldX - minWorldX;
+        var worldHeight = maxWorldZ - minWorldZ;
+        return preview
+            .Select(sample => new TrackGeometryPreviewPoint
+            {
+                X = Normalize(sample.WorldX, minWorldX, worldWidth),
+                Y = Normalize(maxWorldZ - sample.WorldZ, 0.0, worldHeight),
+            })
+            .ToList();
+    }
 
     private int DefaultTargetLaps() => ClampTargetLaps(_options.CurrentValue.DriverTracker.GeometryRecordingLaps);
 
@@ -1193,6 +1231,23 @@ public sealed record TrackGeometryCatalogEntry
     /// Operator-facing detail explaining the current geometry state.
     /// </summary>
     public string StatusDetail { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Compact normalized outline points for an at-a-glance catalog preview.
+    /// </summary>
+    public IReadOnlyList<TrackGeometryPreviewPoint> PreviewPoints { get; init; } = [];
+}
+
+/// <summary>
+/// One normalized point in a compact admin catalog outline preview.
+/// </summary>
+public sealed record TrackGeometryPreviewPoint
+{
+    /// <summary>Normalized horizontal coordinate.</summary>
+    public double X { get; init; }
+
+    /// <summary>Normalized vertical coordinate.</summary>
+    public double Y { get; init; }
 }
 
 /// <summary>

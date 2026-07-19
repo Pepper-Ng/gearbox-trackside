@@ -242,6 +242,7 @@ const translations = {
     'driverTracker.geometryRecordingLaps': 'Geometry laps',
     'driverTracker.saveButton': 'Save Tracker',
     'driverTracker.refreshTracks': 'Refresh Tracks',
+    'driverTracker.preview': 'Map',
     'driverTracker.track': 'Track',
     'driverTracker.status': 'Status',
     'driverTracker.coverage': 'Coverage',
@@ -541,6 +542,7 @@ const translations = {
     'driverTracker.geometryRecordingLaps': 'Geometrieronden',
     'driverTracker.saveButton': 'Tracker opslaan',
     'driverTracker.refreshTracks': 'Banen vernieuwen',
+    'driverTracker.preview': 'Kaart',
     'driverTracker.track': 'Baan',
     'driverTracker.status': 'Status',
     'driverTracker.coverage': 'Dekking',
@@ -2800,7 +2802,7 @@ function renderDriverTrackerTracks(tracks) {
   if (tracks.length === 0) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 8;
+    cell.colSpan = 9;
     cell.textContent = t('driverTracker.noTracks');
     row.appendChild(cell);
     driverTrackerTrackRowsElement.appendChild(row);
@@ -2836,16 +2838,16 @@ function renderDriverTrackerTracks(tracks) {
       selectDriverTrackerTrack(trackName);
     });
 
+    appendDriverTrackerPreviewCell(row, track);
     appendCell(row, track.trackName ?? '-');
-    appendCell(row, driverTrackerStateLabel(deriveDriverTrackerState(track)));
-    appendCell(row, formatDriverTrackerCoverage(track));
+    appendDriverTrackerProgressCell(row, track);
     appendCell(row, `${track.recordedLapCount ?? 0}/${track.targetCompletedLaps ?? 1}`);
-    appendCell(row, formatDriverTrackerSamples(track));
-    appendCell(row, formatDate(track.updatedUtc));
+    appendCell(row, formatDriverTrackerCatalogSamples(track));
+    appendDriverTrackerUpdatedCell(row, track.updatedUtc);
     appendCell(row, track.statusDetail ?? '-');
     const actions = [
       {
-        label: t('driverTracker.improve'),
+        icon: '↗',
         title: t('driverTracker.improveTitle'),
         ariaLabel: t('driverTracker.improveAria', { track: trackName }),
         onClick: () => {
@@ -2857,7 +2859,7 @@ function renderDriverTrackerTracks(tracks) {
         },
       },
       {
-        label: t('driverTracker.restart'),
+        icon: '↺',
         title: t('driverTracker.restartTitle'),
         ariaLabel: t('driverTracker.restartAria', { track: trackName }),
         onClick: () => {
@@ -2869,8 +2871,9 @@ function renderDriverTrackerTracks(tracks) {
         },
       },
     ];
-    actions.push({
-      label: t('driverTracker.delete'),
+    appendDriverTrackerIconActionsCell(row, actions);
+    appendDriverTrackerDeleteCell(row, {
+      icon: '×',
       title: t('driverTracker.deleteTitle'),
       ariaLabel: t('driverTracker.deleteAria', { track: trackName }),
       danger: true,
@@ -2882,9 +2885,128 @@ function renderDriverTrackerTracks(tracks) {
         deleteDriverTrackerOutline(trackName).catch(showError);
       },
     });
-    appendActionsCell(row, actions);
     driverTrackerTrackRowsElement.appendChild(row);
   }
+}
+
+function appendDriverTrackerPreviewCell(row, track) {
+  const cell = document.createElement('td');
+  cell.className = 'driverTrackerPreviewCell';
+  const preview = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  preview.classList.add('driverTrackerPreview');
+  preview.setAttribute('viewBox', '0 0 100 100');
+  preview.setAttribute('role', 'img');
+  preview.setAttribute('aria-label', `${track.trackName ?? t('driverTracker.track')} ${t('driverTracker.preview')}`);
+
+  const points = Array.isArray(track.previewPoints) ? track.previewPoints : [];
+  const normalizedPoints = points
+    .map(point => ({ x: Number(point.x), y: Number(point.y) }))
+    .filter(point => Number.isFinite(point.x) && Number.isFinite(point.y))
+    .map(point => `${(point.x * 84) + 8},${(point.y * 84) + 8}`);
+  if (normalizedPoints.length >= 2) {
+    const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    polyline.setAttribute('points', normalizedPoints.join(' '));
+    preview.appendChild(polyline);
+  } else {
+    preview.classList.add('isEmpty');
+  }
+
+  cell.appendChild(preview);
+  row.appendChild(cell);
+}
+
+function appendDriverTrackerProgressCell(row, track) {
+  const cell = document.createElement('td');
+  cell.className = 'driverTrackerProgressCell';
+  const state = deriveDriverTrackerState(track);
+  const coverage = Math.max(
+    Number(track.coveragePercent ?? 0),
+    Number(track.candidateCoveragePercent ?? 0));
+  const clampedCoverage = Math.min(100, Math.max(0, coverage));
+  const header = document.createElement('div');
+  header.className = 'driverTrackerProgressHeader';
+  const pill = document.createElement('span');
+  pill.className = `driverTrackerStatusPill ${state}`;
+  pill.textContent = driverTrackerStateLabel(state);
+  pill.title = track.statusDetail ?? '';
+  const percentage = document.createElement('span');
+  percentage.className = 'driverTrackerCoverage';
+  percentage.textContent = `${clampedCoverage.toFixed(1)}%`;
+  header.append(pill, percentage);
+
+  const bar = document.createElement('div');
+  bar.className = 'driverTrackerProgressBar';
+  bar.setAttribute('role', 'progressbar');
+  bar.setAttribute('aria-label', t('driverTracker.coverage'));
+  bar.setAttribute('aria-valuemin', '0');
+  bar.setAttribute('aria-valuemax', '100');
+  bar.setAttribute('aria-valuenow', String(clampedCoverage));
+  const fill = document.createElement('span');
+  fill.style.width = `${clampedCoverage}%`;
+  bar.appendChild(fill);
+  cell.append(header, bar);
+  row.appendChild(cell);
+}
+
+function appendDriverTrackerUpdatedCell(row, value) {
+  const cell = document.createElement('td');
+  cell.className = 'driverTrackerUpdatedCell';
+  if (!value) {
+    cell.textContent = '-';
+  } else {
+    const date = new Date(value);
+    const dateLine = document.createElement('span');
+    dateLine.textContent = date.toLocaleDateString();
+    const timeLine = document.createElement('span');
+    timeLine.textContent = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    cell.append(dateLine, timeLine);
+  }
+
+  row.appendChild(cell);
+}
+
+function appendDriverTrackerIconActionsCell(row, actions) {
+  const cell = document.createElement('td');
+  cell.className = 'driverTrackerIconActionsCell';
+  const wrapper = document.createElement('div');
+  wrapper.className = 'driverTrackerIconActions';
+  for (const action of actions) {
+    const button = document.createElement('button');
+    button.className = 'driverTrackerIconButton';
+    button.type = 'button';
+    button.textContent = action.icon;
+    button.title = action.title;
+    button.setAttribute('aria-label', action.ariaLabel);
+    button.addEventListener('click', action.onClick);
+    wrapper.appendChild(button);
+  }
+
+  cell.appendChild(wrapper);
+  row.appendChild(cell);
+}
+
+function appendDriverTrackerDeleteCell(row, action) {
+  const cell = document.createElement('td');
+  cell.className = 'driverTrackerDeleteCell';
+  const button = document.createElement('button');
+  button.className = 'driverTrackerIconButton dangerButton';
+  button.type = 'button';
+  button.textContent = action.icon;
+  button.title = action.title;
+  button.setAttribute('aria-label', action.ariaLabel);
+  button.addEventListener('click', action.onClick);
+  cell.appendChild(button);
+  row.appendChild(cell);
+}
+
+function formatDriverTrackerCatalogSamples(track) {
+  if (!track) {
+    return '-';
+  }
+
+  const stored = Number(track.sampleCount ?? 0);
+  const candidate = Number(track.candidateSampleCount ?? 0);
+  return candidate > 0 ? `${stored}/${candidate}` : String(stored);
 }
 
 function formatDriverTrackerCoverage(track) {
