@@ -695,6 +695,42 @@ tbody tr:last-child td {
   background: linear-gradient(90deg, rgba(0, 176, 255, .16), transparent 46%);
 }
 
+.driverTrackerWorkspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  align-items: start;
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.driverTrackerWorkspace .configurationPanel {
+  margin-top: 0;
+}
+
+.driverTrackerSelectionPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.driverTrackerSelectedHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.driverTrackerSelectedHeader h2 {
+  overflow-wrap: anywhere;
+}
+
+.driverTrackerSelectedHeader p {
+  margin: 5px 0 0;
+  color: var(--gt-muted);
+  font-size: 13px;
+}
+
 .sessionSetupTable th:first-child,
 .sessionSetupTable td:first-child {
   width: 220px;
@@ -705,11 +741,11 @@ tbody tr:last-child td {
 .lapCorrectionTable,
 .sessionSetupTable,
 .driverTrackerTracksTable {
-  min-width: 920px;
+  min-width: 860px;
 }
 
 .driverTrackerTracksTable {
-  min-width: 1100px;
+  min-width: 920px;
   table-layout: fixed;
 }
 
@@ -726,12 +762,13 @@ tbody tr:last-child td {
 
 .driverTrackerTracksTable th:nth-child(2),
 .driverTrackerTracksTable td:nth-child(2) {
-  width: 300px;
+  width: 210px;
 }
 
 .driverTrackerTracksTable th:nth-child(3),
 .driverTrackerTracksTable td:nth-child(3) {
-  width: 160px;
+  width: 112px;
+  padding-inline: 6px;
 }
 
 .driverTrackerTracksTable th:nth-child(4),
@@ -741,16 +778,11 @@ tbody tr:last-child td {
 
 .driverTrackerTracksTable th:nth-child(5),
 .driverTrackerTracksTable td:nth-child(5) {
-  width: 78px;
+  width: 96px;
 }
 
 .driverTrackerTracksTable th:nth-child(6),
 .driverTrackerTracksTable td:nth-child(6) {
-  width: 96px;
-}
-
-.driverTrackerTracksTable th:nth-child(7),
-.driverTrackerTracksTable td:nth-child(7) {
   width: 190px;
   max-width: 190px;
   line-height: 1.4;
@@ -759,21 +791,13 @@ tbody tr:last-child td {
   white-space: normal;
 }
 
-.driverTrackerTracksTable th:nth-child(8),
-.driverTrackerTracksTable td:nth-child(8) {
-  width: 74px;
+.driverTrackerTracksTable th:nth-child(7),
+.driverTrackerTracksTable td:nth-child(7) {
+  width: 104px;
   padding-inline: 6px;
 }
 
-.driverTrackerTracksTable th:nth-child(9),
-.driverTrackerTracksTable td:nth-child(9) {
-  width: 50px;
-  padding-inline: 6px;
-  text-align: center;
-}
-
-.driverTrackerPreviewColumn,
-.driverTrackerDeleteColumn {
+.driverTrackerPreviewColumn {
   text-align: center;
 }
 
@@ -785,11 +809,7 @@ tbody tr:last-child td {
   display: block;
   width: 52px;
   height: 52px;
-  border: 1px solid rgba(255, 255, 255, .12);
-  border-radius: 9px;
-  background:
-    radial-gradient(circle at 22% 18%, rgba(0, 176, 255, .16), transparent 44%),
-    rgba(7, 9, 13, .72);
+  background: transparent;
 }
 
 .driverTrackerPreview polyline {
@@ -797,7 +817,7 @@ tbody tr:last-child td {
   stroke: var(--gt-blue);
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 3.4;
+  stroke-width: 3;
   vector-effect: non-scaling-stroke;
 }
 
@@ -919,9 +939,37 @@ tbody tr:last-child td {
   outline: 0;
 }
 
-.driverTrackerDeleteCell .driverTrackerIconButton {
+.driverTrackerIconButton.dangerButton {
   border-color: rgba(255, 32, 45, .55);
   color: var(--gt-danger);
+}
+
+.driverTrackerStats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 16px;
+}
+
+.driverTrackerStats .statusFact {
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.driverTrackerStats .statusFact strong {
+  margin-top: 4px;
+  color: var(--gt-text);
+  font-size: 16px;
+}
+
+.driverTrackerSelectedDetail {
+  width: 100%;
+  margin: 0;
+  color: var(--gt-muted);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .sessionsTable th:first-child,
@@ -1117,23 +1165,14 @@ tbody tr:last-child td {
 }
 
 .driverTrackerOutlinePanel {
-  border: 1px solid rgba(255, 255, 255, .1);
-  border-radius: 14px;
-  background: linear-gradient(160deg, rgba(255, 255, 255, .05), rgba(255, 255, 255, .015));
-  padding: 14px;
+  background: transparent;
 }
 
 .driverTrackerOutline {
   display: block;
-  width: min(100%, 560px);
+  width: 100%;
   aspect-ratio: 1 / 1;
-  border: 1px solid rgba(255, 255, 255, .14);
-  border-radius: 12px;
-  background:
-    radial-gradient(circle at 18% 14%, rgba(255, 32, 45, .14), transparent 32%),
-    radial-gradient(circle at 84% 88%, rgba(0, 176, 255, .14), transparent 40%),
-    rgba(7, 9, 13, .88);
-  padding: 6px;
+  background: transparent;
 }
 
 .driverTrackerOutline polyline {
@@ -1141,7 +1180,7 @@ tbody tr:last-child td {
   stroke: var(--gt-blue);
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 1.6;
+  stroke-width: 1.35;
   filter: drop-shadow(0 0 5px rgba(0, 176, 255, .45));
 }
 
@@ -2061,6 +2100,10 @@ tbody tr:last-child td {
   }
 
   .sourceControlGridPair {
+    grid-template-columns: 1fr;
+  }
+
+  .driverTrackerWorkspace {
     grid-template-columns: 1fr;
   }
 

@@ -71,6 +71,9 @@ const driverTrackerSelectionHintElement = document.querySelector('#driverTracker
 const driverTrackerGeometryFactsElement = document.querySelector('#driverTrackerGeometryFacts');
 const driverTrackerOutlinePolylineElement = document.querySelector('#driverTrackerOutlinePolyline');
 const driverTrackerOutlineMessageElement = document.querySelector('#driverTrackerOutlineMessage');
+const driverTrackerSelectedSourceElement = document.querySelector('#driverTrackerSelectedSource');
+const driverTrackerSelectedStateElement = document.querySelector('#driverTrackerSelectedState');
+const driverTrackerSelectedDetailElement = document.querySelector('#driverTrackerSelectedDetail');
 const setMonthlyTrackButton = document.querySelector('#setMonthlyTrack');
 const resetMonthlyTrackButton = document.querySelector('#resetMonthlyTrack');
 const monthlyBestLapsElement = document.querySelector('#monthlyBestLaps');
@@ -2802,7 +2805,7 @@ function renderDriverTrackerTracks(tracks) {
   if (tracks.length === 0) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 9;
+    cell.colSpan = 7;
     cell.textContent = t('driverTracker.noTracks');
     row.appendChild(cell);
     driverTrackerTrackRowsElement.appendChild(row);
@@ -2842,7 +2845,6 @@ function renderDriverTrackerTracks(tracks) {
     appendCell(row, track.trackName ?? '-');
     appendDriverTrackerProgressCell(row, track);
     appendCell(row, `${track.recordedLapCount ?? 0}/${track.targetCompletedLaps ?? 1}`);
-    appendCell(row, formatDriverTrackerCatalogSamples(track));
     appendDriverTrackerUpdatedCell(row, track.updatedUtc);
     appendCell(row, track.statusDetail ?? '-');
     const actions = [
@@ -2870,21 +2872,21 @@ function renderDriverTrackerTracks(tracks) {
           startDriverTrackerRecording(trackName, true).catch(showError);
         },
       },
+      {
+        icon: '×',
+        title: t('driverTracker.deleteTitle'),
+        ariaLabel: t('driverTracker.deleteAria', { track: trackName }),
+        danger: true,
+        onClick: () => {
+          if (!trackName) {
+            return;
+          }
+
+          deleteDriverTrackerOutline(trackName).catch(showError);
+        },
+      },
     ];
     appendDriverTrackerIconActionsCell(row, actions);
-    appendDriverTrackerDeleteCell(row, {
-      icon: '×',
-      title: t('driverTracker.deleteTitle'),
-      ariaLabel: t('driverTracker.deleteAria', { track: trackName }),
-      danger: true,
-      onClick: () => {
-        if (!trackName) {
-          return;
-        }
-
-        deleteDriverTrackerOutline(trackName).catch(showError);
-      },
-    });
     driverTrackerTrackRowsElement.appendChild(row);
   }
 }
@@ -2972,7 +2974,7 @@ function appendDriverTrackerIconActionsCell(row, actions) {
   wrapper.className = 'driverTrackerIconActions';
   for (const action of actions) {
     const button = document.createElement('button');
-    button.className = 'driverTrackerIconButton';
+    button.className = action.danger ? 'driverTrackerIconButton dangerButton' : 'driverTrackerIconButton';
     button.type = 'button';
     button.textContent = action.icon;
     button.title = action.title;
@@ -2983,30 +2985,6 @@ function appendDriverTrackerIconActionsCell(row, actions) {
 
   cell.appendChild(wrapper);
   row.appendChild(cell);
-}
-
-function appendDriverTrackerDeleteCell(row, action) {
-  const cell = document.createElement('td');
-  cell.className = 'driverTrackerDeleteCell';
-  const button = document.createElement('button');
-  button.className = 'driverTrackerIconButton dangerButton';
-  button.type = 'button';
-  button.textContent = action.icon;
-  button.title = action.title;
-  button.setAttribute('aria-label', action.ariaLabel);
-  button.addEventListener('click', action.onClick);
-  cell.appendChild(button);
-  row.appendChild(cell);
-}
-
-function formatDriverTrackerCatalogSamples(track) {
-  if (!track) {
-    return '-';
-  }
-
-  const stored = Number(track.sampleCount ?? 0);
-  const candidate = Number(track.candidateSampleCount ?? 0);
-  return candidate > 0 ? `${stored}/${candidate}` : String(stored);
 }
 
 function formatDriverTrackerCoverage(track) {
@@ -3238,17 +3216,17 @@ function renderDriverTrackerGeometryPanel({ isLoading = false } = {}) {
   const selectedGeometry = latestSelectedTrackGeometry;
 
   if (!selectedTrackName) {
-    driverTrackerSelectionHintElement.textContent = t('driverTracker.noSelection');
+    driverTrackerSelectionHintElement.textContent = t('driverTracker.currentGeometryTitle');
+    driverTrackerSelectedSourceElement.textContent = `${t('driverTracker.source')}: -`;
+    driverTrackerSelectedStateElement.className = 'driverTrackerStatusPill unavailable';
+    driverTrackerSelectedStateElement.textContent = driverTrackerStateLabel('unavailable');
+    driverTrackerSelectedDetailElement.textContent = t('driverTracker.noSelection');
     renderStatusFacts(driverTrackerGeometryFactsElement, []);
     driverTrackerOutlinePolylineElement.setAttribute('points', '');
     driverTrackerOutlineMessageElement.hidden = false;
     driverTrackerOutlineMessageElement.textContent = t('driverTracker.noSelection');
     return;
   }
-
-  driverTrackerSelectionHintElement.textContent = isLoading
-    ? t('driverTracker.selectionLoading', { track: selectedTrackName })
-    : t('driverTracker.selectionLoaded', { track: selectedTrackName });
 
   const selectedState = deriveDriverTrackerStateForSelection(selectedCatalog, selectedGeometry, true);
   const hasDrawableGeometry = Boolean(selectedGeometry?.isAvailable);
@@ -3265,15 +3243,19 @@ function renderDriverTrackerGeometryPanel({ isLoading = false } = {}) {
   const detail = selectedGeometry?.statusDetail ?? selectedCatalog?.statusDetail ?? '-';
   const source = selectedGeometry?.source ?? selectedCatalog?.source ?? '-';
 
+  driverTrackerSelectionHintElement.textContent = selectedTrackName;
+  driverTrackerSelectedSourceElement.textContent = `${t('driverTracker.source')}: ${source}`;
+  driverTrackerSelectedStateElement.className = `driverTrackerStatusPill ${selectedState}`;
+  driverTrackerSelectedStateElement.textContent = driverTrackerStateLabel(selectedState);
+  driverTrackerSelectedDetailElement.textContent = isLoading
+    ? t('driverTracker.selectionLoading', { track: selectedTrackName })
+    : detail;
+
   renderStatusFacts(driverTrackerGeometryFactsElement, [
-    { label: t('driverTracker.activeTrack'), value: selectedTrackName },
-    { label: t('driverTracker.state'), value: driverTrackerStateLabel(selectedState) },
     { label: t('driverTracker.coverage'), value: effectiveCoverage },
     { label: t('driverTracker.lapProgress'), value: lapProgress },
     { label: t('driverTracker.samples'), value: sampleCount },
     { label: t('driverTracker.updated'), value: formatDate(updatedUtc) },
-    { label: t('driverTracker.source'), value: source },
-    { label: t('driverTracker.detail'), value: detail },
   ]);
 
   if (selectedGeometry?.isAvailable && Array.isArray(selectedGeometry.points) && selectedGeometry.points.length > 1) {

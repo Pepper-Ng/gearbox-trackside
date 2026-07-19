@@ -204,52 +204,58 @@
       </section>
 
       <section id="trackerTab" class="adminTab" hidden aria-label="Driver tracker">
-        <section class="configurationPanel">
-          <h2 data-i18n="driverTracker.title">Driver Tracker</h2>
-          <p class="wideField trackerValidationNote" data-i18n="driverTracker.phase4Note">Track-outline generation was not venue-validated in Phase 4. Treat this as operator tooling and confirm on-site behavior before race-night reliance.</p>
-          <label>
-            <span data-i18n="driverTracker.clientRefreshHz">Tracker update Hz</span>
-            <input id="driverTrackerClientRefreshHz" type="number" min="1" max="120" step="1">
-          </label>
-          <label>
-            <span data-i18n="driverTracker.geometryRecordingLaps">Geometry laps</span>
-            <input id="driverTrackerGeometryRecordingLaps" type="number" min="1" max="20" step="1">
-          </label>
-          <div class="buttonRow">
-            <button id="saveDriverTrackerSettings" type="button" data-i18n="driverTracker.saveButton">Save Tracker</button>
-            <button id="refreshDriverTrackerTracks" type="button" data-i18n="driverTracker.refreshTracks">Refresh Tracks</button>
-          </div>
-          <p class="wideField driverTrackerActionHelp" data-i18n="driverTracker.actionHelp">Improve Outline keeps stored geometry and averages more completed laps. Start Over clears the stored outline and records fresh laps.</p>
-          <div class="tableFrame wideField">
-            <table class="driverTrackerTracksTable">
-              <thead>
-                <tr>
-                  <th class="driverTrackerPreviewColumn" data-i18n="driverTracker.preview">Map</th>
-                  <th data-i18n="driverTracker.track">Track</th>
-                  <th data-i18n="driverTracker.status">Status</th>
-                  <th data-i18n="driverTracker.laps">Laps</th>
-                  <th data-i18n="driverTracker.samples">Samples</th>
-                  <th data-i18n="driverTracker.updated">Updated</th>
-                  <th data-i18n="driverTracker.detail">Detail</th>
-                  <th data-i18n="driverTracker.actions">Actions</th>
-                  <th class="driverTrackerDeleteColumn" title="Delete outline" aria-label="Delete outline">×</th>
-                </tr>
-              </thead>
-              <tbody id="driverTrackerTrackRows"></tbody>
-            </table>
-          </div>
-        </section>
-        <section class="configurationPanel">
-          <h2 data-i18n="driverTracker.currentGeometryTitle">Selected Track Geometry</h2>
-          <p id="driverTrackerSelectionHint" class="wideField" data-i18n="driverTracker.selectionHint">Select a track row to inspect its geometry state and stored outline.</p>
-          <div id="driverTrackerGeometryFacts" class="wideField statusFactsGrid"></div>
-          <div class="wideField driverTrackerOutlinePanel">
+        <div class="driverTrackerWorkspace">
+          <section class="configurationPanel driverTrackerCatalogPanel">
+            <h2 data-i18n="driverTracker.title">Driver Tracker</h2>
+            <p class="wideField trackerValidationNote" data-i18n="driverTracker.phase4Note">Track-outline generation was not venue-validated in Phase 4. Treat this as operator tooling and confirm on-site behavior before race-night reliance.</p>
+            <label>
+              <span data-i18n="driverTracker.clientRefreshHz">Tracker update Hz</span>
+              <input id="driverTrackerClientRefreshHz" type="number" min="1" max="120" step="1">
+            </label>
+            <label>
+              <span data-i18n="driverTracker.geometryRecordingLaps">Geometry laps</span>
+              <input id="driverTrackerGeometryRecordingLaps" type="number" min="1" max="20" step="1">
+            </label>
+            <div class="buttonRow">
+              <button id="saveDriverTrackerSettings" type="button" data-i18n="driverTracker.saveButton">Save Tracker</button>
+              <button id="refreshDriverTrackerTracks" type="button" data-i18n="driverTracker.refreshTracks">Refresh Tracks</button>
+            </div>
+            <p class="wideField driverTrackerActionHelp" data-i18n="driverTracker.actionHelp">Improve Outline keeps stored geometry and averages more completed laps. Start Over clears the stored outline and records fresh laps.</p>
+            <div class="tableFrame wideField">
+              <table class="driverTrackerTracksTable">
+                <thead>
+                  <tr>
+                    <th class="driverTrackerPreviewColumn" data-i18n="driverTracker.preview">Map</th>
+                    <th data-i18n="driverTracker.track">Track</th>
+                    <th data-i18n="driverTracker.status">Status</th>
+                    <th data-i18n="driverTracker.laps">Laps</th>
+                    <th data-i18n="driverTracker.updated">Updated</th>
+                    <th data-i18n="driverTracker.detail">Detail</th>
+                    <th data-i18n="driverTracker.actions">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="driverTrackerTrackRows"></tbody>
+              </table>
+            </div>
+          </section>
+          <aside class="configurationPanel driverTrackerSelectionPanel">
+            <div class="driverTrackerSelectedHeader">
+              <div>
+                <h2 id="driverTrackerSelectionHint" data-i18n="driverTracker.currentGeometryTitle">Selected Track Geometry</h2>
+                <p id="driverTrackerSelectedSource">Source: -</p>
+              </div>
+              <span id="driverTrackerSelectedState" class="driverTrackerStatusPill unavailable">Unavailable</span>
+            </div>
+            <div class="driverTrackerOutlinePanel">
             <svg id="driverTrackerOutline" class="driverTrackerOutline" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
               <polyline id="driverTrackerOutlinePolyline" points=""></polyline>
             </svg>
             <p id="driverTrackerOutlineMessage" class="driverTrackerOutlineMessage">No outline loaded.</p>
-          </div>
-        </section>
+            </div>
+            <div id="driverTrackerGeometryFacts" class="driverTrackerStats"></div>
+            <p id="driverTrackerSelectedDetail" class="driverTrackerSelectedDetail">Select a track row to inspect geometry state.</p>
+          </aside>
+        </div>
       </section>
 
       <section id="leaderboardsTab" class="adminTab" hidden aria-label="Leaderboard controls">
