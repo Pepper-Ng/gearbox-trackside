@@ -207,11 +207,9 @@
         <div class="driverTrackerWorkspace">
           <section class="configurationPanel driverTrackerCatalogPanel">
             <h2 data-i18n="driverTracker.title">Driver Tracker</h2>
-            <p class="wideField trackerValidationNote" data-i18n="driverTracker.phase4Note">Track-outline generation was not venue-validated in Phase 4. Treat this as operator tooling and confirm on-site behavior before race-night reliance.</p>
             <div class="buttonRow">
               <button id="refreshDriverTrackerTracks" type="button" data-i18n="driverTracker.refreshTracks">Refresh Tracks</button>
             </div>
-            <p class="wideField driverTrackerActionHelp" data-i18n="driverTracker.actionHelp">Improve Outline keeps stored geometry and averages more completed laps. Start Over clears the stored outline and records fresh laps.</p>
             <div class="tableFrame wideField">
               <table class="driverTrackerTracksTable">
                 <thead>
@@ -469,6 +467,21 @@
           </fieldset>
         </section>
 
+        <section class="configurationPanel">
+          <h2 data-i18n="driverTracker.title">Driver Tracker</h2>
+          <label>
+            <span data-i18n="driverTracker.clientRefreshHz">Tracker update Hz</span>
+            <input id="driverTrackerClientRefreshHz" type="number" min="1" max="120" step="1">
+          </label>
+          <label>
+            <span data-i18n="driverTracker.geometryRecordingLaps">Geometry laps</span>
+            <input id="driverTrackerGeometryRecordingLaps" type="number" min="1" max="20" step="1">
+          </label>
+          <div class="buttonRow">
+            <button id="saveDriverTrackerSettings" type="button" data-i18n="driverTracker.saveButton">Save Tracker</button>
+          </div>
+        </section>
+
         <section class="configurationPanel" data-i18n-aria="aria.sharedMemoryDiscovery" aria-label="Shared-memory discovery">
           <h2 data-i18n="discovery.title">Shared Memory Discovery</h2>
           <p id="discoveryStatus" data-i18n="discovery.noResult">No discovery result yet.</p>
@@ -500,20 +513,6 @@
           <p class="wideField advancedDiagnosticNote" data-i18n="advancedConfig.fixturePathNote">Only relevant for fixture/demo/fallback operation. This field is diagnostic and not part of routine source editing.</p>
         </section>
 
-        <section class="configurationPanel">
-          <h2 data-i18n="driverTracker.title">Driver Tracker</h2>
-          <label>
-            <span data-i18n="driverTracker.clientRefreshHz">Tracker update Hz</span>
-            <input id="driverTrackerClientRefreshHz" type="number" min="1" max="120" step="1">
-          </label>
-          <label>
-            <span data-i18n="driverTracker.geometryRecordingLaps">Geometry laps</span>
-            <input id="driverTrackerGeometryRecordingLaps" type="number" min="1" max="20" step="1">
-          </label>
-          <div class="buttonRow">
-            <button id="saveDriverTrackerSettings" type="button" data-i18n="driverTracker.saveButton">Save Tracker</button>
-          </div>
-        </section>
       </section>
     </section>
   </main>
